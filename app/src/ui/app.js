@@ -3,7 +3,7 @@ import { fileMention } from './references.js';
 import { mountChat } from './chat.js';
 import { createEditor } from './editor.js';
 import { createNotion } from './notion.js';
-import { createId as uid, readPage, setProperties, remapPath, rewriteKnowledgeReferences } from './knowledge.js';
+import { createId as uid, readPage, setProperties, localDate, remapPath, rewriteKnowledgeReferences } from './knowledge.js';
 import { escape, title, renderMarkdown, wikiTargets } from './markdown.js';
 
 const $ = (selector, parent = document) => parent.querySelector(selector);
@@ -26,6 +26,7 @@ app.innerHTML = `<header class="app-titlebar"><div class="app-mark">${icon('Gem'
   <nav class="sc-sidebar-nav" aria-label="Navegación principal">
     <div class="sc-side-search-row"><button class="sc-side-search" data-action="search">${icon('Search',16)}<span>Buscar</span><kbd>Ctrl Alt F</kbd></button>${button('Plus','Nueva página · Ctrl+Alt+N','new-page','sc-side-create')}</div>
     <button class="sc-side-link" data-action="home">${icon('LayoutDashboard',17)} Inicio</button>
+    <button class="sc-side-link" data-action="calendar">${icon('CalendarDays',17)} Calendario</button>
     <button class="sc-side-link" data-action="daily">${icon('CalendarDays',17)} Diario</button>
     <button class="sc-side-link" data-action="chat" aria-controls="aiChat">${icon('MessageSquare',17)} Chat con IA</button>
     <button class="sc-side-link" data-action="graph">${icon('Network',17)} Grafo</button>
@@ -53,7 +54,7 @@ function activeGroup() { return state.groups.find(group => group.id === state.ac
 function activeTab() { const group = activeGroup(); return group?.tabs.find(tab => tab.id === group.active); }
 function activeDoc() { return state.documents.get(activeTab()?.path); }
 function persist() {
-  clearTimeout(workspaceTimer); workspaceTimer = setTimeout(() => run(post('/api/workspace', { groups: state.groups.map(g => ({ id: g.id, size: g.size, active: g.active, tabs: g.tabs.map(({ id, path, type, mode }) => ({ id, path, type, mode })) })), horizontal: state.horizontal, leftView: state.leftView, activeGroup: state.activeGroup, left: state.left, right: state.right, leftWidth: $('#leftSidebar').style.width, rightWidth: $('#rightSidebar').style.width, folders: [...state.folders], bookmarks: state.bookmarks, rightView: state.rightView })), 300);
+  clearTimeout(workspaceTimer); workspaceTimer = setTimeout(() => run(post('/api/workspace', { groups: state.groups.map(g => ({ id: g.id, size: g.size, active: g.active, tabs: g.tabs.map(({ id, path, type, mode, date }) => ({ id, path, type, mode, date })) })), horizontal: state.horizontal, leftView: state.leftView, activeGroup: state.activeGroup, left: state.left, right: state.right, leftWidth: $('#leftSidebar').style.width, rightWidth: $('#rightSidebar').style.width, folders: [...state.folders], bookmarks: state.bookmarks, rightView: state.rightView })), 300);
 }
 function applyPrefs() { document.documentElement.dataset.theme = prefs.theme; $('meta[name=theme-color]').content = prefs.theme === 'light' ? '#FFFFFF' : '#1C1C1C'; document.documentElement.style.setProperty('--editor-font-size', `${prefs.fontSize}px`); document.documentElement.classList.toggle('readable', prefs.readable); safeStorage.set('sc-preferences', prefs); }
 function setDraft(path, content) { const drafts = safeStorage.get('sc-drafts', {}); if (content === null) delete drafts[path]; else drafts[path] = content; safeStorage.set('sc-drafts', drafts); }
@@ -92,19 +93,19 @@ function changed(doc, content, origin) {
 function status() {
   const doc = activeDoc(), tab = activeTab();
   $('.app-body').classList.toggle('sc-at-home', tab?.type === 'home');
-  for (const [action,type] of [['home','home'],['graph','graph']]) {
+  for (const [action,type] of [['home','home'],['graph','graph'],['calendar','calendar']]) {
     const link=$('.sc-side-link[data-action='+action+']');
     if (tab?.type===type) link.setAttribute('aria-current','page');
     else link.removeAttribute('aria-current');
   }
   $$('#leftSidebar [data-path]').forEach(row=>row.classList.toggle('active',row.dataset.path===tab?.path));
-  $('.app-body').classList.toggle('workspace-wide', ['home', 'database'].includes(tab?.type));
+  $('.app-body').classList.toggle('workspace-wide', ['home', 'database', 'calendar'].includes(tab?.type));
   $('#saveStatus').textContent = doc?.dirty ? 'Cambios sin guardar' : doc ? 'Todos los cambios guardados' : 'Bóveda local';
   $('#fileCount').textContent = `${state.files.filter(f => !f.is_dir).length} archivos`;
   const content = doc && tab?.type === 'note' ? readPage(doc.content).body : doc?.content || ''; $('#wordCount').textContent = doc && tab?.type === 'note' ? `${content.trim() ? content.trim().split(/\s+/u).length : 0} palabras  ·  ${content.length} caracteres` : '';
   $('#modeStatus').innerHTML = tab?.type === 'note' ? `${icon(tab.mode === 'reading' ? 'BookOpen' : tab.mode === 'source' ? 'CodeXml' : tab.mode === 'blocks' ? 'Columns2' : 'Pencil', 14)} ${modeLabel(tab.mode)}` : '';
   $('#modeStatus').hidden = tab?.type !== 'note' || isMarkdown(tab.path);
-  $('#windowTitle').textContent = tab ? `${tab.type === 'home' ? 'Inicio' : tab.type === 'graph' ? 'Vista de grafo' : tab.path ? title(tab.path) : 'Nueva pestaña'} — Super Cerebro` : 'Super Cerebro'; document.title = $('#windowTitle').textContent;
+  $('#windowTitle').textContent = tab ? `${tab.type === 'calendar' ? 'Calendario' : tab.type === 'home' ? 'Inicio' : tab.type === 'graph' ? 'Vista de grafo' : tab.path ? title(tab.path) : 'Nueva pestaña'} — Super Cerebro` : 'Super Cerebro'; document.title = $('#windowTitle').textContent;
 }
 const isMarkdown = path => /\.(md|markdown)$/i.test(path || '');
 const modeLabel = mode => ({ blocks: 'Bloques', live: 'Vista en vivo', source: 'Modo fuente', reading: 'Vista de lectura' }[mode]);
@@ -121,7 +122,7 @@ function resolveNote(raw, from = activeTab()?.path) {
   return state.files.find(f => f.path === path + '.md')?.path || state.files.find(f => f.path === relative)?.path || state.files.find(f => !f.is_dir && title(f.path).toLocaleLowerCase() === path.toLocaleLowerCase())?.path;
 }
 function scrollToHeading(body, heading) {
-  $('h1,h2,h3,h4,h5,h6', body).find(el => el.textContent.trim() === heading)?.scrollIntoView({ block: 'start' });
+  $$('h1,h2,h3,h4,h5,h6', body).find(el => el.textContent.trim() === heading)?.scrollIntoView({ block: 'start' });
 }
 function ctxFile(path) { return state.files.some(file => !file.is_dir && file.path === path); }
 async function followLink(raw) {
@@ -175,11 +176,12 @@ function renderWorkspace() {
     }
     pane.addEventListener('pointerdown', () => { if (state.activeGroup !== group.id) { state.activeGroup = group.id; status(); renderRight(); } });
     const tab = group.tabs.find(t => t.id === group.active);
-    pane.innerHTML = `<div class="tab-strip" role="tablist" aria-label="Notas abiertas">${group.tabs.map(t => `<div class="workspace-tab ${t.id === group.active ? 'active' : ''} ${state.documents.get(t.path)?.dirty ? 'dirty' : ''}" role="tab" tabindex="0" aria-selected="${t.id === group.active}" draggable="true" data-tab-id="${t.id}" data-group-id="${group.id}" title="${escape(t.path || (t.type === 'home' ? 'Inicio' : t.type === 'graph' ? 'Vista de grafo' : 'Nueva pestaña'))}">${icon(t.type === 'home' ? 'Gem' : t.type === 'database' ? 'Columns2' : t.type === 'graph' ? 'Network' : t.type === 'canvas' ? 'LayoutDashboard' : t.type === 'empty' ? 'FilePlus2' : 'FileText', 15)}<span>${escape(t.type === 'home' ? 'Inicio' : t.type === 'graph' ? 'Vista de grafo' : t.path ? title(t.path) : 'Nueva pestaña')}</span><button class="tab-close" aria-label="Cerrar pestaña" title="Cerrar pestaña · Ctrl+Alt+W">${icon('X', 13)}</button></div>`).join('')}${button('Plus', 'Nueva pestaña · Ctrl+Alt+T', 'new-tab')}<span class="tab-spacer"></span>${button('ChevronDown', 'Lista de pestañas', 'tab-list')}</div><div class="note-header"><div class="navigation-buttons">${button('ArrowLeft', 'Volver · Ctrl+Alt+J', 'back')}${button('ArrowRight', 'Avanzar · Ctrl+Alt+L', 'forward')}</div><div class="breadcrumb">${escape(tab?.path?.includes('/') ? tab.path.slice(0, tab.path.lastIndexOf('/')).replaceAll('/', ' / ') : '')}${tab?.path?.includes('/') ? ' / ' : ''}<span>${escape(tab?.path ? title(tab.path) : tab?.type === 'home' ? 'Escritorio' : tab?.type === 'graph' ? 'Vista de grafo' : '')}</span></div><div class="note-actions">${tab?.path ? button("MessageSquare", "Preguntar sobre este archivo", "chat-with-file") : ""}${tab?.type === 'note' ? button('AtSign', 'Mencionar archivo · Ctrl+Alt+M', 'mention-file') : ''}${tab?.type === 'note' && !isMarkdown(tab.path) ? button(tab.mode === 'reading' ? 'Pencil' : 'BookOpen', tab.mode === 'reading' ? 'Cambiar a edición · Ctrl+Alt+E' : 'Cambiar a lectura · Ctrl+Alt+E', 'toggle-reading') : ''}${button('MoreHorizontal', 'Más opciones', 'note-menu')}</div></div><div class="pane-content"></div>`;
+    pane.innerHTML = `<div class="tab-strip" role="tablist" aria-label="Notas abiertas">${group.tabs.map(t => `<div class="workspace-tab ${t.id === group.active ? 'active' : ''} ${state.documents.get(t.path)?.dirty ? 'dirty' : ''}" role="tab" tabindex="0" aria-selected="${t.id === group.active}" draggable="true" data-tab-id="${t.id}" data-group-id="${group.id}" title="${escape(t.path || (t.type === 'calendar' ? 'Calendario' : t.type === 'home' ? 'Inicio' : t.type === 'graph' ? 'Vista de grafo' : 'Nueva pestaña'))}">${icon(t.type === 'calendar' ? 'CalendarDays' : t.type === 'home' ? 'Gem' : t.type === 'database' ? 'Columns2' : t.type === 'graph' ? 'Network' : t.type === 'canvas' ? 'LayoutDashboard' : t.type === 'empty' ? 'FilePlus2' : 'FileText', 15)}<span>${escape(t.type === 'calendar' ? 'Calendario' : t.type === 'home' ? 'Inicio' : t.type === 'graph' ? 'Vista de grafo' : t.path ? title(t.path) : 'Nueva pestaña')}</span><button class="tab-close" aria-label="Cerrar pestaña" title="Cerrar pestaña · Ctrl+Alt+W">${icon('X', 13)}</button></div>`).join('')}${button('Plus', 'Nueva pestaña · Ctrl+Alt+T', 'new-tab')}<span class="tab-spacer"></span>${button('ChevronDown', 'Lista de pestañas', 'tab-list')}</div><div class="note-header"><div class="navigation-buttons">${button('ArrowLeft', 'Volver · Ctrl+Alt+J', 'back')}${button('ArrowRight', 'Avanzar · Ctrl+Alt+L', 'forward')}</div><div class="breadcrumb">${escape(tab?.path?.includes('/') ? tab.path.slice(0, tab.path.lastIndexOf('/')).replaceAll('/', ' / ') : '')}${tab?.path?.includes('/') ? ' / ' : ''}<span>${escape(tab?.path ? title(tab.path) : tab?.type === 'home' ? 'Escritorio' : tab?.type === 'graph' ? 'Vista de grafo' : '')}</span></div><div class="note-actions">${tab?.path ? button("MessageSquare", "Preguntar sobre este archivo", "chat-with-file") : ""}${tab?.type === 'note' ? button('AtSign', 'Mencionar archivo · Ctrl+Alt+M', 'mention-file') : ''}${tab?.type === 'note' && !isMarkdown(tab.path) ? button(tab.mode === 'reading' ? 'Pencil' : 'BookOpen', tab.mode === 'reading' ? 'Cambiar a edición · Ctrl+Alt+E' : 'Cambiar a lectura · Ctrl+Alt+E', 'toggle-reading') : ''}${button('MoreHorizontal', 'Más opciones', 'note-menu')}</div></div><div class="pane-content"></div>`;
     workspace.append(pane);
     const content = $('.pane-content', pane);
     if (!tab || tab.type === 'empty') { content.innerHTML = `<div class="empty-state"><div class="empty-gem">${icon('Gem', 64)}</div><h1>No hay ningún archivo abierto</h1><button data-action="switcher">Abrir una nota existente <kbd>Ctrl Alt O</kbd></button><button data-action="new-note">Crear una nota nueva <kbd>Ctrl Alt N</kbd></button><button data-action="commands">Abrir paleta de comandos <kbd>Ctrl Alt P</kbd></button><button data-action="graph">Explorar la vista de grafo <kbd>Ctrl Alt G</kbd></button><p>Tu espacio para pensar y conectar ideas.</p></div>`; }
     else if (tab.type === 'home') tab.surface = notion.mountHome(content);
+    else if (tab.type === 'calendar') tab.surface = notion.mountCalendar(content,tab);
     else if (tab.type === 'database') tab.surface = notion.mountDatabase(content, tab);
     else if (tab.type === 'note' && isMarkdown(tab.path)) { tab.body = content; tab.surface = notion.mountBlocks(content, tab); }
     else if (tab.type === 'graph') mountGraph(content, tab);
@@ -352,6 +354,7 @@ function noteMenu(event) { const tab = activeTab(); menu(event, [
   ...(tab?.type === 'note' && !isMarkdown(tab.path) ? ['live', 'source', 'reading'].map(mode => ({ icon: mode === 'reading' ? 'BookOpen' : mode === 'source' ? 'CodeXml' : 'Pencil', label: `${mode === tab.mode ? '✓ ' : ''}${modeLabel(mode)}`, action: () => setMode(mode) })) : []), null,
   { icon: 'Columns2', label: 'Dividir a la derecha', action: () => split(false) }, { icon: 'Rows2', label: 'Dividir debajo', action: () => split(true) },
   ...(tab?.type === 'note' ? [{ icon: 'Files', label: 'Mover página a…', action: () => notion.movePage(activeDoc()) }] : []),
+  ...(tab?.surface?.find ? [{icon:'CalendarDays',label:'Programar en el calendario',action:()=>notion.scheduleNote(activeDoc())}] : []),
   ...(tab?.path ? [null, { icon: 'Bookmark', label: state.bookmarks.includes(tab.path) ? 'Quitar marcador' : 'Añadir marcador', action: () => toggleBookmark() }, { icon: 'Pencil', label: 'Renombrar archivo', action: () => promptName('Renombrar archivo', tab.path, 'Ruta en la bóveda', to => renamePath(tab.path, to)) }, { icon: 'Download', label: 'Exportar archivo', action: exportNote }, { icon: 'Trash2', label: 'Eliminar archivo', danger: true, action: () => deletePath(tab.path) }] : []),
 ]); }
 function exportNote() { const doc = activeDoc(); if (!doc) return; const url = URL.createObjectURL(new Blob([doc.content], { type: 'text/plain;charset=utf-8' })), a = document.createElement('a'); a.href = url; a.download = doc.path.split('/').pop(); a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
@@ -367,7 +370,7 @@ async function enableFullScreenShortcuts() {
   }
   try {
     await document.documentElement.requestFullscreen();
-    await navigator.keyboard.lock(['KeyN', 'KeyO', 'KeyP', 'KeyT', 'KeyW']);
+    await navigator.keyboard.lock(['KeyN', 'KeyO', 'KeyP', 'KeyK', 'KeyT', 'KeyW']);
     shortcutLock = Boolean(document.fullscreenElement);
     notify('Atajos de pantalla completa activos. Sal con Escape.');
   } catch {
@@ -388,6 +391,8 @@ const commands = () => [
   { label: 'Activar atajos en pantalla completa', icon: 'Focus', action: enableFullScreenShortcuts },
   { label: 'Volver a Mis archivos', icon: 'ArrowUpRight', action: () => location.assign('/') },
   { label: 'Abrir Inicio', icon: 'Gem', action: openHome },
+  { label: 'Abrir calendario', icon: 'CalendarDays', action: () => openCalendar() },
+  ...(activeTab()?.surface?.find ? [{label:'Programar esta nota',icon:'CalendarDays',action:()=>notion.scheduleNote(activeDoc())}] : []),
   { label: 'Página: crear con bloques', icon: 'FilePlus2', action: () => createNote() },
   { label: 'Colección: crear base de datos', icon: 'Columns2', action: () => notion.createDatabase() },
   { label: 'Plantillas: abrir biblioteca', icon: 'BookOpen', action: () => notion.templates() },
@@ -410,8 +415,11 @@ const commands = () => [
   { label: 'Mencionar archivo', icon: 'AtSign', shortcut: 'Ctrl Alt M', action: mentionFile },
   ...(activeTab()?.editor || activeTab()?.surface?.link ? [{ label: 'Insertar enlace interno', icon: 'Link', shortcut: 'Ctrl Alt K', action: insertInternalLink }] : []),
   { label: 'Abrir ajustes', icon: 'Settings', shortcut: 'Ctrl Alt ,', action: settings },
-  { label: 'Cambiar entre tema claro y oscuro', icon: 'SunMoon', action: () => { prefs.theme = prefs.theme === 'dark' ? 'light' : 'dark'; applyPrefs(); renderWorkspace(); } },
+  { label: 'Cambiar entre tema claro y oscuro', icon: 'SunMoon', shortcut:'Ctrl Mayús L', action: toggleTheme },
+  { label: 'Abrir Super Cerebro en otra ventana', icon: 'ExternalLink', shortcut:'Ctrl Alt Mayús N', action: openAnotherWindow },
 ];
+function toggleTheme() { prefs.theme = prefs.theme === 'dark' ? 'light' : 'dark'; applyPrefs(); renderWorkspace(); }
+function openAnotherWindow() { window.open('/cerebro','_blank','noopener,popup'); }
 function chooser(heading, placeholder, getItems, create) {
   dialog(heading, `<input class="chooser-input" id="chooserInput" aria-label="${escape(placeholder)}" placeholder="${escape(placeholder)}" autocomplete="off"><div class="chooser-list" id="chooserList" role="listbox"></div>`, `<span><kbd>↑</kbd><kbd>↓</kbd> navegar</span><span><kbd>↵</kbd> abrir</span><span><kbd>esc</kbd> cerrar</span>`);
   $('.modal').classList.add('chooser'); let selected = 0, list = [];
@@ -428,7 +436,22 @@ function insertInternalLink() {
 function quickSwitcher() { chooser('Abrir nota', 'Escribe el nombre de una nota…', query => state.files.filter(f => !f.is_dir && f.path.toLocaleLowerCase().includes(query.toLocaleLowerCase())).map(f => ({ label: title(f.path), detail: f.path.includes('/') ? f.path : '', icon: f.path.endsWith('.canvas') ? 'LayoutDashboard' : 'FileText', action: () => openNote(f.path) })), true); }
 function commandPalette() { chooser('Paleta de comandos', 'Escribe un comando…', query => commands().filter(c => c.label.toLocaleLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').includes(query.toLocaleLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')))); }
 function showLeft(view) { if (view === 'bookmarks') { $('#favoriteSection').open = true; view = 'files'; } state.left = true; state.leftView = view; updateSidebars(); renderLeft(); if (view === 'search') $('#vaultSearch')?.focus(); persist(); }
-function dailyNote() { const date = new Date(), name = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; return createNote(name); }
+function dailyNote(date = localDate()) { return createNote(date); }
+function openCalendar(date) {
+  const group=activeGroup();
+  let tab=group.tabs.find(item=>item.type==='calendar');
+  if(!tab){tab={id:uid(),type:'calendar'};group.tabs.push(tab);}
+  if(typeof date==='string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(date)))tab.date=date;
+  group.active=tab.id;renderWorkspace();renderLeft();renderRight();status();persist();
+}
+async function checkReminders() {
+  const reminders=await notion.dueReminders(), shown=safeStorage.get('sc-shown-reminders',[]);
+  const key=item=>item.id+':'+item.when;
+  const pending=reminders.filter(item=>!shown.includes(key(item)));
+  if(!pending.length)return;
+  safeStorage.set('sc-shown-reminders',[...shown,...pending.map(key)].slice(-500));
+  notify('Recordatorio: '+pending.map(item=>item.label).join(' · '));
+}
 
 function settings(page = 'appearance') {
   const sections = [['appearance','Apariencia'],['editor','Editor'],['files','Archivos y enlaces'],['hotkeys','Atajos de teclado'],['about','Acerca de']];
@@ -439,7 +462,7 @@ function settings(page = 'appearance') {
   if (page === 'appearance') root.innerHTML = `<h2>Apariencia</h2>${row('Tema base', 'Elige el aspecto de tu espacio de trabajo.', `<select id="themeSelect"><option value="dark" ${prefs.theme === 'dark' ? 'selected' : ''}>Oscuro</option><option value="light" ${prefs.theme === 'light' ? 'selected' : ''}>Claro</option></select>`)}${row('Tamaño de fuente', 'Tamaño del texto del editor, en píxeles.', `<input id="fontSize" type="number" min="12" max="28" value="${prefs.fontSize}">`)}${row('Ancho de línea legible', 'Limita el ancho del contenido para una lectura cómoda.', `<input id="readableToggle" class="toggle" type="checkbox" ${prefs.readable ? 'checked' : ''}>`)}`;
   if (page === 'editor') root.innerHTML = `<h2>Editor</h2>${row('Modo predeterminado', 'Modo de edición para archivos de texto plano.', `<select id="defaultMode"><option value="live" ${prefs.defaultMode === 'live' ? 'selected' : ''}>Vista en vivo</option><option value="source" ${prefs.defaultMode === 'source' ? 'selected' : ''}>Modo fuente</option><option value="reading" ${prefs.defaultMode === 'reading' ? 'selected' : ''}>Lectura</option></select>`)}${row('Corrección ortográfica', 'Usa el corrector del navegador en el editor.', `<input id="spellcheckToggle" class="toggle" type="checkbox" ${prefs.spellcheck ? 'checked' : ''}>`)}<p class="settings-note">Los cambios se guardan automáticamente. El historial de deshacer se mantiene al cambiar de pestaña o de modo de edición.</p>`;
   if (page === 'files') root.innerHTML = `<h2>Archivos y enlaces</h2>${row('Ubicación de la bóveda', 'Archivos Markdown locales. No se necesita una base de datos.', '<code>app/vault/</code>')}${row('Importar archivos', 'Añade archivos Markdown o lienzos a la bóveda.', '<button class="secondary-button" data-action="import">Importar</button>')}${row('Formato de enlaces internos', 'Enlaza notas por su nombre o ruta; admite alias y encabezados.', '<code>[[nota|alias]]</code>')}<p class="settings-note">Al renombrar un archivo, los enlaces internos se actualizan automáticamente. Los archivos existentes no se sobrescriben al importar.</p>`;
-  if (page === 'hotkeys') root.innerHTML = '<h2>Atajos de teclado</h2>' + commands().filter(c => c.shortcut).map(c => row(escape(c.label), '', `<kbd>${escape(c.shortcut)}</kbd>`)).join('') + row('Cerrar pestaña', '', '<kbd>Ctrl Alt W</kbd>') + row('Nueva pestaña', '', '<kbd>Ctrl Alt T</kbd>') + row('Cambiar de pestaña', '', '<kbd>Ctrl Alt RePág / AvPág</kbd>') + row('Navegar por el historial', '', '<kbd>Ctrl Alt J / L</kbd>') + row('Buscar en la nota', 'Búsqueda nativa de CodeMirror.', '<kbd>Ctrl F</kbd>');
+  if (page === 'hotkeys') root.innerHTML = '<h2>Atajos de teclado</h2>' + commands().filter(c => c.shortcut).map(c => row(escape(c.label), '', `<kbd>${escape(c.shortcut)}</kbd>`)).join('') + row('Cerrar pestaña', '', '<kbd>Ctrl Alt W</kbd>') + row('Nueva pestaña', '', '<kbd>Ctrl Alt T</kbd>') + row('Cambiar de pestaña', '', '<kbd>Ctrl Alt RePág / AvPág</kbd>') + row('Navegar por el historial', '', '<kbd>Ctrl Alt J / L</kbd>') + row('Buscar en la nota', '', '<kbd>Ctrl F</kbd>') + row('Saltar a una página', 'Ctrl+Alt+O funciona también si el navegador reserva Ctrl+P o Ctrl+K.', '<kbd>Ctrl P / K</kbd>') + row('Mostrar u ocultar la barra lateral', '', '<kbd>Ctrl Alt B</kbd>') + row('Seleccionar el bloque actual', 'Esc otra vez lo elimina. Deshaz desde la barra de la nota.', '<kbd>Esc</kbd>');
   if (page === 'about') root.innerHTML = `<div class="about-mark">${icon('Gem', 48)}</div><h2>Super Cerebro</h2><p>Un espacio de notas local, inspirado en Obsidian.</p><p class="muted">Rust · Markdown · CodeMirror</p><p class="settings-note">Esta aplicación es independiente de Obsidian. Incluye edición Markdown, enlaces, grafo y lienzos. No incluye Obsidian Sync, Publish ni compatibilidad con plugins de Obsidian.</p>`;
   const controlLabels = { '#themeSelect': 'Tema base', '#fontSize': 'Tamaño de fuente', '#readableToggle': 'Ancho de línea legible', '#spellcheckToggle': 'Corrección ortográfica', '#defaultMode': 'Modo predeterminado' };
   const bind = (selector, callback) => { const el = $(selector); if (el) { el.setAttribute('aria-label', controlLabels[selector]); el.onchange = () => { callback(el); applyPrefs(); renderWorkspace(); }; } };
@@ -682,11 +705,11 @@ function mountCanvas(container, tab, inline = false) {
 
 const actions = {
   chat: () => chat.open(), 'chat-with-file': chatWithFile,
-  home: openHome, 'new-page': () => createNote(), 'new-database': () => notion.createDatabase(), templates: () => notion.templates(),
+  home: openHome, calendar: () => openCalendar(), 'new-page': () => createNote(), 'new-database': () => notion.createDatabase(), templates: () => notion.templates(),
   'toggle-left': () => toggleSidebar('left'), 'toggle-right': () => toggleSidebar('right'),
   'left-files': () => showLeft('files'), 'left-pages': () => showLeft('pages'), 'left-search': () => showLeft('search'), 'left-bookmarks': () => showLeft('bookmarks'), search: () => showLeft('search'),
   'mention-file': mentionFile,
-  switcher: quickSwitcher, commands: commandPalette, graph: openGraph, canvas: () => createNote(null, '', true), daily: dailyNote, settings, help: () => settings('hotkeys'),
+  switcher: quickSwitcher, commands: commandPalette, graph: openGraph, canvas: () => createNote(null, '', true), daily: () => dailyNote(), settings, help: () => settings('hotkeys'),
   'new-note': () => createNote(), 'new-tab': () => newTab(), 'new-folder': () => promptName('Nueva carpeta', '', 'Nombre de la carpeta', async path => { if (!validPath(path)) throw new Error('Nombre no válido.'); if (state.files.some(f => f.path === path)) throw new Error('Ya existe un archivo o carpeta con ese nombre.'); await post('/api/folder', { path }); state.folders.add(path); await refreshFiles(); }),
   'toggle-reading': toggleReading, 'cycle-mode': () => setMode(activeTab()?.mode === 'live' ? 'source' : activeTab()?.mode === 'source' ? 'reading' : 'live'),
   'close-overlay': closeOverlay, back: () => navigate(-1), forward: () => navigate(1),
@@ -696,6 +719,8 @@ const actions = {
   'add-property': () => promptName('Añadir propiedad', '', 'Nombre de la propiedad', key => { if (!/^[\p{L}\p{N}_-]+$/u.test(key)) throw new Error('Usa letras, números o guiones.'); const doc = activeDoc(); if (!doc) return; const content = /^---\r?\n/.test(doc.content) ? doc.content.replace(/^(---\r?\n)/, `$1${key}: \n`) : `---\n${key}: \n---\n\n${doc.content}`; changed(doc, content); renderWorkspace(); }),
 };
 document.addEventListener('click', event => {
+  const dateLink=event.target.closest('a[href^="/cerebro?fecha="]');
+  if(dateLink){event.preventDefault();openCalendar(new URL(dateLink.href).searchParams.get('fecha'));return;}
   const markdownLink = event.target.closest('.markdown-preview a[href]:not(.sc-reference)');
   if (markdownLink && !markdownLink.dataset.note && !markdownLink.dataset.tag) { const href = markdownLink.getAttribute('href'); if (href.startsWith('#') || /^[^:]+\.md(?:#.*)?$/.test(href)) { event.preventDefault(); run(followLink(decodeURIComponent(href))); return; } }
   const link = event.target.closest('[data-note]'); if (link && !link.closest('.cm-editor')) { event.preventDefault(); run(followLink(link.dataset.note)); return; }
@@ -706,7 +731,7 @@ document.addEventListener('click', event => {
   if (action.startsWith('right-')) { state.rightView = action.slice(6); run(renderRight()); persist(); }
   else if (action === 'note-menu') noteMenu({ currentTarget: el });
   else if (action === 'vault-menu') menu({ currentTarget: el }, [{ icon: 'Upload', label: 'Importar archivos', action: () => $('#importFiles').click() }, { icon: 'Settings', label: 'Ajustes de la bóveda', action: settings }]);
-  else if (action === 'tab-list') chooser('Pestañas abiertas', 'Buscar pestaña…', query => state.groups.flatMap(g => g.tabs.map(t => ({ label: t.path ? title(t.path) : t.type === 'home' ? 'Inicio' : t.type === 'graph' ? 'Vista de grafo' : 'Nueva pestaña', action: () => { g.active = t.id; state.activeGroup = g.id; renderWorkspace(); renderRight(); status(); persist(); } }))).filter(t => t.label.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
+  else if (action === 'tab-list') chooser('Pestañas abiertas', 'Buscar pestaña…', query => state.groups.flatMap(g => g.tabs.map(t => ({ label: t.path ? title(t.path) : t.type === 'calendar' ? 'Calendario' : t.type === 'home' ? 'Inicio' : t.type === 'graph' ? 'Vista de grafo' : 'Nueva pestaña', action: () => { g.active = t.id; state.activeGroup = g.id; renderWorkspace(); renderRight(); status(); persist(); } }))).filter(t => t.label.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
   else if (actions[action]) { try { run(actions[action]()); } catch (e) { report(e); } }
 });
 function switchTab(direction) {
@@ -726,6 +751,7 @@ const browserCommands = {
   KeyW: () => activeTab() && closeTab(activeGroup(), activeTab().id),
   KeyJ: () => navigate(-1), KeyL: () => navigate(1),
   PageUp: () => switchTab(-1), PageDown: () => switchTab(1),
+  KeyB: () => toggleSidebar('left'),
 };
 
 document.addEventListener('keydown', event => {
@@ -736,12 +762,19 @@ document.addEventListener('keydown', event => {
   const code = event.code;
   let action;
   if (!event.altKey && !event.shiftKey) {
-    if (shortcutLock && ['KeyN','KeyO','KeyP','KeyT','KeyW'].includes(code)) action = browserCommands[code];
+    if (shortcutLock && ['KeyO','KeyT','KeyW'].includes(code)) action = browserCommands[code];
+    if (code==='KeyP'||code==='KeyK') action=quickSwitcher;
+    if (code==='KeyN') action=()=>createNote();
+    if (code==='KeyF'&&activeTab()?.surface?.find) action=()=>activeTab().surface.find();
+    if (event.key==='\\'||code==='Backslash') action=()=>toggleSidebar('left');
     if (code === 'KeyS' && activeDoc()) action = () => saveDocument(activeDoc());
     if (code === 'KeyB' && editor) action = () => editor.insert('**');
     if (code === 'KeyI' && editor) action = () => editor.insert('*');
   } else if (event.altKey && !event.shiftKey) {
     action = browserCommands[code];
+  } else if (event.shiftKey) {
+    if (code==='KeyL') action=toggleTheme;
+    if (code==='KeyN') action=openAnotherWindow;
   }
   if (!action || event.repeat) return;
   event.preventDefault();
@@ -768,13 +801,17 @@ async function init() {
     state.activeGroup = state.groups.some(g => g.id === saved.activeGroup) ? saved.activeGroup : state.groups[0].id;
   }
   updateSidebars(); renderWorkspace(); renderLeft(); renderRight(); status();
-  const requested = new URLSearchParams(location.search).get('path');
+  const params=new URLSearchParams(location.search), requested=params.get('path');
+  if(params.has('fecha'))openCalendar(params.get('fecha'));
+  else
   if (requested && state.files.some(file => !file.is_dir && file.path === requested)) {
     await openNote(requested);
   } else if (!activeTab() || activeTab().type === 'empty') {
     openHome();
   }
+  run(checkReminders());
+  setInterval(()=>run(checkReminders()),30_000);
 }
-const notion = createNotion({ state, prefs, activePath: () => activeTab()?.path, chatWithNote: path => chat.open(path), createNote, recentFiles, homeCollection, dailyNote, icon, button, api, post, run, report, notify, loadDocument, changed, saveDocument, openNote, refreshFiles, renderWorkspace, renderRight, persist, promptName, dialog, closeOverlay, menu, chooser, showLeft, openHome, validPath, renamePath, mountCanvas });
+const notion = createNotion({ state, prefs, activePath: () => activeTab()?.path, chatWithNote: path => chat.open(path), createNote, recentFiles, homeCollection, dailyNote, openCalendar, icon, button, api, post, run, report, notify, loadDocument, changed, saveDocument, openNote, refreshFiles, renderWorkspace, renderRight, persist, promptName, dialog, closeOverlay, menu, chooser, showLeft, openHome, validPath, renamePath, mountCanvas });
 run(init());
 

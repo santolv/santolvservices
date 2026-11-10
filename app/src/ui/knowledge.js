@@ -41,12 +41,18 @@ export function splitBlocks(content) {
 
 export const blockBody = blocks => blocks.map(block => block.raw).join('\n\n') + (blocks.some(b => b.raw) ? '\n' : '');
 export function mergeBlocks(original, blocks) { const page = readPage(original); return page.prefix + blockBody(blocks); }
+const toggleParts = raw => /^<details>\r?\n<summary>([^\n]*)<\/summary>\r?\n\r?\n([\s\S]*?)\r?\n\r?\n<\/details>$/.exec(raw);
+const toggleEntities = {'&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&#39;':"'"};
 export function blockText(block) {
   if (/^h[1-6]$/.test(block.type)) return block.raw.replace(/^#{1,6}\s?/, '');
   if (block.type === 'task') return block.raw.replace(/^\s*[-*]\s+\[[ xX]\]\s?/, '');
   if (block.type === 'bullet') return block.raw.replace(/^\s*[-*+]\s?/, '');
   if (block.type === 'number') return block.raw.replace(/^\s*\d+[.)]\s?/, '');
   if (block.type === 'quote') return block.raw.replace(/^>\s?/gm, '');
+  if (block.type === 'toggle') {
+    const parts=toggleParts(block.raw);
+    if(parts)return parts[1].replace(/&(?:amp|lt|gt|quot|#39);/g,entity=>toggleEntities[entity])+(parts[2]?'\n'+parts[2]:'');
+  }
   if (block.type === 'code') { const match = /^(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)\n?\1$/.exec(block.raw); return match ? match[3] : block.raw.replace(/^ {4}/gm, ''); }
   return block.raw;
 }
@@ -56,12 +62,17 @@ export function updateBlockText(block, text) {
   if (block.type === 'bullet') return '- ' + text;
   if (block.type === 'number') return (block.raw.match(/^\s*(\d+)/)?.[1] || '1') + '. ' + text;
   if (block.type === 'quote') return text.split('\n').map(line => '> ' + line).join('\n');
+  if (block.type === 'toggle' && (toggleParts(block.raw) || !block.raw)) {
+    const [heading,...body]=text.split('\n');
+    const escaped=heading.replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
+    return '<details>\n<summary>'+escaped+'</summary>\n\n'+body.join('\n')+'\n\n</details>';
+  }
   if (block.type === 'code') { const language = block.raw.match(/^(`{3,}|~{3,})([^\n]*)/)?.[2] || ''; const runs = [...text.matchAll(/`+/g)].map(match => match[0].length); const fence = '`'.repeat(Math.max(3, ...runs.map(length => length + 1))); return fence + language + '\n' + text + '\n' + fence; }
   return text;
 }
 export const isPropertyKey = key => /^[\p{L}\p{N}_-]{1,50}$/u.test(key) && !['__proto__','prototype','constructor'].includes(key);
 export const propertyKey = label => label.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-export const pageReservedKeys = new Set(['title','icon','cover','editor','parent','template','_database','archived']);
+export const pageReservedKeys = new Set(['title','icon','cover','editor','parent','template','_database','archived','fecha_calendario','recordatorios']);
 export function databaseKey(label) { const key=propertyKey(label);return pageReservedKeys.has(key)?'prop_'+key:key; }
 export const remapPath = (path, from, to) => typeof path === 'string' && (path === from || path.startsWith(from + '/')) ? to + path.slice(from.length) : path;
 export function rewriteKnowledgeReferences(content, from, to, oldPaths) {

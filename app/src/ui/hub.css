@@ -198,9 +198,9 @@
 .hub-dialog .hub-actions { justify-content: end; }
 .craft-view { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--hub-surface); }
 .craft-bar { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr) minmax(0,1fr); gap: 8px; align-items: center; min-height: 35px; padding: 3px 12px; background: var(--hub-shell); border-bottom: 1px solid var(--hub-line); font-size: 12px; }
-.craft-bar a { justify-self:start; color:var(--hub-muted); white-space:nowrap; }
-.craft-bar a:hover { color:var(--hub-text); }
-.craft-bar a span { font-size:18px; vertical-align:-1px; }
+.craft-bar a { display:inline-flex; justify-self:start; align-items:center; gap:5px; min-height:28px; padding:0 10px; border-radius:999px; border:1px solid var(--hub-line); background:var(--hub-control); color:var(--hub-text); font:550 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; white-space:nowrap; box-shadow:inset 0 1px 0 #ffffff1a; }
+.craft-bar a:hover { background:var(--hub-search); }
+.craft-bar a span { font-size:17px; line-height:1; }
 .craft-wordcraft .craft-bar { position:absolute; top:0; left:0; z-index:2; display:flex; border-radius:0 0 6px 0; }
 .craft-wordcraft #craft-title { display:none; }
 #craft-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; font-weight:500; }

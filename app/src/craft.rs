@@ -2,9 +2,12 @@ use crate::{json_error, safe_path, safe_path_at, server};
 use quick_xml::{events::Event, name::ResolveResult, NsReader};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::fs::File;
+use std::collections::HashMap;
+use std::fs::{self, File};
 use std::io::{Cursor, ErrorKind};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 use tiny_http::{Header, Request, Response};
 
 const EDITORS: [(&str, &str, &str); 4] = [
@@ -77,6 +80,255 @@ fn extension(path: &str) -> String {
         .to_ascii_lowercase()
 }
 
+const WORD_BODY: &str = ".wordcraft.docx";
+const WORD_TEXT: &str = "texto.md";
+const WORD_REVISION: &str = ".texto-revision";
+const EDITOR_LEASE: Duration = Duration::from_secs(120);
+
+#[derive(Default)]
+struct WordJob {
+    editors: HashMap<String, Instant>,
+    due: Option<Instant>,
+}
+fn jobs() -> &'static Mutex<HashMap<PathBuf, WordJob>> {
+    static JOBS: OnceLock<Mutex<HashMap<PathBuf, WordJob>>> = OnceLock::new();
+    JOBS.get_or_init(Default::default)
+}
+
+pub fn is_word_package(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("docx"))
+        && path.is_dir()
+        && path.join(WORD_BODY).is_file()
+        && !crate::linked_path(&path.join(WORD_BODY))
+}
+
+pub fn document_path(path: &Path) -> PathBuf {
+    if is_word_package(path) {
+        path.join(WORD_BODY)
+    } else {
+        path.to_path_buf()
+    }
+}
+
+fn word_index_current(path: &Path) -> bool {
+    if !is_word_package(path) {
+        return false;
+    }
+    let marker = path.join(WORD_REVISION);
+    let text = path.join(WORD_TEXT);
+    if crate::linked_path(&marker) || crate::linked_path(&text) || !text.is_file() {
+        return false;
+    }
+    let modified = |file: &Path| fs::metadata(file).and_then(|meta| meta.modified());
+    matches!((modified(&marker),modified(&path.join(WORD_BODY))),(Ok(index),Ok(body)) if index>=body)
+}
+
+fn queue_text(path: &Path) {
+    jobs().lock().unwrap().entry(path.into()).or_default().due =
+        Some(Instant::now() + Duration::from_secs(2));
+}
+
+pub fn editor_presence(req: Request, path: &str, session: &str, leaving: bool) {
+    let Some(path) = safe_path(path) else {
+        return json_error(req, 400, "Ruta no válida");
+    };
+    if extension(&path.to_string_lossy()) != "docx"
+        || !document_path(&path).is_file()
+        || session.len() != 32
+        || !session.bytes().all(|ch| ch.is_ascii_hexdigit())
+    {
+        return json_error(req, 400, "Sesión de WordCraft no válida");
+    }
+    let mut jobs = jobs().lock().unwrap();
+    let job = jobs.entry(path).or_default();
+    job.editors.retain(|_, expiry| *expiry > Instant::now());
+    if leaving {
+        job.editors.remove(session);
+    } else if job.editors.len() < 128 || job.editors.contains_key(session) {
+        job.editors
+            .insert(session.into(), Instant::now() + EDITOR_LEASE);
+    }
+    drop(jobs);
+    server::json(req, json!({"ok":true}));
+}
+
+pub fn schedule_existing_words() {
+    // Recover an interrupted migration before exposing the vault to readers.
+    let root = crate::vault_root();
+    for entry in walkdir::WalkDir::new(&root)
+        .into_iter()
+        .filter_entry(|entry| {
+            entry.depth() == 0
+                || (entry.file_type().is_dir()
+                    && !crate::linked_path(entry.path())
+                    && !is_word_package(entry.path())
+                    && (!entry.file_name().to_string_lossy().starts_with('.')
+                        || entry
+                            .file_name()
+                            .to_string_lossy()
+                            .starts_with(".wordcraft-")))
+        })
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".wordcraft-")
+        })
+    {
+        let previous = entry.path().join(".previous.docx");
+        let marker = entry.path().join(".restore-name");
+        if !previous.is_file() || crate::linked_path(&previous) || crate::linked_path(&marker) {
+            continue;
+        }
+        let Ok(name) = fs::read_to_string(marker) else {
+            continue;
+        };
+        if extension(&name) != "docx" || name.contains(['/', '\\']) {
+            continue;
+        }
+        if let Some(target) = entry
+            .path()
+            .parent()
+            .and_then(|parent| safe_path_at(parent, &name))
+            .filter(|target| !target.exists())
+        {
+            if let Err(error) = fs::rename(&previous, &target) {
+                eprintln!(
+                    "WordCraft: no se pudo recuperar {}: {error}",
+                    previous.display()
+                );
+            }
+        }
+    }
+    for entry in crate::list_files()
+        .into_iter()
+        .filter(|entry| !entry.is_dir && extension(&entry.path) == "docx")
+    {
+        if let Some(path) = safe_path(&entry.path).filter(|path| !word_index_current(path)) {
+            queue_text(&path);
+        }
+    }
+}
+
+pub fn move_word_jobs(from: &Path, to: &Path) {
+    let mut jobs = jobs().lock().unwrap();
+    let paths: Vec<_> = jobs
+        .keys()
+        .filter(|path| path.starts_with(from))
+        .cloned()
+        .collect();
+    for path in paths {
+        let relative = path.strip_prefix(from).unwrap();
+        let target = if relative.as_os_str().is_empty() {
+            to.into()
+        } else {
+            to.join(relative)
+        };
+        if let Some(job) = jobs.remove(&path) {
+            jobs.insert(target, job);
+        }
+    }
+}
+
+pub fn index_ready_words(writes: &Mutex<()>) {
+    let now = Instant::now();
+    let mut ready = Vec::new();
+    jobs().lock().unwrap().retain(|path, job| {
+        job.editors.retain(|_, expiry| *expiry > now);
+        if job.editors.is_empty() {
+            if let Some(due) = job.due.filter(|due| *due <= now) {
+                ready.push((path.clone(), due));
+            }
+        }
+        !job.editors.is_empty() || job.due.is_some()
+    });
+    for (path, due) in ready {
+        let still_ready = |job: &WordJob| {
+            job.due == Some(due) && !job.editors.values().any(|expiry| *expiry > Instant::now())
+        };
+        let snapshot = {
+            let _guard = writes.lock().unwrap();
+            if !jobs().lock().unwrap().get(&path).is_some_and(still_ready) {
+                continue;
+            }
+            read_document(&document_path(&path))
+        };
+        let extracted = snapshot.and_then(|bytes| {
+            read_docx_text_with_limit(&bytes, None).map(|(text, _)| (bytes, text))
+        });
+        let _guard = writes.lock().unwrap();
+        {
+            let mut jobs = jobs().lock().unwrap();
+            let Some(job) = jobs.get_mut(&path).filter(|job| still_ready(job)) else {
+                continue;
+            };
+            job.due = None;
+        }
+        let Ok((bytes, text)) = extracted else {
+            continue;
+        };
+        if !is_word_package(&path) && install_word_package(&path, &bytes, true).is_err() {
+            continue;
+        }
+        let result =
+            server::write_atomic(&path.join(WORD_TEXT), text.as_bytes(), true).and_then(|()| {
+                server::write_atomic(&path.join(WORD_REVISION), revision(&bytes).as_bytes(), true)
+            });
+        if let Err(error) = result {
+            eprintln!("WordCraft: no se pudo actualizar el índice: {error}");
+        }
+    }
+}
+
+pub fn create_document(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    if extension(&path.to_string_lossy()) != "docx" {
+        return server::write_atomic(path, bytes, false);
+    }
+    install_word_package(path, bytes, false)?;
+    queue_text(path);
+    Ok(())
+}
+
+fn install_word_package(path: &Path, bytes: &[u8], migrate: bool) -> std::io::Result<()> {
+    if !migrate && path.exists() {
+        return Err(ErrorKind::AlreadyExists.into());
+    }
+    let parent = path.parent().ok_or(ErrorKind::InvalidInput)?;
+    fs::create_dir_all(parent)?;
+    let staging = tempfile::Builder::new()
+        .prefix(".wordcraft-")
+        .tempdir_in(parent)?;
+    server::write_atomic(&staging.path().join(WORD_BODY), bytes, false)?;
+    let previous = staging.path().join(".previous.docx");
+    if migrate {
+        server::write_atomic(
+            &staging.path().join(".restore-name"),
+            path.file_name()
+                .ok_or(ErrorKind::InvalidInput)?
+                .to_string_lossy()
+                .as_bytes(),
+            false,
+        )?;
+        fs::rename(path, &previous)?;
+    }
+    if let Err(error) = fs::rename(staging.path(), path) {
+        if migrate && fs::rename(&previous, path).is_err() {
+            eprintln!(
+                "WordCraft: documento conservado en {}",
+                staging.keep().display()
+            );
+        }
+        return Err(error);
+    }
+    if migrate {
+        let _ = fs::remove_file(path.join(".previous.docx"));
+        let _ = fs::remove_file(path.join(".restore-name"));
+    }
+    Ok(())
+}
+
 fn valid_format(path: &str, bytes: &[u8]) -> bool {
     match extension(path).as_str() {
         "docx" | "pptx" | "xlsx" => bytes.starts_with(b"PK\x03\x04"),
@@ -93,12 +345,15 @@ pub fn open(req: Request, path: &str) {
     let Some(full) = safe_path(path) else {
         return json_error(req, 400, "Ruta no válida");
     };
-    let bytes = match read_document(&full) {
+    let bytes = match read_document(&document_path(&full)) {
         Ok(bytes) => bytes,
         Err((status, message)) => return json_error(req, status, message),
     };
     if !valid_format(path, &bytes) {
         return json_error(req, 415, "Formato de documento no válido");
+    }
+    if extension(path) == "docx" && !word_index_current(&full) {
+        queue_text(&full);
     }
     let tag = revision(&bytes);
     let _ = req.respond(
@@ -117,19 +372,35 @@ pub fn context(req: Request, path: &str) {
     let Some(full) = safe_path(path) else {
         return json_error(req, 400, "Ruta no válida");
     };
-    let bytes = match read_document(&full) {
+    const STALE: &str =
+        "El documento cambió en otra sesión. Vuelve a abrirlo para usar esa versión.";
+    let expected = server::header(&req, "If-Match");
+    if word_index_current(&full) {
+        if let (Ok(tag), Ok(mut text)) = (
+            fs::read_to_string(full.join(WORD_REVISION)),
+            fs::read_to_string(full.join(WORD_TEXT)),
+        ) {
+            if expected.is_some_and(|expected| expected != tag) {
+                return json_error(req, 412, STALE);
+            }
+            let truncated = text.len() > 160_000;
+            if truncated {
+                text.truncate(text.floor_char_boundary(160_000));
+            }
+            return server::json(
+                req,
+                json!({"path":path,"content":text,"truncated":truncated}),
+            );
+        }
+    }
+    let bytes = match read_document(&document_path(&full)) {
         Ok(bytes) => bytes,
         Err((status, message)) => return json_error(req, status, message),
     };
-    if server::header(&req, "If-Match").is_some_and(|tag| tag != revision(&bytes)) {
-        return json_error(
-            req,
-            412,
-            "El documento cambió en otra sesión. Vuelve a abrirlo para usar esa versión.",
-        );
+    if expected.is_some_and(|tag| tag != revision(&bytes)) {
+        return json_error(req, 412, STALE);
     }
-    let result = read_docx_text(&bytes);
-    match result {
+    match read_docx_text(&bytes) {
         Ok((content, truncated)) => server::json(
             req,
             json!({ "path": path, "content": content, "truncated": truncated }),
@@ -139,6 +410,13 @@ pub fn context(req: Request, path: &str) {
 }
 
 fn read_docx_text(bytes: &[u8]) -> Result<(String, bool), (u16, &'static str)> {
+    read_docx_text_with_limit(bytes, Some(160_000))
+}
+
+fn read_docx_text_with_limit(
+    bytes: &[u8],
+    limit: Option<usize>,
+) -> Result<(String, bool), (u16, &'static str)> {
     const INVALID: (u16, &str) = (
         422,
         "No se pudo extraer texto del DOCX. Comprueba que se puede abrir sin contraseña.",
@@ -156,11 +434,10 @@ fn read_docx_text(bytes: &[u8]) -> Result<(String, bool), (u16, &'static str)> {
         }
     })?;
     let xml = std::str::from_utf8(&xml).map_err(|_| INVALID)?;
-    docx_xml_text(xml).map_err(|_| INVALID)
+    docx_xml_text(xml, limit).map_err(|_| INVALID)
 }
 
-fn docx_xml_text(xml: &str) -> Result<(String, bool), quick_xml::Error> {
-    const LIMIT: usize = 160_000;
+fn docx_xml_text(xml: &str, limit: Option<usize>) -> Result<(String, bool), quick_xml::Error> {
     let mut reader = NsReader::from_str(xml);
     let mut output = String::new();
     let mut in_text = false;
@@ -193,8 +470,8 @@ fn docx_xml_text(xml: &str) -> Result<(String, bool), quick_xml::Error> {
             Event::Eof => return Ok((output.trim_end().to_owned(), false)),
             _ => {}
         }
-        if output.len() > LIMIT {
-            output.truncate(output.floor_char_boundary(LIMIT));
+        if let Some(limit) = limit.filter(|limit| output.len() > *limit) {
+            output.truncate(output.floor_char_boundary(limit));
             return Ok((output, true));
         }
     }
@@ -217,7 +494,7 @@ pub fn save(mut req: Request, path: &str) {
     if !valid_format(path, &bytes) {
         return json_error(req, 415, "Formato de documento no válido");
     }
-    let current = match read_document(&full) {
+    let current = match read_document(&document_path(&full)) {
         Ok(bytes) => bytes,
         Err((status, message)) => return json_error(req, status, message),
     };
@@ -229,9 +506,20 @@ pub fn save(mut req: Request, path: &str) {
                 "El archivo cambió en otra sesión. Descarga tu copia para conservar los cambios.",
             );
         }
-        if server::write_atomic(&full, &bytes, true).is_err() {
+        if is_word_package(&full) {
+            let _ = fs::remove_file(full.join(WORD_REVISION));
+        }
+        let written = if extension(path) == "docx" && !is_word_package(&full) {
+            install_word_package(&full, &bytes, true)
+        } else {
+            server::write_atomic(&document_path(&full), &bytes, true)
+        };
+        if written.is_err() {
             return json_error(req, 500, "No se pudo guardar el archivo");
         }
+    }
+    if extension(path) == "docx" && (current != bytes || !word_index_current(&full)) {
+        queue_text(&full);
     }
     server::json(req, json!({"revision": revision(&bytes)}));
 }
@@ -254,6 +542,58 @@ fn read_document(path: &Path) -> Result<Vec<u8>, (u16, &'static str)> {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn packages_keep_bytes_and_index_only_after_all_editors_leave() {
+        let vault = tempfile::tempdir().unwrap();
+        let doc = vault.path().join("Informe.docx");
+        let original = include_bytes!("blank.docx");
+        create_document(&doc, original).unwrap();
+        assert!(is_word_package(&doc));
+        assert_eq!(fs::read(document_path(&doc)).unwrap(), original);
+        assert!(create_document(&doc, original).is_err());
+
+        let now = Instant::now();
+        {
+            let mut jobs = jobs().lock().unwrap();
+            let job = jobs.get_mut(&doc).unwrap();
+            job.due = Some(now);
+            for session in ["primera", "segunda"] {
+                job.editors.insert(session.into(), now + EDITOR_LEASE);
+            }
+        }
+        let writes = Mutex::new(());
+        index_ready_words(&writes);
+        assert!(!doc.join(WORD_TEXT).exists());
+        jobs()
+            .lock()
+            .unwrap()
+            .get_mut(&doc)
+            .unwrap()
+            .editors
+            .remove("primera");
+        index_ready_words(&writes);
+        assert!(!doc.join(WORD_TEXT).exists());
+        jobs()
+            .lock()
+            .unwrap()
+            .get_mut(&doc)
+            .unwrap()
+            .editors
+            .remove("segunda");
+        index_ready_words(&writes);
+        assert!(word_index_current(&doc));
+        assert_eq!(
+            fs::read_to_string(doc.join(WORD_REVISION)).unwrap(),
+            revision(original)
+        );
+
+        let old = vault.path().join("Legado.docx");
+        fs::write(&old, original).unwrap();
+        install_word_package(&old, original, true).unwrap();
+        assert_eq!(fs::read(document_path(&old)).unwrap(), original);
+        assert!(!old.join(".previous.docx").exists());
+    }
 
     #[test]
     fn reads_visible_docx_text_with_paragraphs_and_escaped_characters() {

@@ -8,6 +8,26 @@ const fieldTypes = { text:'Texto', select:'Selección', multi:'Selección múlti
 const fieldIcons = { text:'List', select:'ChevronDown', multi:'Tags', date:'CalendarDays', number:'Hash', checkbox:'Check', relation:'Links', formula:'CodeXml', rollup:'ListFilter', url:'ExternalLink' };
 const viewIcons = { table:'List', board:'Columns2', gallery:'LayoutDashboard', calendar:'CalendarDays', list:'ListFilter' };
 const covers = { none:'Sin portada', tapestry:'Tapiz violeta', forest:'Niebla', parchment:'Papel', wine:'Terciopelo' };
+const dateOnly = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+const normalized = value => value.toLocaleLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu,'');
+const emojis = [
+  ['😀','Sonrisa smile'],['😂','Risa laugh'],['🙂','Feliz happy'],['😍','Enamorado love'],['👍','Pulgar arriba ok'],['👋','Saludo hola wave'],
+  ['❤️','Corazón heart'],['✨','Brillo sparkles'],['⭐','Estrella star'],['🔥','Fuego fire'],['🎉','Fiesta party'],['✅','Hecho check'],
+  ['❌','Error cruz cross'],['⚠️','Alerta aviso warning'],['💡','Idea bombilla'],['📅','Calendario fecha calendar'],['📌','Chincheta pin'],
+  ['📎','Clip adjunto'],['📚','Libros books'],['📝','Nota memo'],['📈','Gráfico chart'],['🔍','Buscar lupa search'],['🔗','Enlace link'],
+  ['🎯','Objetivo target'],['🚀','Cohete rocket'],['⏰','Reloj alarma clock'],['☕','Café coffee'],['🌙','Luna moon'],
+];
+
+function prefixBlock(value) {
+  const heading=/^(#{1,6}) $/.exec(value);
+  if(heading)return 'h'+heading[1].length;
+  if(/^[-*+] $/.test(value))return 'bullet';
+  if(value==='1. ')return 'number';
+  if(value==='[] ')return 'task';
+  if(value==='> ')return 'toggle';
+  if(value==='" ')return 'quote';
+  return null;
+}
 
 function chartMarkup(text) {
   const rows=[];
@@ -42,10 +62,10 @@ export function createNotion(ctx) {
     return Promise.all(files.map(async file => { const doc = await ctx.loadDocument(file.path); return { path:file.path, title:title(file.path), doc, ...readPage(doc.content) }; }));
   }
   function update(doc, content, origin) { ctx.changed(doc, content, origin); }
-  async function newPage(template = pageTemplates[0], parentDoc = null, onCreated = null) {
+  async function newPage(template = pageTemplates[0], parentDoc = null, onCreated = null, suggestedName = '') {
     if (typeof template === 'string') template = pageTemplates.find(t => t.id === template) || pageTemplates[0];
     const folder = parentDoc ? parentDoc.path.replace(/\.md$/, '') + '/' : '';
-    ctx.promptName(parentDoc ? 'Crear subpágina' : 'Crear página', template.id === 'blank' ? 'Sin título' : template.name, 'Nombre de la página', async name => {
+    ctx.promptName(parentDoc ? 'Crear subpágina' : 'Crear página', suggestedName || (template.id === 'blank' ? 'Sin título' : template.name), 'Nombre de la página', async name => {
       const path = choosePath(folder + name, '.md');
       const meta = { icon: template.icon || 'FileText', cover:template.cover || 'none', editor:'blocks', ...(template.meta || {}) };
       if (parentDoc) meta.parent = parentDoc.path;
@@ -56,6 +76,130 @@ export function createNotion(ctx) {
       await ctx.refreshFiles(); for (const part of path.split('/').slice(0,-1)) ctx.state.folders.add(part);
       ctx.closeOverlay(); await ctx.openNote(path, { mode:'blocks' });
     });
+  }
+
+  const remindersFor = page => (Array.isArray(page.meta.recordatorios) ? page.meta.recordatorios : [])
+    .filter(item=>typeof item?.id==='string' && typeof item.label==='string' && typeof item.when==='string' && Number.isFinite(Date.parse(item.when)));
+
+  async function calendarEntries() {
+    const [pages,collections]=await Promise.all([allPages(),Promise.all(ctx.state.files.filter(file=>!file.is_dir&&file.path.endsWith('.base')).map(async file=>{
+      try {
+        const config=JSON.parse((await ctx.loadDocument(file.path)).content);
+        const fields=config.fields.filter(field=>field.type==='date');
+        const views=config.views.filter(view=>view.type==='calendar');
+        return [file.path,[...new Set((views.length?views.map(view=>fields.find(field=>field.key===view.dateBy)||fields[0]):fields).filter(Boolean).map(field=>field.key))]];
+      } catch { return [file.path,[]]; }
+    }))]);
+    const dateFields=new Map(collections);
+    return pages.filter(page=>!page.meta.archived&&!page.meta.template).flatMap(page=>{
+      const dates=new Set([page.meta.fecha_calendario,page.title,...(dateFields.get(page.meta._database)||['fecha']).map(key=>page.meta[key])].filter(dateOnly));
+      return [
+        ...[...dates].map(date=>({date,path:page.path,title:page.title})),
+        ...remindersFor(page).map(item=>({date:item.when.slice(0,10),path:page.path,title:item.label,when:item.when,id:item.id})),
+      ];
+    }).sort((a,b)=>a.date.localeCompare(b.date)||String(a.when||'').localeCompare(String(b.when||''))||a.title.localeCompare(b.title,'es'));
+  }
+
+  async function dueReminders() {
+    const now=Date.now();
+    return (await allPages()).filter(page=>!page.meta.archived&&!page.meta.template).flatMap(page=>remindersFor(page)
+      .filter(item=>Date.parse(item.when)<=now && Date.parse(item.when)>now-86_400_000)
+      .map(item=>({...item,path:page.path})));
+  }
+
+  function pickDate(heading, type, initial, onSave, allowClear=false, label='') {
+    ctx.dialog(heading,`<form id="scDateForm"><label class="field-label" for="scDateValue">Fecha${type==='datetime-local'?' y hora':''}</label><input id="scDateValue" class="text-input" type="${type}" value="${escape(initial)}" ${allowClear?'':'required'}>${label?`<label class="field-label" for="scDateLabel">Título del recordatorio</label><input class="text-input" id="scDateLabel" value="${escape(label)}" required maxlength="160">`:''}<div class="form-actions"><button class="primary-button" type="submit">Guardar</button></div></form>`);
+    const input=$('#scDateValue');
+    $('#scDateForm').onsubmit=event=>{
+      event.preventDefault();
+      const date=input.value, name=$('#scDateLabel')?.value.trim();
+      ctx.closeOverlay();
+      invoke(()=>onSave(date,name));
+    };
+  }
+
+  function scheduleNote(doc) {
+    const date=readPage(doc.content).meta.fecha_calendario;
+    pickDate('Programar nota','date',dateOnly(date)?date:localDate(),async value=>{
+      update(doc,setProperties(doc.content,{fecha_calendario:value||undefined}));
+      await ctx.saveDocument(doc);
+      ctx.notify(value?'Nota programada en el calendario.':'Fecha de la nota eliminada.');
+    },true);
+  }
+
+  async function changeReminder(event,patch) {
+    const doc=await ctx.loadDocument(event.path);
+    const current=remindersFor(readPage(doc.content));
+    const reminders=patch?current.map(item=>item.id===event.id?{...item,...patch}:item):current.filter(item=>item.id!==event.id);
+    update(doc,setProperties(doc.content,{recordatorios:reminders.length?reminders:undefined}));
+    await ctx.saveDocument(doc);
+  }
+
+  function mountCalendar(container,tab) {
+    let alive=true, version=0, timer;
+    let selected=dateOnly(tab.date)?tab.date:localDate();
+    function setDay(date,focus=false) {
+      selected=date;tab.date=date;ctx.persist();
+      invoke(async()=>{await draw();if(focus)$(`[data-day="${date}"]`,container)?.focus();});
+    }
+    async function draw() {
+      const request=++version, events=await calendarEntries();
+      if(!alive||request!==version||!container.isConnected)return;
+      const [year,month]=selected.split('-').map(Number), first=new Date(year,month-1,1);
+      const offset=(first.getDay()+6)%7, days=new Date(year,month,0).getDate(), prefix=selected.slice(0,7)+'-';
+      const byDay=new Map();
+      for(const event of events) {
+        if(!event.date.startsWith(prefix))continue;
+        const items=byDay.get(event.date)||[];
+        items.push(event);byDay.set(event.date,items);
+      }
+      const today=localDate(), dayEvents=byDay.get(selected)||[];
+      const dateLabel=new Date(selected+'T12:00:00').toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'});
+      container.innerHTML=`<div class="sc-calendar">
+        <header class="sc-calendar-head"><div><h1>Calendario</h1><p>Notas, colecciones y recordatorios de la bóveda.</p></div><button class="primary-button" data-n-action="event">${I('Plus',16)} Nuevo evento</button></header>
+        <div class="sc-calendar-layout"><section class="sc-calendar-grid" aria-label="Mes">
+          <div class="n-calendar-controls"><strong>${escape(first.toLocaleDateString('es',{month:'long',year:'numeric'}))}</strong><span></span><button data-step="-1" aria-label="Mes anterior">${I('ChevronLeft',17)}</button><button data-today>Hoy</button><button data-step="1" aria-label="Mes siguiente">${I('ChevronRight',17)}</button></div>
+          <div class="n-calendar-week">${['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(day=>`<span>${day}</span>`).join('')}</div>
+          <div class="n-calendar">${Array.from({length:Math.ceil((offset+days)/7)*7},(_,i)=>{
+            const day=i-offset+1;
+            if(day<1||day>days)return '<div class="n-calendar-day outside"></div>';
+            const date=prefix+String(day).padStart(2,'0'), items=byDay.get(date)||[];
+            return `<button type="button" class="n-calendar-day ${date===today?'today':''}" data-day="${date}" aria-label="${date}${items.length?', '+items.length+' eventos':''}" aria-pressed="${date===selected}"><strong>${day}</strong>${items.slice(0,2).map(item=>`<span>${escape(item.title)}</span>`).join('')}${items.length>2?`<small>+${items.length-2}</small>`:''}</button>`;
+          }).join('')}</div>
+        </section><section class="sc-calendar-agenda" aria-label="Agenda del día"><h2>${escape(dateLabel)}</h2>
+          ${dayEvents.length?dayEvents.map((item,index)=>`<div class="sc-agenda-row"><button class="sc-agenda-event" data-path="${escape(item.path)}">${I(item.when?'CalendarDays':'FileText',16)}<span>${escape(item.title)}<small>${item.when?escape(item.when.slice(11,16)):'Todo el día'}</small></span></button>${item.id?`<button class="icon-button" type="button" aria-label="Opciones del recordatorio" data-reminder="${index}">${I('MoreHorizontal',16)}</button>`:''}</div>`).join(''):'<p>No hay eventos para este día.</p>'}
+          <button class="secondary-button" data-n-action="daily">${I('BookOpen',15)} Abrir diario</button>
+        </section></div></div>`;
+      $$('[data-day]',container).forEach(button=>{
+        button.onclick=event=>setDay(button.dataset.day,event.detail===0);
+        button.onkeydown=event=>{
+          const delta={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7}[event.key];
+          if(!delta)return;
+          event.preventDefault();
+          setDay(localDate(new Date(year,month-1,Number(button.dataset.day.slice(-2))+delta)),true);
+        };
+      });
+      $$('[data-step]',container).forEach(button=>button.onclick=()=>setDay(localDate(new Date(year,month-1+Number(button.dataset.step),1))));
+      $('[data-today]',container).onclick=()=>setDay(today);
+      $$('[data-path]',container).forEach(button=>button.onclick=()=>ctx.run(ctx.openNote(button.dataset.path)));
+      $$('[data-reminder]',container).forEach(button=>button.onclick=event=>{
+        const reminder=dayEvents[Number(button.dataset.reminder)];
+        ctx.menu(event,[
+          {icon:'Pencil',label:'Editar recordatorio',action:()=>pickDate('Editar recordatorio','datetime-local',reminder.when,(when,label)=>changeReminder(reminder,{when,label}),false,reminder.title)},
+          {icon:'Trash2',label:'Quitar recordatorio',danger:true,action:()=>changeReminder(reminder,null)},
+        ]);
+      });
+      bindLocal(container,{daily:()=>ctx.dailyNote(selected),event:()=>ctx.promptName('Nuevo evento','', 'Nombre para el '+selected,async name=>{
+        const path=choosePath(name,'.md');
+        await postFile(path,writePage({fecha_calendario:selected},''));
+        await ctx.refreshFiles();
+        await draw();
+      })});
+    }
+    const refresh=()=>{clearTimeout(timer);timer=setTimeout(()=>invoke(draw),200);};
+    document.addEventListener('sc-document-changed',refresh);
+    invoke(draw);
+    return {refresh:draw,destroy(){alive=false;clearTimeout(timer);document.removeEventListener('sc-document-changed',refresh);}};
   }
   async function createDatabase(parentDoc = null, onCreated = null, view = 'table') {
     const calendar = view === 'calendar';
@@ -91,23 +235,8 @@ export function createNotion(ctx) {
       const recent = ctx.recentFiles().filter(path => byPath.has(path)).slice(0, 5);
       const favorites = ctx.state.bookmarks.filter(path => byPath.has(path));
       const today = localDate();
-      const calendars = await Promise.all(collections.map(async file => {
-        try {
-          const data = JSON.parse((await ctx.loadDocument(file.path)).content);
-          const view = data.views.find(view => view.type === 'calendar');
-          const date = data.fields.find(field => field.key === view?.dateBy && field.type === 'date')
-            || data.fields.find(field => field.type === 'date');
-          return view && date ? [file.path, date.key] : null;
-        } catch { return null; }
-      }));
-      const fields = new Map(calendars.filter(Boolean));
-      const pages = fields.size ? await allPages() : [];
+      const events=(await calendarEntries()).filter(event=>event.date>=today).slice(0,5);
       if (!alive || !container.isConnected) return;
-      const events = pages.flatMap(page => {
-        const value = page.meta[fields.get(page.meta._database)];
-        return !page.meta.archived && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && value >= today
-          ? [{ ...page, date: value }] : [];
-      }).sort((a,b) => a.date.localeCompare(b.date)).slice(0, 5);
       const pinned = ctx.homeCollection();
       const hours = new Date().getHours();
       const greeting = hours < 12 ? 'Buenos días' : hours < 20 ? 'Buenas tardes' : 'Buenas noches';
@@ -119,7 +248,7 @@ export function createNotion(ctx) {
         </section>
         ${favorites.length ? `<section><h2>${I('Bookmark',15)} Favoritas</h2><div class="sc-home-panel sc-home-links">${favorites.map(path => open(path)).join('')}</div></section>` : ''}
         <section><h2>${I('CalendarDays',15)} Próximos eventos</h2>
-          <div class="sc-home-panel sc-home-events">${events.length ? events.map(event => `<div><time datetime="${event.date}">${escape(new Date(event.date + 'T12:00:00').toLocaleDateString('es',{day:'numeric',month:'short'}))}</time>${open(event.path,event.title)}</div>`).join('') : `<div class="sc-home-empty">${I('CalendarDays',24)}<p>Las fechas de tus colecciones con vista de calendario aparecerán aquí.</p>${actionButton('CalendarDays','Abrir diario','daily')}</div>`}</div>
+          <div class="sc-home-panel sc-home-events">${events.length ? events.map(event => `<div><time datetime="${event.date}">${escape(new Date(event.date + 'T12:00:00').toLocaleDateString('es',{day:'numeric',month:'short'}))}</time>${open(event.path,event.title)}</div>`).join('') : `<div class="sc-home-empty">${I('CalendarDays',24)}<p>Las fechas de notas, colecciones y recordatorios aparecerán aquí.</p>${actionButton('CalendarDays','Abrir calendario','calendar')}</div>`}</div>
         </section>
         <section><h2>${I('Columns2',15)} Vistas de inicio</h2><div class="sc-home-panel">
           <div class="sc-home-pin"><label for="homeCollection">Colección anclada</label><select id="homeCollection"><option value="">Seleccionar colección</option>${collections.map(file => `<option value="${escape(file.path)}">${escape(title(file.path))}</option>`).join('')}</select></div>
@@ -129,7 +258,7 @@ export function createNotion(ctx) {
       const selector = $('#homeCollection',container);
       selector.value = collections.some(file => file.path === pinned) ? pinned : '';
       selector.onchange = () => { ctx.homeCollection(selector.value); ctx.run(render()); };
-      bindLocal(container, { page:() => ctx.createNote(), database:() => createDatabase(), daily:ctx.dailyNote });
+      bindLocal(container, { page:() => ctx.createNote(), database:() => createDatabase(), calendar:()=>ctx.openCalendar() });
       $$('[data-open]',container).forEach(el => el.onclick = () => ctx.run(ctx.openNote(el.dataset.open)));
       const target = $('#homePinned',container);
       if (target) embedded = mountDatabase(target, { id:'home-pinned', path:pinned }, true);
@@ -200,6 +329,25 @@ export function createNotion(ctx) {
     }
     function renderBlock(block) {
       const el=document.createElement('div');el.className=`n-block n-block-${block.type}`;el.dataset.block=block.id;
+      el.tabIndex=-1;
+      el.onblur=()=>el.classList.remove('n-block-selected');
+      el.onkeydown=event=>{
+        if(event.target!==el || event.isComposing || !el.classList.contains('n-block-selected'))return;
+        if((event.ctrlKey||event.metaKey)&&event.code==='KeyZ'&&!event.altKey) {
+          event.preventDefault();event.stopPropagation();undo(event.shiftKey);return;
+        }
+        if(!['Escape','Delete','Backspace','Enter','ArrowUp','ArrowDown'].includes(event.key))return;
+        event.preventDefault();event.stopPropagation();
+        if(event.key==='Enter')edit(block.id);
+        else if(event.key.startsWith('Arrow')) {
+          const next=blocks[blocks.indexOf(block)+(event.key==='ArrowUp'?-1:1)];
+          if(next)selectBlock(next);
+        } else {
+          const next=blocks[blocks.indexOf(block)+1]||blocks[blocks.indexOf(block)-1];
+          removeBlock(block);
+          selectBlock(next||blocks[0]);
+        }
+      };
       el.innerHTML=`<div class="n-block-rail"><button class="n-block-insert" title="Insertar bloque debajo" aria-label="Insertar bloque debajo">${I('Plus',14)}</button><button class="n-block-handle" draggable="true" title="Opciones del bloque; arrastra para mover" aria-label="Opciones del bloque">${I('Grip',15)}</button></div><div class="n-block-render" tabindex="0">${block.raw ? renderMarkdown(block.raw) : '<span class="n-block-placeholder">Escribe algo o pulsa / para ver los bloques…</span>'}</div>`;
       const preview=$('.n-block-render',el);
       if(block.type==='callout')preview.classList.add('n-callout');
@@ -261,16 +409,77 @@ export function createNotion(ctx) {
         drawList();
       } });
     }
-    function linkPage(block) {
+    function selectBlock(block) {
+      const el=$(`[data-block="${block.id}"]`,container);
+      if(!el)return;
+      el.classList.add('n-block-selected');
+      el.focus({preventScroll:true});
+      el.scrollIntoView({block:'nearest'});
+    }
+    function removeBlock(block) {
+      blocks=blocks.filter(item=>item!==block);
+      if(!blocks.length)blocks=[{id:uuid(),type:'text',raw:''}];
+      commit();drawList();
+    }
+    function findInPage() {
+      ctx.chooser('Buscar en esta nota','Buscar texto…',query=>blocks.map(block=>({block,text:blockText(block)}))
+        .filter(({text})=>text.trim()&&normalized(text).includes(normalized(query.trim()))).slice(0,60)
+        .map(({block,text})=>{
+          const index=Math.max(0,normalized(text).indexOf(normalized(query.trim()))-30);
+          return {label:text.slice(index,index+150).replace(/\s+/g,' '),icon:'FileText',action:()=>selectBlock(block)};
+        }));
+    }
+    function setInlineValue(block,value) {
+      if(!alive||!blocks.includes(block))return;
+      block.raw=updateBlockText(block,value);
+      commit();drawList();edit(block.id);
+    }
+    function insertInline(block,value,from,to) {
+      const text=blockText(block);
+      setInlineValue(block,text.slice(0,from)+value+text.slice(to));
+      const input=$('.n-block-textarea',container);
+      input?.setSelectionRange(from+value.length,from+value.length);
+    }
+    function dateMention(date) { return '['+date+'](/cerebro?fecha='+encodeURIComponent(date)+')'; }
+    function mentionMenu(block,from,to) {
+      const today=new Date();
+      const day=offset=>localDate(new Date(today.getFullYear(),today.getMonth(),today.getDate()+offset));
+      ctx.chooser('Mencionar','Busca una página, fecha o recordatorio…',query=>[
+        ...[['Hoy',0],['Mañana',1],['Ayer',-1]].map(([label,offset])=>({
+          label,detail:day(offset),icon:'CalendarDays',action:()=>insertInline(block,dateMention(day(offset)),from,to),
+        })),
+        {label:'Elegir fecha',icon:'CalendarDays',action:()=>pickDate('Mencionar fecha','date',day(0),date=>insertInline(block,dateMention(date),from,to))},
+        ...(dateOnly(query.trim())?[{label:query.trim(),icon:'CalendarDays',action:()=>insertInline(block,dateMention(query.trim()),from,to)}]:[]),
+        {label:'Recordatorio',icon:'CalendarDays',detail:'Recordar · Añade un aviso al calendario.',action:()=>pickDate('Nuevo recordatorio','datetime-local',day(0)+'T09:00',async (when,label)=>{
+          if(!alive||!blocks.includes(block))return;
+          if(!label||!Number.isFinite(Date.parse(when)))throw new Error('Introduce un título y una fecha válida.');
+          const item={id:uuid(),label,when};
+          insertInline(block,'🔔 '+dateMention(when.slice(0,10)),from,to);
+          update(doc,setProperties(doc.content,{recordatorios:[...remindersFor(readPage(doc.content)),item]}),tab.id);
+          await ctx.saveDocument(doc);
+          ctx.notify('Recordatorio añadido al calendario.');
+        },false,title(doc.path))},
+        {label:'Mencionar archivo…',icon:'AtSign',action:()=>mention(block,from,to)},
+        ...ctx.state.files.filter(file=>!file.is_dir&&file.path!==doc.path&&/\.md$/i.test(file.path))
+          .map(file=>({label:title(file.path),detail:file.path,icon:'FileText',action:()=>insertInline(block,'[['+file.path.replace(/\.md$/i,'')+']]',from,to)})),
+        ...(query.trim()?[{label:'Mencionar a '+query.trim(),icon:'AtSign',detail:'Mención de texto.',action:()=>insertInline(block,'@'+query.trim(),from,to)}]:[]),
+      ].filter(item=>normalized(item.label+' '+(item.detail||'')).includes(normalized(query.trim()))).slice(0,70));
+    }
+    function linkPage(block, from, to) {
+      const attach=path=>{
+        const raw='[['+path.replace(/\.md$/i,'')+']]';
+        if (!alive || (block && !blocks.includes(block))) return;
+        if (block && from!==undefined) { insertInline(block,raw,from,to);return; }
+        if (block) { block.type='text';block.raw=raw; }
+        else blocks.push({id:uuid(),type:'text',raw});
+        commit();drawList();
+      };
       ctx.chooser('Enlazar una página','Buscar por nombre o carpeta…',query=>ctx.state.files
         .filter(file=>!file.is_dir && file.path!==doc.path && /\.(md|base|canvas)$/i.test(file.path) && file.path.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
-        .map(file=>({label:title(file.path),detail:file.path,icon:'Links',action:()=>{
-          const raw='[['+file.path.replace(/\.md$/i,'')+']]';
-          if (!alive || (block && !blocks.includes(block))) return;
-          if (block) { block.type='text';block.raw=raw; }
-          else blocks.push({id:uuid(),type:'text',raw});
-          commit();drawList();
-        }})));
+        .slice(0,60).map(file=>({label:title(file.path),detail:file.path,icon:'Links',action:()=>attach(file.path)}))
+        .concat(from===undefined?[]:[{label:'Crear subpágina'+(query.trim()?' «'+query.trim()+'»':''),icon:'FilePlus2',action:()=>newPage(pageTemplates[0],doc,async path=>{
+          attach(path);await ctx.saveDocument(doc);
+        },query.trim())}]));
     }
     function edit(id, openPicker = false) {
       const block=blocks.find(b=>b.id===id),el=$(`[data-block="${id}"]`,container);if(!block||!el||$('.n-block-textarea',el))return;
@@ -285,7 +494,7 @@ export function createNotion(ctx) {
       const resize=()=>{textarea.style.height='auto';textarea.style.height=Math.max(30,textarea.scrollHeight)+'px';};resize();textarea.focus();textarea.setSelectionRange(textarea.value.length,textarea.value.length);
       const finish=()=>{if(!alive||!textarea.isConnected)return;if(blockPicker?.anchor===textarea)blockPicker.close();const replacement=renderBlock(block);el.replaceWith(replacement);};
       textarea.onblur=finish;
-      let remembered=false;
+      let remembered=false, emojiState;
       textarea.oninput=event=>{
         resize();
         if (event.isComposing) return;
@@ -294,8 +503,26 @@ export function createNotion(ctx) {
           blockPicker.filter(textarea.value.slice(1));
           return;
         }
+        const end=textarea.selectionStart, token=/(?:^|\s):([\p{L}\p{N}_-]*)$/u.exec(textarea.value.slice(0,end));
+        if(token && !['code','raw'].includes(block.type) && event.inputType!=='insertFromPaste') {
+          const start=end-token[1].length-1;
+          emojiState={before:textarea.value.slice(0,start),after:textarea.value.slice(end)};
+          if(blockPicker?.kind!=='emoji')slash(block,textarea,true,emojis.map(([symbol,label])=>({
+            label:label.split(' ')[0],symbol,aliases:label,detail:'',action:()=>{
+              setInlineValue(block,emojiState.before+symbol+emojiState.after);
+              $('.n-block-textarea',container)?.setSelectionRange(emojiState.before.length+symbol.length,emojiState.before.length+symbol.length);
+            },
+          })));
+          blockPicker.filter(token[1]);
+          return;
+        }
         if (blockPicker?.anchor===textarea) blockPicker.close(false);
         if(!remembered){remember();remembered=true;}
+        const type=block.type==='text'&&event.inputType!=='insertFromPaste'&&prefixBlock(textarea.value);
+        if(type) {
+          block.type=type;block.raw='';textarea.value='';
+          textarea.placeholder=type==='toggle'?'Título del desplegable. Añade el contenido en la siguiente línea.':'Escribe el contenido del bloque…';
+        }
         block.raw=updateBlockText(block,textarea.value);commit(false);
       };
       textarea.oncompositionend=()=>textarea.oninput(new Event('input'));
@@ -305,10 +532,13 @@ export function createNotion(ctx) {
         if (event.key === '@' && !event.isComposing && !['code', 'raw'].includes(block.type)
           && atMentionStart(textarea.value.slice(0, textarea.selectionStart))) {
           event.preventDefault();
-          mention(block, textarea.selectionStart, textarea.selectionEnd);
+          mentionMenu(block,textarea.selectionStart,textarea.selectionEnd);
           return;
         }
-        if(event.key==='Escape'){event.preventDefault();textarea.blur();return;}
+        if(event.key==='['&&!['code','raw'].includes(block.type)&&textarea.value[textarea.selectionStart-1]==='[') {
+          event.preventDefault();linkPage(block,textarea.selectionStart-1,textarea.selectionEnd);return;
+        }
+        if(event.key==='Escape'){event.preventDefault();event.stopPropagation();textarea.blur();selectBlock(block);return;}
         if((event.ctrlKey||event.metaKey)&&!event.getModifierState('AltGraph')&&((!event.altKey&&['b','i'].includes(event.key.toLowerCase()))||(event.altKey&&event.code==='KeyK'))){event.preventDefault();event.stopPropagation();const wrap=event.key.toLowerCase()==='b'?'**':event.key.toLowerCase()==='i'?'*':'[[',end=wrap==='[['?']]':wrap;const {selectionStart:start,selectionEnd:stop,value}=textarea;textarea.value=value.slice(0,start)+wrap+value.slice(start,stop)+end+value.slice(stop);textarea.setSelectionRange(start+wrap.length,stop+wrap.length);textarea.dispatchEvent(new Event('input',{bubbles:true}));return;}
         if(event.key==='Enter'&&!event.shiftKey&&!event.ctrlKey&&!event.metaKey&&!['code','toggle','raw'].includes(block.type)){
           event.preventDefault();block.raw=updateBlockText(block,textarea.value);textarea.onblur=null;commit();if(!textarea.value.trim()&&['task','bullet','number'].includes(block.type)){block.type='text';block.raw='';commit();drawList();edit(block.id);return;}const next=block.type==='task'?{id:uuid(),type:'task',raw:'- [ ] '}:block.type==='bullet'?{id:uuid(),type:'bullet',raw:'- '}:block.type==='number'?{id:uuid(),type:'number',raw:String(Number(block.raw.match(/^\d+/)?.[0]||1)+1)+'. '}:{id:uuid(),type:'text',raw:''};blocks.splice(blocks.indexOf(block)+1,0,next);commit();drawList();edit(next.id);
@@ -338,7 +568,7 @@ export function createNotion(ctx) {
           .map(file=>({label:title(file.path),detail:file.path,icon:'LayoutDashboard',action:()=>insertCanvas(block,file.path)})),
       ]);
     }
-    function slash(block,anchor,typing=false){
+    function slash(block,anchor,typing=false,customChoices=null){
       blockPicker?.close();
       const plain=blockText(block);
       const insertCreated=async path=>{
@@ -346,7 +576,7 @@ export function createNotion(ctx) {
         block.type='text';block.raw='[['+path.replace(/\.md$/,'')+']]';commit();await ctx.saveDocument(doc);
       };
       const convert=(label,icon,type,detail,raw,aliases='')=>({label,icon,detail,aliases,action:()=>changeType(block,{type,raw})});
-      const choices=[
+      const choices=customChoices||[
         ...(typing ? [{label:'Preguntar a la IA',icon:'MessageSquare',detail:'Abre el chat con esta nota como contexto.',aliases:'ai ask chat',action:()=>ctx.chatWithNote(doc.path)}] : []),
         {group:'Bloques básicos'},
         convert('Texto','Type','text','Escribe un párrafo.',plain,'paragraph text'),
@@ -416,7 +646,7 @@ export function createNotion(ctx) {
           }
           const row=document.createElement('button'), index=rows.length;
           row.type='button';row.id=id+'-'+index;row.tabIndex=-1;row.setAttribute('role','option');
-          row.innerHTML=`<span class="n-block-option-icon">${I(item.icon,16)}</span><span><strong>${escape(item.label)}</strong><small>${escape(item.detail)}</small></span>`;
+          row.innerHTML=`<span class="n-block-option-icon">${item.symbol?escape(item.symbol):I(item.icon,16)}</span><span><strong>${escape(item.label)}</strong><small>${escape(item.detail)}</small></span>`;
           row.onpointermove=()=>highlight(index);
           row.onmousedown=event=>event.preventDefault();
           row.onclick=()=>{close();invoke(item.action);};
@@ -446,7 +676,7 @@ export function createNotion(ctx) {
         window.removeEventListener('scroll',position,true);
         popup.remove();
       }
-      blockPicker={anchor,close,filter,keydown};
+      blockPicker={anchor,close,filter,keydown,kind:customChoices?'emoji':'slash'};
       document.body.append(popup);
       document.addEventListener('pointerdown',dismiss,true);
       window.addEventListener('resize',position);
@@ -457,11 +687,11 @@ export function createNotion(ctx) {
     function blockMenu(event,block){const anchor=event.currentTarget.closest('.n-block');ctx.menu(event,[{icon:'Pencil',label:'Editar bloque',action:()=>edit(block.id)},{icon:'ListFilter',label:'Convertir en…',action:()=>slash(block,anchor)},{icon:'Files',label:'Duplicar',action:()=>{blocks.splice(blocks.indexOf(block)+1,0,{...block,id:uuid()});commit();drawList();}},{icon:'ArrowLeft',label:'Mover arriba',action:()=>{const index=blocks.indexOf(block);if(index>0){[blocks[index-1],blocks[index]]=[blocks[index],blocks[index-1]];commit();drawList();}}},{icon:'ArrowRight',label:'Mover abajo',action:()=>{const index=blocks.indexOf(block);if(index<blocks.length-1){[blocks[index+1],blocks[index]]=[blocks[index],blocks[index+1]];commit();drawList();}}},null,{icon:'Trash2',label:'Eliminar bloque',danger:true,action:()=>{blocks=blocks.filter(b=>b!==block);if(!blocks.length)blocks=[{id:uuid(),type:'text',raw:''}];commit();drawList();}}]);}
     async function saveAsTemplate(){ctx.promptName('Guardar como plantilla',title(doc.path),'Nombre de tu plantilla',async name=>{const path=choosePath('Plantillas/'+name,'.md');const page=readPage(doc.content);await postFile(path,writePage({...page.meta,template:true,parent:undefined,_database:undefined},page.body));await ctx.refreshFiles();ctx.notify('Plantilla guardada en tu biblioteca.');});}
     async function drawSubpages(){const pages=await allPages();if(!alive)return;const children=pages.filter(page=>page.meta.parent===doc.path),root=$('.n-subpages',container);if(!root)return;root.innerHTML=children.length?`<div class="n-eyebrow">DENTRO DE ESTA PÁGINA</div>${children.map(child=>`<button data-child="${escape(child.path)}">${I(child.meta.icon||'FileText',17)}<span>${escape(child.title)}</span>${I('ArrowUpRight',13)}</button>`).join('')}`:'';$$('[data-child]',root).forEach(el=>el.onclick=()=>ctx.run(ctx.openNote(el.dataset.child,{mode:'blocks'})));}
-    draw();return{destroy(){alive=false;blockPicker?.close();cleanupChildren.forEach(fn=>fn());},refresh:draw,mention:()=>mention(),link:()=>linkPage(),insert:()=>insertBlock()};
+    draw();return{destroy(){alive=false;blockPicker?.close();cleanupChildren.forEach(fn=>fn());},refresh:draw,mention:()=>mention(),link:()=>linkPage(),insert:()=>insertBlock(),find:findInPage};
   }
 
   function renderPageProperties(root,doc,tab,redraw){
-    const page=readPage(doc.content);const reserved=new Set(['icon','cover','editor','parent','template','_database']);
+    const page=readPage(doc.content);const reserved=new Set(['icon','cover','editor','parent','template','_database','fecha_calendario','recordatorios']);
     const entries=Object.entries(page.meta).filter(([key])=>!reserved.has(key));
     root.innerHTML=(page.meta.parent&&ctx.state.files.some(file=>file.path===page.meta.parent)?`<button class="n-parent-collection" data-parent-page>${I('FileText',13)}${escape(title(page.meta.parent))}${I('ArrowUpRight',12)}</button>`:'')+entries.map(([key,value])=>`<div class="n-page-property"><span>${I(typeof value==='boolean'?'Check':Array.isArray(value)?'Tags':'List',14)}${escape(key)}</span><button data-property="${escape(key)}">${escape(Array.isArray(value)?value.join(', '):String(value??''))||'<span class="muted">Vacío</span>'}</button></div>`).join('')+`<button class="n-add-property" data-add-property>${I('Plus',13)} Añadir propiedad</button>`;
     if($('[data-parent-page]',root))$('[data-parent-page]',root).onclick=()=>ctx.run(ctx.openNote(page.meta.parent,{mode:'blocks'}));
@@ -544,5 +774,5 @@ export function createNotion(ctx) {
     const onChange=event=>{if(!alive||event.detail.origin===tab.id)return;if(event.detail.path===doc.path){try{config=JSON.parse(doc.content);}catch{return;}}else if(!event.detail.path.endsWith('.md'))return;clearTimeout(timer);timer=setTimeout(()=>ctx.run(draw()),200);};document.addEventListener('sc-document-changed',onChange);ctx.run(draw());
     return{destroy(){alive=false;clearTimeout(timer);document.removeEventListener('sc-document-changed',onChange);},refresh(){try{config=JSON.parse(doc.content);ctx.run(draw());}catch(error){ctx.report(error);}}};
   }
-  return { mountHome,mountBlocks,mountDatabase,mountPageTree,newPage,createDatabase,templates,appearance,allPages,movePage };
+  return { mountHome, mountCalendar, scheduleNote, dueReminders,mountBlocks,mountDatabase,mountPageTree,newPage,createDatabase,templates,appearance,allPages,movePage };
 }

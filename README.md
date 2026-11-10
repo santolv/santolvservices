@@ -25,6 +25,14 @@ En un bloque vacío, escribe `/calendario` para insertar un calendario con event
 
 En WordCraft, **Chat con IA** abre un panel junto al documento. **Copiar consulta** reúne la pregunta y el texto del DOCX guardado para pegarlo en el asistente que elijas. Si hay cambios pendientes, guarda primero en WordCraft. Las preguntas se guardan en el navegador.
 
+## Calendario y edición
+
+Abre **Calendario** en la barra lateral para ver eventos, fechas de las colecciones y recordatorios. Crea eventos desde el día seleccionado o usa **Programar en el calendario** desde el menú de una nota. Los recordatorios aparecen en la agenda y avisan dentro de Super Cerebro mientras está abierto.
+
+En el editor, `[[` busca enlaces y permite crear una subpágina, `@` ofrece páginas, archivos, fechas, recordatorios y menciones de texto, y `:` seguido de un nombre busca emojis. Usa `Ctrl/Cmd+F` para buscar en la nota y `Ctrl/Cmd+Mayús+L` para cambiar de tema. Si el navegador reserva un atajo, usa `Ctrl/Cmd+Alt+O` para saltar a otra nota, `Ctrl/Cmd+Alt+N` para crear una página, `Ctrl/Cmd+Alt+B` para la barra lateral y `Ctrl/Cmd+Alt+Mayús+N` para otra ventana.
+
+En la bóveda, cada DOCX se conserva dentro de una carpeta con su nombre, por ejemplo `Informe.docx/.wordcraft.docx`. La aplicación sigue mostrando un solo archivo. Rust actualiza `texto.md` al quedar libre el documento y el chat reutiliza ese texto si corresponde a la versión guardada. Los DOCX anteriores se migran en segundo plano. Copia la carpeta completa al respaldar un documento.
+
 ## Servidor
 
 Compila desde `app` con `cargo build --release`. Ejecuta `target/release/notionobsidian` (`notionobsidian.exe` en Windows) con estas variables de entorno.

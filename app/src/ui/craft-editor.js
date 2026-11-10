@@ -55,8 +55,15 @@ export async function openCraft(path, editor) {
   let original;
   let currentName = filename;
   let requestSave;
+  let presence;
 
   if (isWordCraft) {
+    const session=Array.from(crypto.getRandomValues(new Uint8Array(16)), byte=>byte.toString(16).padStart(2,'0')).join('');
+    presence=(name=currentName, leave=false)=>fetch(fileUrl('/api/craft/presence',localPath(name))+'&session='+session+(leave?'&leave=true':''),{method:'POST',keepalive:leave}).catch(()=>{});
+    await presence();
+    setInterval(()=>presence(),12_000);
+    window.addEventListener('pagehide',()=>presence(currentName,true));
+    window.addEventListener('pageshow',event=>{if(event.persisted)presence();});
     const launcher = view.querySelector('#craft-chat-open');
     const chat = mountChat(view.querySelector('#craft-chat'), {
       storage: {
@@ -123,6 +130,10 @@ export async function openCraft(path, editor) {
       }
       if (saveAs && revisions.has(name) && name.toLowerCase().endsWith('.' + editor.extension)) {
         title.textContent = name;
+        if (presence && currentName!==name) {
+          await presence(name);
+          presence(currentName,true);
+        }
         currentName = name;
       }
       if (failed?.name === name) {
@@ -174,13 +185,21 @@ export async function openCraft(path, editor) {
           if (childDocument?.body) {
             const returnButton = childDocument.createElement("button");
             returnButton.type = "button";
-            returnButton.textContent = "‹ Mis archivos";
+            returnButton.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg><span>Mis archivos</span>';
             returnButton.setAttribute("aria-label", "Volver a Mis archivos");
             const light = document.documentElement.dataset.theme === "light";
             // shortcut: covers the disabled AutoSave slot in WordCraft 0.16, use a native toolbar action when the host exposes one.
-            returnButton.style.cssText = "position:absolute;left:0;top:0;z-index:2;width:120px;height:35px;padding:0 10px;border:0;text-align:left;font:13px system-ui;cursor:pointer;color:" + (light ? "#222;background:#f3f3f3" : "#dedede;background:#232323");
+            const returnStyle=childDocument.createElement('style');
+            returnButton.className='sc-craft-back';
+            const slot=childDocument.createElement('div');
+            slot.className='sc-craft-back-slot';
+            returnStyle.textContent=`.sc-craft-back-slot{position:absolute;top:0;left:0;z-index:2;display:flex;align-items:center;padding-left:6px;width:120px;height:35px;box-sizing:border-box;background:${light?'#f3f3f3':'#232323'}}
+              .sc-craft-back{display:inline-flex;align-items:center;justify-content:center;gap:3px;height:29px;padding:0 10px 0 6px;border:1px solid ${light?'#0002':'#ffffff26'};border-radius:999px;background:${light?'#f5f5f7e8':'#303033e8'};color:${light?'#262629':'#f2f2f4'};box-shadow:inset 0 1px 0 #ffffff24,0 2px 5px #0002;backdrop-filter:blur(12px);font:550 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;cursor:pointer}
+              .sc-craft-back:hover{filter:brightness(${light?'.97':'1.16'})}.sc-craft-back:active{box-shadow:inset 0 1px 4px #0003}.sc-craft-back:focus-visible{outline:2px solid #8a5cf5;outline-offset:1px}`;
+            childDocument.head.append(returnStyle);
             returnButton.onclick = () => location.assign(back.href);
-            childDocument.body.append(returnButton);
+            slot.append(returnButton);
+            childDocument.body.append(slot);
             back.closest(".craft-bar").hidden = true;
             const canvas = childDocument.getElementById("wordcraft_canvas");
             if (canvas) {

@@ -117,6 +117,9 @@ fn safe_path_at(root: &Path, rel: &str) -> Option<PathBuf> {
     }
     let mut full = root.to_path_buf();
     for part in rel.split('/') {
+        if craft::is_word_package(&full) {
+            return None;
+        }
         if part.is_empty() || part.starts_with('.') || part.ends_with(['.', ' ']) {
             return None;
         }
@@ -161,7 +164,9 @@ fn query_param(query: &str, key: &str) -> String {
 
 fn visible_entry(entry: &walkdir::DirEntry) -> bool {
     entry.depth() == 0
-        || (!entry.file_name().to_string_lossy().starts_with('.') && !linked_path(entry.path()))
+        || (!entry.file_name().to_string_lossy().starts_with('.')
+            && !linked_path(entry.path())
+            && !entry.path().parent().is_some_and(craft::is_word_package))
 }
 
 fn list_files() -> Vec<FileEntry> {
@@ -189,7 +194,7 @@ fn list_files() -> Vec<FileEntry> {
         out.push(FileEntry {
             path: rel,
             name,
-            is_dir: entry.file_type().is_dir(),
+            is_dir: entry.file_type().is_dir() && !craft::is_word_package(p),
         });
     }
     out.sort_by(|a, b| a.path.cmp(&b.path));
@@ -496,7 +501,11 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
     if !config.authorized(&req) {
         return server::unauthorized(req);
     }
-    let _guard = if matches!(method, Method::Post | Method::Put | Method::Delete) {
+    let _guard = if matches!(method, Method::Post | Method::Put | Method::Delete)
+        || matches!(
+            path,
+            "/api/craft/file" | "/api/craft/context" | "/api/download" | "/api/files"
+        ) {
         if !server::trusted_origin(&req) {
             return json_error(req, 403, "Origen de solicitud no permitido");
         }
@@ -552,15 +561,24 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
         (Method::Get, "/api/craft/file") => craft::open(req, &query_param(query, "path")),
         (Method::Get, "/api/craft/context") => craft::context(req, &query_param(query, "path")),
         (Method::Put, "/api/craft/file") => craft::save(req, &query_param(query, "path")),
+        (Method::Post, "/api/craft/presence") => craft::editor_presence(
+            req,
+            &query_param(query, "path"),
+            &query_param(query, "session"),
+            query_param(query, "leave") == "true",
+        ),
         (Method::Get, "/api/download") => {
-            let Some(full) = safe_path(&query_param(query, "path")).filter(|path| path.is_file())
+            let logical = query_param(query, "path");
+            let Some(full) = safe_path(&logical)
+                .map(|path| craft::document_path(&path))
+                .filter(|path| path.is_file())
             else {
                 return json_error(req, 404, "Archivo no encontrado");
             };
             let Ok(file) = fs::File::open(&full) else {
                 return json_error(req, 404, "Archivo no encontrado");
             };
-            let name = full.file_name().unwrap_or_default().to_string_lossy();
+            let name = logical.rsplit('/').next().unwrap_or("documento.docx");
             let disposition = format!(
                 "attachment; filename*=UTF-8''{}",
                 urlencoding::encode(&name)
@@ -594,7 +612,7 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
                     Err(_) => return json_error(req, 400, "No se pudo leer el archivo"),
                 }
             };
-            match server::write_atomic(&full, &bytes, false) {
+            match craft::create_document(&full, &bytes) {
                 Ok(()) => server::json(
                     req,
                     serde_json::json!({"ok":true,"revision":craft::revision(&bytes)}),
@@ -685,7 +703,12 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
             let Some(full) = safe_path(&rel) else {
                 return json_error(req, 400, "Ruta no válida");
             };
-            if let Err(e) = fs::remove_file(&full) {
+            let removed = if craft::is_word_package(&full) {
+                fs::remove_dir_all(&full)
+            } else {
+                fs::remove_file(&full)
+            };
+            if let Err(e) = removed {
                 return json_error(req, 500, &e.to_string());
             }
             let _ = req.respond(
@@ -730,6 +753,9 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
             if !from.exists() {
                 return json_error(req, 404, "No se ha encontrado el archivo");
             }
+            if craft::is_word_package(&from) && !rr.to.to_ascii_lowercase().ends_with(".docx") {
+                return json_error(req, 400, "Conserva la extensión .docx del documento Word.");
+            }
             let old_paths = md_files();
             // Read all affected links before changing the tree so aliases and headings survive.
             let updates: Vec<_> = old_paths
@@ -754,9 +780,10 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
                     return json_error(req, 500, &e.to_string());
                 }
             }
-            if let Err(e) = fs::rename(from, to) {
+            if let Err(e) = fs::rename(&from, &to) {
                 return json_error(req, 500, &e.to_string());
             }
+            craft::move_word_jobs(&from, &to);
             for (target, content) in updates {
                 if let Some(full) = safe_path(&target) {
                     if let Err(e) = server::write_atomic(&full, content.as_bytes(), true) {
@@ -946,7 +973,13 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = server::Config::from_env()?;
     fs::create_dir_all(vault_root())?;
     let server = Server::http(config.address)?;
-    let writes = Mutex::new(());
+    let writes = std::sync::Arc::new(Mutex::new(()));
+    craft::schedule_existing_words();
+    let index_writes = std::sync::Arc::clone(&writes);
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        craft::index_ready_words(&index_writes);
+    });
     println!("Super Cerebro running at http://{}", config.address);
     std::thread::scope(|scope| {
         for _ in 0..4 {

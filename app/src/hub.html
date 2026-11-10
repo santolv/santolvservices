@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
+  <title>Archivos · Super Cerebro</title>
+  <link rel="stylesheet" href="/ui/app.css">
+  <link rel="stylesheet" href="/ui/hub.css">
+  <script type="module" src="/ui/hub.js"></script>
+</head>
+<body class="hub">
+  <svg xmlns="http://www.w3.org/2000/svg" class="hub-symbols" aria-hidden="true">
+    <symbol id="icon-vault" viewBox="0 0 24 24"><path d="M12 2 3 8l3 11 6 3 6-3 3-11z" fill="currentColor"/></symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M20.8 14.2A9 9 0 0 1 9.8 3.2 9 9 0 1 0 20.8 14.2Z"/></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="icon-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h6"/></symbol>
+    <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M4 16v4h16v-4"/></symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 4v12m-5-5 5 5 5-5M4 16v4h16v-4"/></symbol>
+    <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  </svg>
+  <header class="hub-bar">
+    <a class="hub-brand" href="/"><svg class="hub-icon hub-mark" aria-hidden="true"><use href="#icon-vault"/></svg>Super Cerebro</a>
+    <label class="hub-search">
+      <svg class="hub-icon" aria-hidden="true"><use href="#icon-search"/></svg>
+      <input id="file-search" type="search" aria-label="Buscar archivos" placeholder="Buscar en Mis archivos">
+    </label>
+    <button id="theme-toggle" class="hub-icon-button" type="button" aria-label="Tema claro" title="Tema claro">
+      <svg class="hub-icon" aria-hidden="true"><use href="#icon-sun"/></svg>
+    </button>
+  </header>
+  <div class="hub-layout">
+    <aside class="hub-sidebar" aria-label="Espacios">
+      <details class="hub-new" id="new-menu">
+        <summary><svg class="hub-icon" aria-hidden="true"><use href="#icon-plus"/></svg>Nuevo</summary>
+        <div class="hub-new-options">
+          <button id="new-folder" type="button"><svg class="hub-icon" aria-hidden="true"><use href="#icon-folder"/></svg>Nueva carpeta</button>
+          <button id="upload" type="button"><svg class="hub-icon" aria-hidden="true"><use href="#icon-upload"/></svg>Subir archivos</button>
+          <div id="craft-create"></div>
+        </div>
+      </details>
+      <input id="uploads" type="file" multiple hidden>
+      <nav class="hub-nav" aria-label="Espacio de trabajo">
+        <a class="current" href="/" aria-current="page"><svg class="hub-icon" aria-hidden="true"><use href="#icon-folder"/></svg>Mis archivos</a>
+        <a href="/cerebro"><svg class="hub-icon hub-mark" aria-hidden="true"><use href="#icon-vault"/></svg>Super Cerebro</a>
+      </nav>
+      <section class="hub-tools" aria-label="Herramientas">
+        <p class="hub-label">Herramientas</p>
+        <div id="tools" class="hub-nav"></div>
+        <div id="craft-tools" class="hub-nav"></div>
+      </section>
+    </aside>
+    <main class="hub-main">
+      <div class="hub-heading">
+        <h1>Mis archivos</h1>
+        <nav id="breadcrumbs" class="hub-breadcrumbs" aria-label="Ruta de carpeta" hidden></nav>
+      </div>
+      <div class="hub-toolbar">
+        <label class="hub-filter">
+          <select id="file-type" aria-label="Filtrar por tipo">
+            <option value="">Tipo</option>
+            <option value="folder">Carpetas</option>
+            <option value="office">Documentos de oficina</option>
+            <option value="note">Notas y archivos de Super Cerebro</option>
+            <option value="other">Otros archivos</option>
+          </select>
+          <svg class="hub-icon" aria-hidden="true"><use href="#icon-chevron"/></svg>
+        </label>
+        <p id="message" role="status" aria-live="polite">Cargando archivos…</p>
+      </div>
+      <div class="hub-table-wrap">
+        <table class="hub-table" aria-label="Explorador de archivos">
+          <thead><tr><th scope="col">Nombre</th><th scope="col">Tipo</th><th scope="col">Acciones</th></tr></thead>
+          <tbody id="files"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+  <dialog id="create-dialog" class="hub-dialog">
+    <form id="create-form">
+      <h2 id="create-title"></h2>
+      <label for="create-name">Nombre</label>
+      <input id="create-name" name="name" required maxlength="180" autocomplete="off">
+      <p id="create-error" role="alert"></p>
+      <div class="hub-actions">
+        <button id="cancel-create" class="hub-button" type="button">Cancelar</button>
+        <button class="hub-button primary" type="submit">Crear</button>
+      </div>
+    </form>
+  </dialog>
+  <section id="craft-view" class="craft-view" hidden aria-label="Editor de documentos">
+    <div class="craft-bar"><a href="/" title="Volver a Mis archivos"><span aria-hidden="true">‹</span> Mis archivos</a><strong id="craft-title"></strong></div>
+    <div class="craft-feedback">
+      <p id="craft-message" role="status" aria-live="polite"></p>
+      <button id="craft-recovery" type="button" class="hub-button" hidden>Descargar copia</button>
+    </div>
+    <iframe id="craft-editor" title="Editor de documentos" hidden></iframe>
+  </section>
+</body>
+</html>

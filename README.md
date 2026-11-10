@@ -11,6 +11,20 @@ cargo run
 
 Abre [Mis archivos](http://127.0.0.1:7878/). Desde ahí puedes crear carpetas y documentos de texto, hojas de cálculo, presentaciones y PDF, subir y descargar archivos, y abrir [Super Cerebro](http://127.0.0.1:7878/cerebro). Ambos usan la misma bóveda. El gestor tiene tema claro y oscuro.
 
+## Versiones y respaldo
+
+Desde la raíz del proyecto, guarda una versión con `git add -u` y `git commit -m "Describe el cambio"`. Añade los archivos nuevos con `git add ruta`. Consulta los puntos de restauración con `git log --oneline` y abre una versión en una rama aparte con `git switch -c recuperar <commit>`.
+
+Git guarda el código de forma local. Puedes exportar el historial con `git bundle create ../super-cerebro.bundle --all` y copiar el archivo a otra unidad. Para respaldar tus documentos y notas, copia también `app/vault/` o la ruta configurada en `SUPER_CEREBRO_VAULT`.
+
+## Grafo y bloques de notas
+
+El grafo abre en 3D. Arrastra el fondo o usa las flechas con el grafo enfocado para girar. Arrastra con Mayús para desplazar la cámara. El botón **3D** cambia a la vista plana.
+
+En un bloque vacío, escribe `/calendario` para insertar un calendario con eventos, `/gráfico` para editar un gráfico de barras por pares como `Enero: 12`, o `/lienzo` para crear o incrustar un canvas editable.
+
+En WordCraft, **Chat con IA** abre un panel junto al documento. **Copiar consulta** reúne la pregunta y el texto del DOCX guardado para pegarlo en el asistente que elijas. Si hay cambios pendientes, guarda primero en WordCraft. Las preguntas se guardan en el navegador.
+
 ## Servidor
 
 Compila desde `app` con `cargo build --release`. Ejecuta `target/release/notionobsidian` (`notionobsidian.exe` en Windows) con estas variables de entorno.

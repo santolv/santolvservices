@@ -9,6 +9,23 @@ const fieldIcons = { text:'List', select:'ChevronDown', multi:'Tags', date:'Cale
 const viewIcons = { table:'List', board:'Columns2', gallery:'LayoutDashboard', calendar:'CalendarDays', list:'ListFilter' };
 const covers = { none:'Sin portada', tapestry:'Tapiz violeta', forest:'Niebla', parchment:'Papel', wine:'Terciopelo' };
 
+function chartMarkup(text) {
+  const rows=[];
+  for (const line of text.split('\n').filter(line=>line.trim())) {
+    const match=/^(.+):\s*(-?\d+(?:[.,]\d+)?)\s*$/.exec(line);
+    const value=match&&Number(match[2].replace(',','.'));
+    if (!match||!match[1].trim()||!Number.isFinite(value)) return '<p class="empty-hint">Escribe una etiqueta y un número por línea. Ejemplo: Enero: 12</p>';
+    rows.push({label:match[1].trim(),value});
+  }
+  if (!rows.length) return '<p class="empty-hint">Haz clic para añadir datos al gráfico.</p>';
+  const min=rows.reduce((min,row)=>Math.min(min,row.value),0);
+  const max=rows.reduce((max,row)=>Math.max(max,row.value),0);
+  const span=Math.max(Math.abs(min),max)||1, range=max/span-min/span||1;
+  const percent=value=>100*(value/span-min/span)/range;
+  const zero=percent(0), number=new Intl.NumberFormat('es');
+  return `<figure class="n-chart" aria-label="Gráfico de barras"><figcaption>Gráfico de barras <small>Clic para editar los datos</small></figcaption><ul style="--chart-zero:${zero}%">${rows.map(({label,value})=>`<li><span>${escape(label)}</span><span class="n-chart-track" aria-hidden="true"><i class="${value<0?'negative':''}" style="left:${Math.min(zero,percent(value))}%;width:${Math.abs(percent(value)-zero)}%"></i></span><strong>${escape(number.format(value))}</strong></li>`).join('')}</ul></figure>`;
+}
+
 export function createNotion(ctx) {
   const I = ctx.icon;
   const actionButton = (icon, label, action, classes = '') => `<button type="button" class="${classes}" data-n-action="${action}">${I(icon,15)}<span>${escape(label)}</span></button>`;
@@ -40,16 +57,18 @@ export function createNotion(ctx) {
       ctx.closeOverlay(); await ctx.openNote(path, { mode:'blocks' });
     });
   }
-  async function createDatabase(parentDoc = null, onCreated = null) {
-    ctx.promptName('Nueva colección', 'Mis proyectos', 'Nombre de la colección', async name => {
+  async function createDatabase(parentDoc = null, onCreated = null, view = 'table') {
+    const calendar = view === 'calendar';
+    ctx.promptName(calendar ? 'Nuevo calendario' : 'Nueva colección', calendar ? 'Mi calendario' : 'Mis proyectos', 'Nombre de la colección', async name => {
       const folder = parentDoc ? parentDoc.path.replace(/\.md$/, '') + '/' : '';
       const path = choosePath(folder + name, '.base');
       const database = newDatabase(title(path), path); if (parentDoc) database.parent = parentDoc.path;
+      database.activeView = view;
       await postFile(path, JSON.stringify(database, null, 2));
       if (onCreated) await onCreated(path);
       else if (parentDoc) { const page = readPage(parentDoc.content); update(parentDoc, writePage(page.meta, page.body.trimEnd() + `\n\n[[${path}]]\n`)); await ctx.saveDocument(parentDoc); }
       await ctx.refreshFiles(); ctx.closeOverlay();
-      if (onCreated) { ctx.renderWorkspace(); ctx.notify('Colección añadida a la página.'); } else await ctx.openNote(path);
+      if (onCreated) { ctx.renderWorkspace(); ctx.notify(calendar ? 'Calendario añadido a la página.' : 'Colección añadida a la página.'); } else await ctx.openNote(path);
     });
   }
   async function templates() {
@@ -169,7 +188,7 @@ export function createNotion(ctx) {
       bindLocal(container, { appearance:() => appearance(doc,tab,draw), subpage:() => newPage(pageTemplates[0],doc), 'save-template':saveAsTemplate, 'add-block':() => insertBlock(), undo:()=>undo(),redo:()=>undo(true) });
       ctx.run(drawSubpages());
     }
-    function drawList() { blockPicker?.close(); const list=$('.n-block-list',container); if(!list)return;list.innerHTML='';blocks.forEach(block=>list.append(renderBlock(block))); }
+    function drawList() { blockPicker?.close(); const list=$('.n-block-list',container); if(!list)return;cleanupChildren.forEach(fn=>fn());cleanupChildren=[];list.innerHTML='';blocks.forEach(block=>list.append(renderBlock(block))); }
     function insertBlock(after = blocks.at(-1)) {
       $('.n-block-textarea',container)?.blur();
       const block = !after.raw ? after : {id:uuid(),type:'text',raw:''};
@@ -184,12 +203,34 @@ export function createNotion(ctx) {
       el.innerHTML=`<div class="n-block-rail"><button class="n-block-insert" title="Insertar bloque debajo" aria-label="Insertar bloque debajo">${I('Plus',14)}</button><button class="n-block-handle" draggable="true" title="Opciones del bloque; arrastra para mover" aria-label="Opciones del bloque">${I('Grip',15)}</button></div><div class="n-block-render" tabindex="0">${block.raw ? renderMarkdown(block.raw) : '<span class="n-block-placeholder">Escribe algo o pulsa / para ver los bloques…</span>'}</div>`;
       const preview=$('.n-block-render',el);
       if(block.type==='callout')preview.classList.add('n-callout');
+      const canvas=/^!\[\[(.+\.canvas)\]\]$/i.exec(block.raw.trim());
+      if (canvas) {
+        const path=canvas[1];
+        preview.className='n-canvas-embed';
+        preview.innerHTML=`<header>${I('LayoutDashboard',16)}<span>${escape(title(path))}</span><button type="button" aria-label="Abrir lienzo completo" title="Abrir lienzo completo">${I('ArrowUpRight',16)}</button></header><div class="n-canvas-body"></div>`;
+        $('header button',preview).onclick=()=>ctx.run(ctx.openNote(path));
+        const body=$('.n-canvas-body',preview);
+        if (!ctx.state.files.some(file=>!file.is_dir&&file.path===path)) body.textContent='No se encuentra el archivo del lienzo.';
+        else ctx.run((async()=>{
+          await ctx.loadDocument(path);
+          if(!alive||!preview.isConnected)return;
+          const instance=ctx.mountCanvas(body,{id:tab.id+'-'+block.id,path},true);
+          if(instance) {
+            preview.disposeCanvas=instance.destroy;
+            cleanupChildren.push(instance.destroy);
+          }
+        })());
+        preview.removeAttribute('tabindex');
+      }
+      if (block.type==='code' && /^(?:```+|~~~+)chart[ \t]*\r?\n/.test(block.raw)) {
+        preview.innerHTML=chartMarkup(blockText(block));
+      }
       const embedded=/^\[\[([^\]]+\.base)\]\]$/.exec(block.raw.trim());
       if(embedded && ctx.state.files.some(file=>file.path===embedded[1])){
         preview.className='n-embedded-database';preview.innerHTML='';
         ctx.run((async()=>{const baseDoc=await ctx.loadDocument(embedded[1]);if(!alive||!preview.isConnected)return;const instance=mountDatabase(preview,{id:tab.id+'-'+block.id,path:baseDoc.path},true);cleanupChildren.push(()=>instance.destroy());})());
       }
-      preview.onclick=event=>{if(event.target.closest('a,input,summary,.n-database'))return;edit(block.id);};
+      preview.onclick=event=>{if(event.target.closest('a,input,summary,.n-database,.n-canvas-embed'))return;edit(block.id);};
       preview.onkeydown=event=>{
         if (event.target !== preview || event.isComposing || event.ctrlKey || event.metaKey) return;
         if (event.key === 'Enter' || (event.key === '/' && !block.raw)) {
@@ -233,7 +274,13 @@ export function createNotion(ctx) {
     }
     function edit(id, openPicker = false) {
       const block=blocks.find(b=>b.id===id),el=$(`[data-block="${id}"]`,container);if(!block||!el||$('.n-block-textarea',el))return;
-      const preview=$('.n-block-render',el);if(!preview)return;preview.innerHTML='';
+      const preview=$('.n-block-render,.n-canvas-embed',el);if(!preview)return;
+      if (preview.classList.contains('n-canvas-embed')) {
+        preview.disposeCanvas?.();
+        preview.replaceWith(Object.assign(document.createElement('div'),{className:'n-block-render'}));
+        return edit(id,openPicker);
+      }
+      preview.innerHTML='';
       const textarea=document.createElement('textarea');textarea.className='n-block-textarea';textarea.setAttribute('aria-label','Contenido del bloque');textarea.placeholder='Escribe / para elegir un tipo de bloque';textarea.value=blockText(block);textarea.spellcheck=ctx.prefs.spellcheck;preview.append(textarea);
       const resize=()=>{textarea.style.height='auto';textarea.style.height=Math.max(30,textarea.scrollHeight)+'px';};resize();textarea.focus();textarea.setSelectionRange(textarea.value.length,textarea.value.length);
       const finish=()=>{if(!alive||!textarea.isConnected)return;if(blockPicker?.anchor===textarea)blockPicker.close();const replacement=renderBlock(block);el.replaceWith(replacement);};
@@ -275,6 +322,22 @@ export function createNotion(ctx) {
       }
     }
     function changeType(block,definition){block.type=definition.type;block.raw=definition.raw;commit();drawList();if(!['divider','database','page'].includes(definition.type))edit(block.id);}
+    function insertCanvas(block,path) {
+      if (!alive||!blocks.includes(block)) return;
+      block.type='text';block.raw='![['+path+']]';commit();drawList();
+    }
+    function chooseCanvas(block) {
+      ctx.chooser('Insertar lienzo','Buscar un lienzo…',query=>[
+        {label:'Crear lienzo',icon:'Plus',action:()=>ctx.promptName('Nuevo lienzo','Mi lienzo','Nombre del lienzo',async name=>{
+          const path=choosePath(name,'.canvas');
+          await postFile(path,JSON.stringify({nodes:[],edges:[]}));
+          await ctx.refreshFiles();
+          insertCanvas(block,path);
+        })},
+        ...ctx.state.files.filter(file=>!file.is_dir&&/\.canvas$/i.test(file.path)&&file.path.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+          .map(file=>({label:title(file.path),detail:file.path,icon:'LayoutDashboard',action:()=>insertCanvas(block,file.path)})),
+      ]);
+    }
     function slash(block,anchor,typing=false){
       blockPicker?.close();
       const plain=blockText(block);
@@ -304,6 +367,9 @@ export function createNotion(ctx) {
           {label:'Mencionar archivo',icon:'AtSign',detail:'Busca una nota, documento o presentación.',aliases:'mention archivo reference',action:()=>mention(block)},
           {label:'Subpágina',icon:'FilePlus2',detail:'Crea una página dentro de esta nota.',aliases:'page pagina',action:()=>newPage(pageTemplates[0],doc,insertCreated)},
           {label:'Colección en la página',icon:'Columns2',detail:'Inserta una base de datos editable.',aliases:'tabla database base de datos',action:()=>createDatabase(doc,insertCreated)},
+          {label:'Calendario',icon:'CalendarDays',detail:'Organiza eventos por fecha dentro de la nota.',aliases:'calendar agenda',action:()=>createDatabase(doc,insertCreated,'calendar')},
+          {label:'Gráfico de barras',icon:'List',detail:'Edita una lista de etiquetas y valores.',aliases:'chart barras grafico',action:()=>changeType(block,{type:'code',raw:'```chart\nEnero: 12\nFebrero: 18\nMarzo: 9\n```'})},
+          {label:'Lienzo',icon:'LayoutDashboard',detail:'Crea o inserta un canvas editable.',aliases:'canvas pizarra tablero',action:()=>chooseCanvas(block)},
           convert('Fecha de hoy','CalendarDays','text','Inserta la fecha en formato AAAA-MM-DD.',localDate(),'date today'),
         ] : []),
         {label:'Imagen por URL',icon:'Image',detail:'Inserta una imagen desde un enlace.',aliases:'image foto',action:()=>ctx.promptName('Insertar imagen','','URL de la imagen (https://…)',url=>{

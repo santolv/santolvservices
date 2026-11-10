@@ -4,12 +4,13 @@ export function buildChatPrompt(question, document) {
     question.trim(),
     'Usa el archivo adjunto como material de referencia.',
     'Archivo: ' + document.path,
+    ...(document.truncated ? ['El texto está recortado por longitud.'] : []),
     '',
     document.content,
   ].join('\n');
 }
 
-export function mountChat(panel, { storage, getDocument, icon }) {
+export function mountChat(panel, { storage, getDocument, icon, documentOnly = false, onVisibility = () => {} }) {
   panel.innerHTML = [
     '<header class="ai-chat-header"><div><h2>Chat con IA</h2><span>Proveedor pendiente</span></div>',
     '<button class="icon-button" type="button" data-chat-close aria-label="Cerrar chat">' + icon('X', 17) + '</button></header>',
@@ -48,7 +49,7 @@ export function mountChat(panel, { storage, getDocument, icon }) {
   function render() {
     context.textContent = path || 'Chat general';
     context.title = path;
-    general.hidden = !path;
+    general.hidden = documentOnly || !path;
     const thread = questions();
     find('[data-chat-empty]').hidden = thread.length > 0;
     messages.replaceChildren(...thread.map(text => {
@@ -63,6 +64,7 @@ export function mountChat(panel, { storage, getDocument, icon }) {
     if (panel.hidden) opener = document.activeElement;
     path = file;
     panel.hidden = false;
+    onVisibility(true);
     composer.value = drafts.get(key()) || '';
     status.textContent = '';
     preview.hidden = true;
@@ -73,6 +75,7 @@ export function mountChat(panel, { storage, getDocument, icon }) {
 
   find('[data-chat-close]').onclick = () => {
     panel.hidden = true;
+    onVisibility(false);
     preview.hidden = true;
     preview.value = '';
     if (opener?.isConnected) opener.focus();
@@ -104,13 +107,21 @@ export function mountChat(panel, { storage, getDocument, icon }) {
   copy.onclick = async () => {
     const text = question();
     if (!text) return;
-    const file = path ? getDocument(path) : null;
-    if (path && !file) {
-      status.textContent = 'Vuelve a abrir el chat desde el archivo para usar su contenido.';
-      return;
-    }
-    const prompt = buildChatPrompt(text, file);
     const threadKey = key();
+    let prompt;
+    copy.disabled = true;
+    status.textContent = 'Preparando consulta…';
+    try {
+      const file = path ? await getDocument(path) : null;
+      if (path && !file) throw new Error('Vuelve a abrir el chat desde el archivo para usar su contenido.');
+      prompt = buildChatPrompt(text, file);
+    } catch (error) {
+      if (!panel.hidden && key() === threadKey) status.textContent = error.message;
+      return;
+    } finally {
+      if (!panel.hidden && key() === threadKey) copy.disabled = !question();
+    }
+    if (panel.hidden || key() !== threadKey) return;
     try {
       await navigator.clipboard.writeText(prompt);
       if (panel.hidden || key() !== threadKey) return;

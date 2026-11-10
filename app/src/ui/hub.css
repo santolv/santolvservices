@@ -204,7 +204,10 @@
 .craft-wordcraft .craft-bar { position:absolute; top:0; left:0; z-index:2; display:flex; border-radius:0 0 6px 0; }
 .craft-wordcraft #craft-title { display:none; }
 #craft-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; font-weight:500; }
-#craft-editor { flex: 1; min-height: 0; width: 100%; border: 0; }
+.craft-body { position:relative; display:flex; flex:1; min-height:0; }
+#craft-editor { flex:1; min-width:0; min-height:0; width:100%; border:0; }
+#craft-chat-open { position:absolute; bottom:40px; right:18px; z-index:2; box-shadow:var(--hub-shadow); }
+.craft-wordcraft .craft-feedback { bottom:92px; }
 .craft-feedback { position:absolute; right:12px; bottom:32px; z-index:1; display:flex; align-items:center; flex-wrap:wrap; gap:8px; max-width:calc(100% - 24px); padding:0 12px; border:1px solid var(--hub-line); border-radius:8px; background:var(--hub-control); }
 .craft-feedback:has(#craft-message:empty):has(#craft-recovery[hidden]) { display:none; }
 #craft-message { margin: 8px 0; color: var(--hub-muted); }

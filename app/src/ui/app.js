@@ -183,7 +183,7 @@ function renderWorkspace() {
     else if (tab.type === 'database') tab.surface = notion.mountDatabase(content, tab);
     else if (tab.type === 'note' && isMarkdown(tab.path)) { tab.body = content; tab.surface = notion.mountBlocks(content, tab); }
     else if (tab.type === 'graph') mountGraph(content, tab);
-    else if (tab.type === 'canvas') mountCanvas(content, tab);
+    else if (tab.type === 'canvas') tab.surface = mountCanvas(content, tab);
     else {
       const doc = state.documents.get(tab.path);
       const page = document.createElement('div'); page.className = 'note-page'; content.append(page);
@@ -448,21 +448,67 @@ function settings(page = 'appearance') {
 
 function openGraph() { let tab = activeGroup().tabs.find(t => t.type === 'graph'); if (!tab) { tab = { id: uid(), type: 'graph' }; activeGroup().tabs.push(tab); } activeGroup().active = tab.id; renderWorkspace(); renderLeft(); renderRight(); status(); persist(); }
 async function mountGraph(container, tab) {
-  container.innerHTML = `<div class="graph-view"><canvas aria-label="Grafo de conexiones entre notas"></canvas><div class="graph-controls">${button('Plus', 'Acercar grafo', 'graph-zoom-in')}${button('Minus', 'Alejar grafo', 'graph-zoom-out')}${button('Focus', 'Centrar grafo', 'graph-reset')}${button('Link', 'Conectar notas', 'graph-connect')}</div><div class="graph-caption" role="status"></div></div>`;
+  container.innerHTML = `<div class="graph-view"><canvas aria-label="Grafo de conexiones entre notas" tabindex="0"></canvas><div class="graph-controls"><button class="graph-mode" data-action="graph-mode" aria-label="Vista 3D" aria-pressed="true">3D</button>${button('Plus', 'Acercar grafo', 'graph-zoom-in')}${button('Minus', 'Alejar grafo', 'graph-zoom-out')}${button('Focus', 'Centrar grafo', 'graph-reset')}${button('Link', 'Conectar notas', 'graph-connect')}</div><div class="graph-caption" role="status"></div></div>`;
   const root = $('.graph-view', container), canvas = $('canvas', root), ctx = canvas.getContext('2d'); let alive = true; graphCleanup.push(() => alive = false);
   const data = await api('/api/graph'); if (!alive) return;
-  const nodes = data.nodes.filter(n => !n.path.startsWith('.')); const nodeMap = new Map(nodes.map((node, index) => { const angle = index * Math.PI * (3 - Math.sqrt(5)), radius = Math.sqrt(index) * 52; return [node.id, { ...node, x: Math.cos(angle) * radius, y: Math.sin(angle) * radius }]; }));
+  const nodes = data.nodes.filter(n => !n.path.startsWith('.'));
+  const nodeMap = new Map(nodes.map((node, index) => {
+    const angle = index * Math.PI * (3 - Math.sqrt(5)), radius = Math.sqrt(index) * 52;
+    return [node.id, { ...node, x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, z: Math.sin(index * 1.7) * radius * .65 }];
+  }));
   const edges = data.edges.filter(edge => nodeMap.has(edge.source) && nodeMap.has(edge.target)); let zoom = 1, offsetX = 0, offsetY = 0, hovered = null, frame = 0, drag = null, width = 0, height = 0;
+  let mode3d = safeStorage.get('sc-graph-3d', true), yaw = .3, pitch = -.2, projected = [];
   let connecting = false, source = null, busy = false;
   const colors = () => { const css = getComputedStyle(document.documentElement); return { text: css.getPropertyValue('--text-muted'), accent: css.getPropertyValue('--accent'), line: css.getPropertyValue('--graph-line'), node: css.getPropertyValue('--graph-node') }; };
-  function draw() { if (!alive) return; const dpr = devicePixelRatio || 1; width = root.clientWidth; height = root.clientHeight; canvas.width = width * dpr; canvas.height = height * dpr; ctx.scale(dpr, dpr); ctx.clearRect(0, 0, width, height); const color = colors(); ctx.save(); ctx.translate(width / 2 + offsetX, height / 2 + offsetY); ctx.scale(zoom, zoom);
+  function camera() {
+    const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    return { cy, sy, cp, sp };
+  }
+  function draw() {
+    if (!alive) return;
+    const dpr = devicePixelRatio || 1;
+    width = root.clientWidth; height = root.clientHeight;
+    if (canvas.width !== Math.round(width*dpr)) canvas.width = Math.round(width*dpr);
+    if (canvas.height !== Math.round(height*dpr)) canvas.height = Math.round(height*dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    const color = colors(), {cy,sy,cp,sp}=camera(), distance=Math.max(420, Math.sqrt(nodes.length)*96);
+    projected = all.map(node => {
+      const x=mode3d?node.x*cy+node.z*sy:node.x;
+      const z=mode3d?node.z*cy-node.x*sy:0;
+      const y=mode3d?node.y*cp-z*sp:node.y, depth=mode3d?node.y*sp+z*cp:0;
+      const scale=zoom*distance/Math.max(distance*.32,distance-depth);
+      return {node, x:width/2+offsetX+x*scale, y:height/2+offsetY+y*scale, depth, scale};
+    }).sort((a,b)=>a.depth-b.depth);
+    const points=new Map(projected.map(point=>[point.node.id,point]));
     const neighbors = new Set(edges.filter(e => e.source === hovered?.id || e.target === hovered?.id).flatMap(e => [e.source, e.target]));
-    for (const edge of edges) { const a = nodeMap.get(edge.source), b = nodeMap.get(edge.target); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineWidth = 1 / zoom; ctx.strokeStyle = hovered && (edge.source === hovered.id || edge.target === hovered.id) ? color.accent : color.line; ctx.stroke(); }
-    for (const node of nodeMap.values()) { const focus = node === source || node === hovered || neighbors.has(node.id); ctx.beginPath(); ctx.arc(node.x, node.y, focus ? 6 : 4.5, 0, Math.PI * 2); ctx.fillStyle = focus ? color.accent : color.node; ctx.fill(); ctx.font = `${12 / Math.max(.8, zoom)}px Segoe UI`; ctx.textAlign = 'center'; ctx.fillStyle = focus ? color.accent : color.text; ctx.fillText(node.title, node.x, node.y + 20 / Math.max(.8, zoom)); }
-    ctx.restore(); if (!nodes.length) { ctx.fillStyle = color.text; ctx.textAlign = 'center'; ctx.font = '14px Segoe UI'; ctx.fillText('Crea notas y conéctalas con [[enlaces internos]].', width / 2, height / 2); }
+    for (const edge of edges) { const a = points.get(edge.source), b = points.get(edge.target); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineWidth = 1; ctx.strokeStyle = hovered && (edge.source === hovered.id || edge.target === hovered.id) ? color.accent : color.line; ctx.stroke(); }
+    for (const {node,x,y,scale} of projected) {
+      const focus=node===source||node===hovered||neighbors.has(node.id), radius=Math.max(2.5,Math.min(13,(focus?6:4.5)*scale));
+      ctx.globalAlpha=focus?1:Math.max(.48,Math.min(1,scale/zoom));
+      ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fillStyle=focus?color.accent:color.node;ctx.fill();
+      ctx.font='12px Segoe UI';ctx.textAlign='center';ctx.fillStyle=focus?color.accent:color.text;ctx.fillText(node.title,x,y+radius+13);
+    }
+    ctx.globalAlpha=1;
+    if (!nodes.length) { ctx.fillStyle = color.text; ctx.textAlign = 'center'; ctx.font = '14px Segoe UI'; ctx.fillText('Crea notas y conéctalas con [[enlaces internos]].', width / 2, height / 2); }
   }
   // Settle a small force-directed layout, without an endless render loop.
-  const all = [...nodeMap.values()]; for (let tick = 0; tick < 90 && all.length <= 150; tick++) { for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) { const a = all[i], b = all[j], dx = a.x - b.x || .1, dy = a.y - b.y || .1, squared = Math.max(100, dx * dx + dy * dy), force = 100 / squared; a.x += dx * force; a.y += dy * force; b.x -= dx * force; b.y -= dy * force; } for (const e of edges) { const a = nodeMap.get(e.source), b = nodeMap.get(e.target), dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy) || 1, pull = (length - 110) * .015; a.x += dx / length * pull; a.y += dy / length * pull; b.x -= dx / length * pull; b.y -= dy / length * pull; } all.forEach(n => { n.x *= .997; n.y *= .997; }); }
+  const all = [...nodeMap.values()];
+  for (let tick=0;tick<90 && all.length<=150;tick++) {
+    for (let i=0;i<all.length;i++) for (let j=i+1;j<all.length;j++) {
+      const a=all[i],b=all[j],dx=a.x-b.x||.1,dy=a.y-b.y||.1,dz=a.z-b.z;
+      const force=100/Math.max(100,dx*dx+dy*dy+dz*dz);
+      a.x+=dx*force;a.y+=dy*force;a.z+=dz*force;
+      b.x-=dx*force;b.y-=dy*force;b.z-=dz*force;
+    }
+    for (const edge of edges) {
+      const a=nodeMap.get(edge.source),b=nodeMap.get(edge.target),dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z;
+      const length=Math.hypot(dx,dy,dz)||1, pull=(length-110)*.015/length;
+      a.x+=dx*pull;a.y+=dy*pull;a.z+=dz*pull;
+      b.x-=dx*pull;b.y-=dy*pull;b.z-=dz*pull;
+    }
+    all.forEach(node=>{node.x*=.997;node.y*=.997;node.z*=.997;});
+  }
   const observer = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(draw); }); observer.observe(root); graphCleanup.push(() => { observer.disconnect(); cancelAnimationFrame(frame); });
   const positionStore = 'sc-graph-positions';
   const positions = safeStorage.get(positionStore, {});
@@ -471,24 +517,27 @@ async function mountGraph(container, tab) {
     if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) {
       node.x = saved.x;
       node.y = saved.y;
+      if (Number.isFinite(saved.z)) node.z = saved.z;
     }
   }
 
   const caption = $('.graph-caption', root);
   const connectButton = $('[data-action=graph-connect]', root);
-  const point = event => {
-    const rect = canvas.getBoundingClientRect();
-    return { x: (event.clientX - rect.left - width / 2 - offsetX) / zoom, y: (event.clientY - rect.top - height / 2 - offsetY) / zoom };
-  };
+  const modeButton = $('[data-action=graph-mode]', root);
   const nodeAt = event => {
-    const p = point(event);
-    return all.find(node => Math.hypot(node.x - p.x, node.y - p.y) < 13 / zoom);
+    const rect = canvas.getBoundingClientRect();
+    for (let i=projected.length-1;i>=0;i--) {
+      const p=projected[i];
+      if (Math.hypot(p.x-(event.clientX-rect.left),p.y-(event.clientY-rect.top)) < Math.max(11,p.scale*5)) return p;
+    }
   };
   function setConnecting(value, first = null) {
     connecting = value;
     source = first;
     connectButton.setAttribute('aria-pressed', String(value));
-    caption.textContent = !value ? 'Arrastra un nodo para moverlo · Arrastra el fondo para desplazarte · Clic para abrir'
+    modeButton.textContent=mode3d?'3D':'2D';
+    modeButton.setAttribute('aria-pressed',String(mode3d));
+    caption.textContent = !value ? (mode3d ? 'Arrastra el fondo para girar · Mayús + arrastrar para desplazar · Flechas para girar' : 'Arrastra el fondo para desplazar · Clic en una nota para abrirla')
       : first ? 'Elige la nota de destino' : 'Elige la nota de origen';
     draw();
   }
@@ -522,8 +571,8 @@ async function mountGraph(container, tab) {
   }
   canvas.onpointerdown = event => {
     if (event.button !== 0) return;
-    const node = nodeAt(event);
-    drag = { x: event.clientX, y: event.clientY, node, ox: node?.x ?? offsetX, oy: node?.y ?? offsetY, moved: false };
+    const hit = nodeAt(event), node=hit?.node;
+    drag = { x: event.clientX, y: event.clientY, node, scale:hit?.scale, ox: node?.x ?? offsetX, oy: node?.y ?? offsetY, oz:node?.z, yaw, pitch, orbit:mode3d&&!event.shiftKey, moved:false };
     canvas.setPointerCapture(event.pointerId);
   };
   canvas.onpointermove = event => {
@@ -531,14 +580,17 @@ async function mountGraph(container, tab) {
       const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
       drag.moved ||= Math.hypot(dx, dy) > 4;
       if (drag.moved && drag.node && !connecting) {
-        drag.node.x = drag.ox + dx / zoom;
-        drag.node.y = drag.oy + dy / zoom;
+        const x=dx/drag.scale, y=dy/drag.scale;
+        const {cy,sy,cp,sp}=camera();
+        drag.node.x=drag.ox+(mode3d?x*cy+y*sp*sy:x);
+        drag.node.y=drag.oy+(mode3d?y*cp:y);
+        if (mode3d) drag.node.z=drag.oz+x*sy-y*sp*cy;
       } else if (drag.moved && !drag.node) {
-        offsetX = drag.ox + dx;
-        offsetY = drag.oy + dy;
+        if (drag.orbit) { yaw=drag.yaw+dx*.008; pitch=drag.pitch+dy*.008; }
+        else { offsetX = drag.ox + dx; offsetY = drag.oy + dy; }
       }
     } else {
-      hovered = nodeAt(event);
+      hovered = nodeAt(event)?.node;
       canvas.style.cursor = hovered && connecting ? 'crosshair' : hovered ? 'move' : 'grab';
     }
     draw();
@@ -549,7 +601,7 @@ async function mountGraph(container, tab) {
     if (!interaction?.node) return;
     const { node, moved } = interaction;
     if (moved && !connecting) {
-      positions[node.path] = { x: node.x, y: node.y };
+      positions[node.path] = { x: node.x, y: node.y, z:node.z };
       safeStorage.set(positionStore, positions);
     } else if (!moved && connecting) {
       if (!source || source === node) setConnecting(true, node);
@@ -560,11 +612,19 @@ async function mountGraph(container, tab) {
     if (drag?.node && drag.moved && !connecting) {
       drag.node.x = drag.ox;
       drag.node.y = drag.oy;
+      drag.node.z = drag.oz;
     }
     drag = null;
     draw();
   };
   canvas.onwheel = event => { event.preventDefault(); zoom = Math.min(4, Math.max(.2, zoom * (event.deltaY > 0 ? .9 : 1.1))); draw(); };
+  canvas.onkeydown = event => {
+    if (!mode3d || !['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key==='ArrowLeft'||event.key==='ArrowRight') yaw+=event.key==='ArrowLeft'?-.12:.12;
+    else pitch+=event.key==='ArrowUp'?-.12:.12;
+    draw();
+  };
   root.onclick = event => {
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'graph-connect') {
@@ -574,14 +634,27 @@ async function mountGraph(container, tab) {
     }
     if (action === 'graph-zoom-in') zoom = Math.min(4, zoom * 1.2);
     if (action === 'graph-zoom-out') zoom = Math.max(.2, zoom / 1.2);
-    if (action === 'graph-reset') { zoom = 1; offsetX = offsetY = 0; }
+    if (action === 'graph-reset') { zoom = 1; offsetX = offsetY = 0; yaw=.3;pitch=-.2; }
+    if (action === 'graph-mode') { mode3d=!mode3d;safeStorage.set('sc-graph-3d',mode3d);setConnecting(false);return; }
     draw();
   };
   setConnecting(false);
 }
 
-function mountCanvas(container, tab) {
-  const doc = state.documents.get(tab.path); let data; try { data = JSON.parse(doc.content); if (!Array.isArray(data.nodes) || !Array.isArray(data.edges)) throw new Error(); } catch { container.innerHTML = '<p class="empty-hint">El archivo no contiene un lienzo válido.</p>'; return; }
+function mountCanvas(container, tab, inline = false) {
+  const doc=state.documents.get(tab.path);
+  function read(content) {
+    try {
+      const parsed=JSON.parse(content);
+      if (Array.isArray(parsed?.nodes)&&Array.isArray(parsed?.edges)) return parsed;
+    } catch {}
+    return null;
+  }
+  let data=read(doc.content);
+  if (!data) {
+    container.innerHTML='<p class="empty-hint">El archivo no contiene un lienzo válido.</p>';
+    return;
+  }
   container.innerHTML = `<div class="canvas-view"><div class="canvas-world"><svg class="canvas-edges"></svg><div class="canvas-cards"></div></div><div class="canvas-toolbar">${button('StickyNote', 'Añadir tarjeta', 'canvas-card')}${button('FilePlus2', 'Añadir tarjeta de archivo', 'canvas-file')}${button('Link', 'Conectar tarjetas', 'canvas-connect')}${button('Focus', 'Centrar lienzo', 'canvas-reset')}</div><div class="graph-caption">Arrastra las tarjetas · Doble clic en el fondo para crear · Arrastra el fondo para desplazar</div></div>`;
   const root = $('.canvas-view', container), world = $('.canvas-world', root), cards = $('.canvas-cards', root), svg = $('.canvas-edges', root); let connecting = false, startNode = null, pan = { x: 0, y: 0 }, zoom = 1;
   const save = () => changed(doc, JSON.stringify(data, null, 2), tab.id);
@@ -601,6 +674,10 @@ function mountCanvas(container, tab) {
   root.onpointerdown = event => { if (event.target.closest('.canvas-card,.canvas-toolbar')) return; const x = event.clientX, y = event.clientY, ox = pan.x, oy = pan.y; root.setPointerCapture(event.pointerId); root.onpointermove = e => { pan.x = ox + e.clientX - x; pan.y = oy + e.clientY - y; transform(); }; root.onpointerup = () => root.onpointermove = null; };
   root.onwheel = event => { if (event.target.closest('textarea')) return; event.preventDefault(); zoom = Math.max(.25, Math.min(2, zoom * (event.deltaY > 0 ? .95 : 1.05))); transform(); };
   root.onclick = event => { const action = event.target.closest('[data-action]')?.dataset.action; if (action === 'canvas-card') add(); if (action === 'canvas-file') chooser('Añadir archivo al lienzo', 'Buscar nota…', query => state.files.filter(f => !f.is_dir && f.path.endsWith('.md') && f.path.includes(query)).map(f => ({ label: title(f.path), action: () => add('file', f.path) }))); if (action === 'canvas-connect') { connecting = !connecting; startNode = null; notify('Selecciona la tarjeta de origen y después la de destino.'); } if (action === 'canvas-reset') { pan = { x: 0, y: 0 }; zoom = 1; transform(); } }; draw();
+  const refresh=content=>{const next=read(content);if(next){data=next;draw();}};
+  const sync=event=>{if(event.detail.path===doc.path && event.detail.origin!==tab.id)refresh(doc.content);};
+  if (inline) document.addEventListener('sc-document-changed',sync);
+  return { refresh, destroy:()=>document.removeEventListener('sc-document-changed',sync) };
 }
 
 const actions = {
@@ -698,6 +775,6 @@ async function init() {
     openHome();
   }
 }
-const notion = createNotion({ state, prefs, activePath: () => activeTab()?.path, chatWithNote: path => chat.open(path), createNote, recentFiles, homeCollection, dailyNote, icon, button, api, post, run, report, notify, loadDocument, changed, saveDocument, openNote, refreshFiles, renderWorkspace, renderRight, persist, promptName, dialog, closeOverlay, menu, chooser, showLeft, openHome, validPath, renamePath });
+const notion = createNotion({ state, prefs, activePath: () => activeTab()?.path, chatWithNote: path => chat.open(path), createNote, recentFiles, homeCollection, dailyNote, icon, button, api, post, run, report, notify, loadDocument, changed, saveDocument, openNote, refreshFiles, renderWorkspace, renderRight, persist, promptName, dialog, closeOverlay, menu, chooser, showLeft, openHome, validPath, renamePath, mountCanvas });
 run(init());
 

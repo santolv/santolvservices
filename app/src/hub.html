@@ -7,6 +7,7 @@
   <title>Archivos · Super Cerebro</title>
   <link rel="stylesheet" href="/ui/app.css">
   <link rel="stylesheet" href="/ui/hub.css">
+  <link rel="stylesheet" href="/ui/chat.css">
   <script type="module" src="/ui/hub.js"></script>
 </head>
 <body class="hub">
@@ -97,7 +98,11 @@
       <p id="craft-message" role="status" aria-live="polite"></p>
       <button id="craft-recovery" type="button" class="hub-button" hidden>Descargar copia</button>
     </div>
-    <iframe id="craft-editor" title="Editor de documentos" hidden></iframe>
+    <div class="craft-body">
+      <iframe id="craft-editor" title="Editor de documentos" hidden></iframe>
+      <aside id="craft-chat" class="ai-chat" aria-label="Chat con IA de WordCraft" hidden></aside>
+    </div>
+    <button id="craft-chat-open" class="hub-button" type="button" aria-controls="craft-chat" aria-expanded="false" hidden>Chat con IA</button>
   </section>
 </body>
 </html>

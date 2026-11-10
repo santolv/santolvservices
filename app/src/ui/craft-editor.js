@@ -1,3 +1,5 @@
+import { mountChat } from './chat.js';
+
 const WORDCRAFT_AUTOSAVE_MS = 4000;
 const MAX_FILE = 32 * 1024 * 1024;
 const fileUrl = (route, path) => route + '?path=' + encodeURIComponent(path);
@@ -51,6 +53,38 @@ export async function openCraft(path, editor) {
   let ready = false;
   let revisions;
   let original;
+  let currentName = filename;
+  let requestSave;
+
+  if (isWordCraft) {
+    const launcher = view.querySelector('#craft-chat-open');
+    const chat = mountChat(view.querySelector('#craft-chat'), {
+      storage: {
+        get(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
+        set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; } },
+      },
+      icon: () => '<span aria-hidden="true">×</span>',
+      documentOnly: true,
+      onVisibility(open) {
+        launcher.setAttribute('aria-expanded', String(open));
+        launcher.hidden = open;
+      },
+      async getDocument(file) {
+        if (file !== localPath(currentName)) throw new Error('Abre el chat del documento actual para usar su texto.');
+        if (failed || dirty || pending) throw new Error('Guarda el documento en WordCraft y vuelve a pulsar Copiar consulta.');
+        const response = await requireOk(await fetch(fileUrl('/api/craft/context', file), {
+          headers: { 'If-Match': revisions.get(currentName) },
+        }));
+        const context = await response.json();
+        if (!context.content.trim()) throw new Error('El documento guardado aún no contiene texto.');
+        return context;
+      },
+    });
+    launcher.onclick = () => {
+      requestSave?.();
+      chat.open(localPath(currentName));
+    };
+  }
 
   window.addEventListener('beforeunload', event => {
     if (dirty || pending || failed) {
@@ -87,7 +121,10 @@ export async function openCraft(path, editor) {
       if (revision || name.toLowerCase().endsWith('.' + editor.extension)) {
         revisions.set(name, (await response.json()).revision);
       }
-      if (saveAs && revisions.has(name)) title.textContent = name;
+      if (saveAs && revisions.has(name) && name.toLowerCase().endsWith('.' + editor.extension)) {
+        title.textContent = name;
+        currentName = name;
+      }
       if (failed?.name === name) {
         failed = null;
         recovery.hidden = true;
@@ -132,6 +169,7 @@ export async function openCraft(path, editor) {
         original = null;
         frame.hidden = false;
         if (isWordCraft) {
+          view.querySelector('#craft-chat-open').hidden = false;
           const childDocument = frame.contentDocument;
           if (childDocument?.body) {
             const returnButton = childDocument.createElement("button");
@@ -149,13 +187,16 @@ export async function openCraft(path, editor) {
               let composing = false;
               childDocument.addEventListener("compositionstart", () => { composing = true; });
               childDocument.addEventListener("compositionend", () => { composing = false; });
-              setInterval(() => {
-                if (!dirty || pending || failed || composing || document.activeElement !== frame || !canvas.isConnected) return;
+              requestSave = () => {
+                if (!dirty || pending || failed || composing || !canvas.isConnected) return;
                 // shortcut: WordCraft 0.16 listens for Save on the canvas, use a host command when the editor exposes one.
                 const mac = /Mac/.test(navigator.platform);
                 const saveKey = { key: "s", code: "KeyS", ctrlKey: !mac, metaKey: mac, bubbles: true, cancelable: true };
                 canvas.dispatchEvent(new frame.contentWindow.KeyboardEvent("keydown", saveKey));
                 canvas.dispatchEvent(new frame.contentWindow.KeyboardEvent("keyup", saveKey));
+              };
+              setInterval(() => {
+                if (document.activeElement === frame) requestSave();
               }, WORDCRAFT_AUTOSAVE_MS);
             }
           }

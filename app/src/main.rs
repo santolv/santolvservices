@@ -15,6 +15,8 @@ const HUB_HTML: &str = include_str!("hub.html");
 const HUB_JS: &str = include_str!("ui/hub.js");
 const REFERENCES_JS: &str = include_str!("ui/references.js");
 const CRAFT_JS: &str = include_str!("ui/craft-editor.js");
+const CHAT_JS: &str = include_str!("ui/chat.js");
+const CHAT_CSS: &str = include_str!("ui/chat.css");
 const HUB_CSS: &str = include_str!("ui/hub.css");
 const APP_CSS: &str = include_str!("ui/app.css");
 const NOTION_CSS: &str = include_str!("ui/notion.css");
@@ -532,6 +534,12 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
         (Method::Get, "/ui/hub.css") => {
             respond_asset(req, "ui/hub.css", HUB_CSS, "text/css; charset=utf-8");
         }
+        (Method::Get, "/ui/chat.js") => {
+            respond_asset(req, "ui/chat.js", CHAT_JS, "text/javascript; charset=utf-8");
+        }
+        (Method::Get, "/ui/chat.css") => {
+            respond_asset(req, "ui/chat.css", CHAT_CSS, "text/css; charset=utf-8");
+        }
         (Method::Get, "/api/hub") => {
             server::json(
                 req,
@@ -542,6 +550,7 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
             craft::asset(req, &config.craft_root, &path["/craft/".len()..]);
         }
         (Method::Get, "/api/craft/file") => craft::open(req, &query_param(query, "path")),
+        (Method::Get, "/api/craft/context") => craft::context(req, &query_param(query, "path")),
         (Method::Put, "/api/craft/file") => craft::save(req, &query_param(query, "path")),
         (Method::Get, "/api/download") => {
             let Some(full) = safe_path(&query_param(query, "path")).filter(|path| path.is_file())

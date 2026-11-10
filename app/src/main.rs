@@ -17,6 +17,7 @@ const REFERENCES_JS: &str = include_str!("ui/references.js");
 const CRAFT_JS: &str = include_str!("ui/craft-editor.js");
 const CHAT_JS: &str = include_str!("ui/chat.js");
 const CHAT_CSS: &str = include_str!("ui/chat.css");
+const STAGESHOW_CSS: &str = include_str!("ui/stageshow.css");
 const HUB_CSS: &str = include_str!("ui/hub.css");
 const APP_CSS: &str = include_str!("ui/app.css");
 const NOTION_CSS: &str = include_str!("ui/notion.css");
@@ -548,6 +549,9 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
         }
         (Method::Get, "/ui/chat.css") => {
             respond_asset(req, "ui/chat.css", CHAT_CSS, "text/css; charset=utf-8");
+        }
+        (Method::Get, "/ui/stageshow.css") => {
+            respond_asset(req, "ui/stageshow.css", STAGESHOW_CSS, "text/css; charset=utf-8");
         }
         (Method::Get, "/api/hub") => {
             server::json(

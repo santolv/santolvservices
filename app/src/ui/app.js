@@ -56,7 +56,7 @@ function activeDoc() { return state.documents.get(activeTab()?.path); }
 function persist() {
   clearTimeout(workspaceTimer); workspaceTimer = setTimeout(() => run(post('/api/workspace', { groups: state.groups.map(g => ({ id: g.id, size: g.size, active: g.active, tabs: g.tabs.map(({ id, path, type, mode, date }) => ({ id, path, type, mode, date })) })), horizontal: state.horizontal, leftView: state.leftView, activeGroup: state.activeGroup, left: state.left, right: state.right, leftWidth: $('#leftSidebar').style.width, rightWidth: $('#rightSidebar').style.width, folders: [...state.folders], bookmarks: state.bookmarks, rightView: state.rightView })), 300);
 }
-function applyPrefs() { document.documentElement.dataset.theme = prefs.theme; $('meta[name=theme-color]').content = prefs.theme === 'light' ? '#FFFFFF' : '#1C1C1C'; document.documentElement.style.setProperty('--editor-font-size', `${prefs.fontSize}px`); document.documentElement.classList.toggle('readable', prefs.readable); safeStorage.set('sc-preferences', prefs); }
+function applyPrefs() { document.documentElement.dataset.theme = prefs.theme; $('meta[name=theme-color]').content = getComputedStyle(document.documentElement).getPropertyValue('--ss-chrome').trim(); document.documentElement.style.setProperty('--editor-font-size', `${prefs.fontSize}px`); document.documentElement.classList.toggle('readable', prefs.readable); safeStorage.set('sc-preferences', prefs); }
 function setDraft(path, content) { const drafts = safeStorage.get('sc-drafts', {}); if (content === null) delete drafts[path]; else drafts[path] = content; safeStorage.set('sc-drafts', drafts); }
 async function loadDocument(path) {
   if (state.documents.has(path)) return state.documents.get(path);
@@ -421,7 +421,7 @@ const commands = () => [
 function toggleTheme() { prefs.theme = prefs.theme === 'dark' ? 'light' : 'dark'; applyPrefs(); renderWorkspace(); }
 function openAnotherWindow() { window.open('/cerebro','_blank','noopener,popup'); }
 function chooser(heading, placeholder, getItems, create) {
-  dialog(heading, `<input class="chooser-input" id="chooserInput" aria-label="${escape(placeholder)}" placeholder="${escape(placeholder)}" autocomplete="off"><div class="chooser-list" id="chooserList" role="listbox"></div>`, `<span><kbd>↑</kbd><kbd>↓</kbd> navegar</span><span><kbd>↵</kbd> abrir</span><span><kbd>esc</kbd> cerrar</span>`);
+  dialog(heading, `<div class="chooser-search">${icon('Search',18)}<input class="chooser-input" id="chooserInput" aria-label="${escape(placeholder)}" placeholder="${escape(placeholder)}" autocomplete="off"></div><div class="chooser-list" id="chooserList" role="listbox"></div>`, `<span><kbd>↑</kbd><kbd>↓</kbd> navegar</span><span><kbd>↵</kbd> abrir</span><span><kbd>esc</kbd> cerrar</span>`);
   $('.modal').classList.add('chooser'); let selected = 0, list = [];
   const update = () => { const query = $('#chooserInput').value; list = getItems(query); if (!list.length && create && query.trim()) list = [{ label: `Crear «${query.trim()}»`, icon: 'FilePlus2', action: () => createNote(query.trim()) }]; selected = 0; draw(); };
   const execute = index => { const item = list[index]; if (!item) return; closeOverlay(); run(item.action()); };

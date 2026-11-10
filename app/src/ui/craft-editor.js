@@ -189,13 +189,14 @@ export async function openCraft(path, editor) {
             returnButton.setAttribute("aria-label", "Volver a Mis archivos");
             const light = document.documentElement.dataset.theme === "light";
             // shortcut: covers the disabled AutoSave slot in WordCraft 0.16, use a native toolbar action when the host exposes one.
+            const palette=getComputedStyle(document.documentElement);
             const returnStyle=childDocument.createElement('style');
             returnButton.className='sc-craft-back';
             const slot=childDocument.createElement('div');
             slot.className='sc-craft-back-slot';
             returnStyle.textContent=`.sc-craft-back-slot{position:absolute;top:0;left:0;z-index:2;display:flex;align-items:center;padding-left:6px;width:120px;height:35px;box-sizing:border-box;background:${light?'#f3f3f3':'#232323'}}
-              .sc-craft-back{display:inline-flex;align-items:center;justify-content:center;gap:3px;height:29px;padding:0 10px 0 6px;border:1px solid ${light?'#0002':'#ffffff26'};border-radius:999px;background:${light?'#f5f5f7e8':'#303033e8'};color:${light?'#262629':'#f2f2f4'};box-shadow:inset 0 1px 0 #ffffff24,0 2px 5px #0002;backdrop-filter:blur(12px);font:550 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;cursor:pointer}
-              .sc-craft-back:hover{filter:brightness(${light?'.97':'1.16'})}.sc-craft-back:active{box-shadow:inset 0 1px 4px #0003}.sc-craft-back:focus-visible{outline:2px solid #8a5cf5;outline-offset:1px}`;
+              .sc-craft-back{display:inline-flex;align-items:center;justify-content:center;gap:3px;height:29px;padding:0 10px 0 6px;border:1px solid ${light?'#0002':'#ffffff26'};border-radius:999px;background:${palette.getPropertyValue('--ss-raised')};color:${palette.getPropertyValue('--ss-text-strong')};box-shadow:inset 0 1px 0 #ffffff24,0 2px 5px #0002;backdrop-filter:blur(12px);font:550 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;cursor:pointer}
+              .sc-craft-back:hover{filter:brightness(${light?'.97':'1.16'})}.sc-craft-back:active{box-shadow:inset 0 1px 4px #0003}.sc-craft-back:focus-visible{outline:2px solid ${palette.getPropertyValue('--ss-accent')};outline-offset:1px}`;
             childDocument.head.append(returnStyle);
             returnButton.onclick = () => location.assign(back.href);
             slot.append(returnButton);

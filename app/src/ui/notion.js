@@ -250,7 +250,7 @@ export function createNotion(ctx) {
         <section><h2>${I('CalendarDays',15)} Próximos eventos</h2>
           <div class="sc-home-panel sc-home-events">${events.length ? events.map(event => `<div><time datetime="${event.date}">${escape(new Date(event.date + 'T12:00:00').toLocaleDateString('es',{day:'numeric',month:'short'}))}</time>${open(event.path,event.title)}</div>`).join('') : `<div class="sc-home-empty">${I('CalendarDays',24)}<p>Las fechas de notas, colecciones y recordatorios aparecerán aquí.</p>${actionButton('CalendarDays','Abrir calendario','calendar')}</div>`}</div>
         </section>
-        <section><h2>${I('Columns2',15)} Vistas de inicio</h2><div class="sc-home-panel">
+        <section class="sc-home-collection"><h2>${I('Columns2',15)} Vistas de inicio</h2><div class="sc-home-panel">
           <div class="sc-home-pin"><label for="homeCollection">Colección anclada</label><select id="homeCollection"><option value="">Seleccionar colección</option>${collections.map(file => `<option value="${escape(file.path)}">${escape(title(file.path))}</option>`).join('')}</select></div>
           ${collections.some(file => file.path === pinned) ? '<div id="homePinned"></div>' : `<div class="sc-home-empty">${I('Columns2',24)}<p>Ancla una colección para consultar y editar sus vistas desde Inicio.</p>${actionButton('Plus','Crear colección','database')}</div>`}
         </div></section>

@@ -6,6 +6,10 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Cursor, ErrorKind};
 use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+    mpsc, Arc,
+};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tiny_http::{Header, Request, Response};
@@ -341,6 +345,122 @@ pub fn revision(bytes: &[u8]) -> String {
     format!("\"{:x}\"", Sha256::digest(bytes))
 }
 
+type Subscribers = HashMap<PathBuf, Vec<(u64, mpsc::SyncSender<()>)>>;
+static SUBSCRIBERS: OnceLock<Mutex<Subscribers>> = OnceLock::new();
+static WATCH_COUNT: AtomicUsize = AtomicUsize::new(0);
+static NEXT_WATCH: AtomicU64 = AtomicU64::new(0);
+
+fn subscribers() -> &'static Mutex<Subscribers> {
+    SUBSCRIBERS.get_or_init(Mutex::default)
+}
+
+pub(crate) fn notify_document(path: &Path) {
+    let Ok(key) = fs::canonicalize(path) else {
+        return;
+    };
+    if let Some(waiters) = subscribers().lock().unwrap().remove(&key) {
+        for (_, sender) in waiters {
+            let _ = sender.try_send(());
+        }
+    }
+}
+
+struct Subscription {
+    key: PathBuf,
+    id: u64,
+    receiver: mpsc::Receiver<()>,
+}
+
+impl Subscription {
+    fn new(key: PathBuf) -> Self {
+        let id = NEXT_WATCH.fetch_add(1, Ordering::Relaxed);
+        let (sender, receiver) = mpsc::sync_channel(1);
+        subscribers()
+            .lock()
+            .unwrap()
+            .entry(key.clone())
+            .or_default()
+            .push((id, sender));
+        Self { key, id, receiver }
+    }
+}
+
+impl Drop for Subscription {
+    fn drop(&mut self) {
+        let mut entries = subscribers().lock().unwrap();
+        if let Some(waiters) = entries.get_mut(&self.key) {
+            waiters.retain(|(id, _)| *id != self.id);
+            if waiters.is_empty() {
+                entries.remove(&self.key);
+            }
+        }
+    }
+}
+
+struct WatchSlot;
+
+impl Drop for WatchSlot {
+    fn drop(&mut self) {
+        WATCH_COUNT.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+pub fn watch(req: Request, path: String, config: Arc<server::Config>, writes: Arc<Mutex<()>>) {
+    if !matches!(extension(&path).as_str(), "docx" | "pptx" | "xlsx") {
+        return json_error(req, 415, "Formato sin colaboración");
+    }
+    let previous = WATCH_COUNT.fetch_add(1, Ordering::Relaxed);
+    let slot = WatchSlot;
+    if previous >= 64 {
+        return json_error(req, 429, "Demasiadas sesiones esperando cambios");
+    }
+    let _ = std::thread::Builder::new().spawn(move || {
+        let _slot = slot;
+        let read = || {
+            if let Some(accounts) = &config.accounts {
+                let actor = accounts.actor(&req).ok_or((401, "Inicia sesión"))?;
+                if !accounts.allows(&actor, &path) {
+                    return Err((403, "Este archivo no está compartido contigo"));
+                }
+            }
+            let full = safe_path(&path).ok_or((400, "Ruta no válida"))?;
+            let bytes = read_document(&document_path(&full))?;
+            if !valid_format(&path, &bytes) {
+                return Err((415, "Formato de documento no válido"));
+            }
+            Ok((full, bytes))
+        };
+        let initial = {
+            let _guard = writes.lock().unwrap();
+            read().map(|(full, bytes)| {
+                let tag = revision(&bytes);
+                if server::header(&req, "If-None-Match") != Some(tag.as_str()) {
+                    return Ok((bytes, tag));
+                }
+                Err(fs::canonicalize(full).map(Subscription::new))
+            })
+        };
+        let subscription = match initial {
+            Err((code, message)) => return json_error(req, code, message),
+            Ok(Ok((bytes, tag))) => return respond_file(req, bytes, tag),
+            Ok(Err(Ok(subscription))) => subscription,
+            Ok(Err(Err(_))) => return json_error(req, 404, "Archivo no encontrado"),
+        };
+        let _ = subscription.receiver.recv_timeout(Duration::from_secs(20));
+        let result = {
+            let _guard = writes.lock().unwrap();
+            read()
+        };
+        match result {
+            Ok((_, bytes)) => {
+                let tag = revision(&bytes);
+                respond_file(req, bytes, tag);
+            }
+            Err((code, message)) => json_error(req, code, message),
+        }
+    });
+}
+
 pub fn open(req: Request, path: &str) {
     let Some(full) = safe_path(path) else {
         return json_error(req, 400, "Ruta no válida");
@@ -353,6 +473,16 @@ pub fn open(req: Request, path: &str) {
         return json_error(req, 415, "Formato de documento no válido");
     }
     let tag = revision(&bytes);
+    if server::header(&req, "If-None-Match") != Some(tag.as_str())
+        && extension(path) == "docx"
+        && !word_index_current(&full)
+    {
+        queue_text(&full);
+    }
+    respond_file(req, bytes, tag);
+}
+
+fn respond_file(req: Request, bytes: Vec<u8>, tag: String) {
     if server::header(&req, "If-None-Match") == Some(tag.as_str()) {
         let _ = req.respond(
             Response::empty(304)
@@ -360,9 +490,6 @@ pub fn open(req: Request, path: &str) {
                 .with_header(Header::from_bytes("ETag", tag).unwrap()),
         );
         return;
-    }
-    if extension(path) == "docx" && !word_index_current(&full) {
-        queue_text(&full);
     }
     let _ = req.respond(
         Response::from_data(bytes)
@@ -525,6 +652,7 @@ pub fn save(mut req: Request, path: &str) {
         if written.is_err() {
             return json_error(req, 500, "No se pudo guardar el archivo");
         }
+        notify_document(&full);
     }
     if extension(path) == "docx" && (current != bytes || !word_index_current(&full)) {
         queue_text(&full);
@@ -548,6 +676,27 @@ fn read_document(path: &Path) -> Result<Vec<u8>, (u16, &'static str)> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_saved_document_only_wakes_its_own_subscribers() {
+        let first = tempfile::NamedTempFile::new().unwrap();
+        let second = tempfile::NamedTempFile::new().unwrap();
+        let first_key = std::fs::canonicalize(first.path()).unwrap();
+        let one = super::Subscription::new(first_key.clone());
+        let two = super::Subscription::new(first_key);
+        let other = super::Subscription::new(std::fs::canonicalize(second.path()).unwrap());
+        super::notify_document(first.path());
+        assert_eq!(one.receiver.try_recv(), Ok(()));
+        assert_eq!(two.receiver.try_recv(), Ok(()));
+        assert_eq!(
+            other.receiver.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Empty)
+        );
+        drop(other);
+        assert!(!super::subscribers()
+            .lock()
+            .unwrap()
+            .contains_key(&std::fs::canonicalize(second.path()).unwrap()));
+    }
     use super::*;
     use std::io::Write;
 

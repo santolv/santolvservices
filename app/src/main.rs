@@ -495,7 +495,11 @@ fn workspace_file() -> Option<PathBuf> {
     (!linked_path(&dir) && !linked_path(&file)).then_some(file)
 }
 
-fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<()>) {
+fn handle(
+    mut req: tiny_http::Request,
+    config: &std::sync::Arc<server::Config>,
+    writes: &std::sync::Arc<Mutex<()>>,
+) {
     let method = req.method().clone();
     let url = req.url().to_string();
     let (path, query) = url.split_once('?').unwrap_or((&url, ""));
@@ -543,6 +547,17 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
     } else {
         None
     };
+    if method == Method::Get && path == "/api/craft/changes" {
+        if !server::trusted_origin(&req) {
+            return json_error(req, 403, "Origen de solicitud no permitido");
+        }
+        return craft::watch(
+            req,
+            query_param(query, "path"),
+            config.clone(),
+            writes.clone(),
+        );
+    }
     let _guard = if matches!(method, Method::Post | Method::Put | Method::Delete)
         || matches!(
             path,
@@ -1128,7 +1143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         println!("Cuenta creada: {name}");
         return Ok(());
     }
-    let config = server::Config::from_env()?;
+    let config = std::sync::Arc::new(server::Config::from_env()?);
     fs::create_dir_all(vault_root())?;
     let server = Server::http(config.address)?;
     let writes = std::sync::Arc::new(Mutex::new(()));

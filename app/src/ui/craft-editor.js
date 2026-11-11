@@ -2,14 +2,15 @@ import { mountChat } from './chat.js';
 import { mountCollaboration } from './accounts.js';
 
 const AUTOSAVE_MS = 1400;
-const SYNC_MS = 1200;
+const INPUT_GRACE_MS = 150;
 const MAX_FILE = 32 * 1024 * 1024;
 const fileUrl = (route, path) => route + '?path=' + encodeURIComponent(path);
 
 async function requireOk(response) {
   if (response.ok) return response;
   const body = await response.json().catch(() => ({}));
-  throw new Error(body.error || 'El servidor devolvió un error (' + response.status + ').');
+  throw Object.assign(new Error(body.error || 'El servidor devolvió un error (' + response.status + ').'),
+    { status: response.status });
 }
 
 export async function openCraft(path, editor, account) {
@@ -63,7 +64,8 @@ export async function openCraft(path, editor, account) {
   let waiting;
   let lastInput = 0;
   let composing = false;
-  let polling = false;
+  let watcher;
+  let applyTimer;
   let epoch = 0;
 
   if (isWordCraft) {
@@ -124,10 +126,12 @@ export async function openCraft(path, editor, account) {
     frame.contentWindow.postMessage({ type: prefix + kind, ...fields }, location.origin, transfer);
   }
 
-  async function snapshot(name, known) {
-    const response = await fetch(fileUrl('/api/craft/file', localPath(name)), {
+  async function snapshot(name, known, signal) {
+    const route = signal ? '/api/craft/changes' : '/api/craft/file';
+    const response = await fetch(fileUrl(route, localPath(name)), {
       cache: 'no-store',
       headers: known ? { 'If-None-Match': known } : {},
+      signal,
     });
     if (response.status === 304) return null;
     await requireOk(response);
@@ -137,7 +141,14 @@ export async function openCraft(path, editor, account) {
   }
 
   function applyWaiting() {
-    if (!waiting || !ready || pending || dirty || failed || composing || Date.now() - lastInput < 1400) return;
+    clearTimeout(applyTimer);
+    if (!waiting || !ready || pending || dirty || failed || composing) return;
+    const delay = INPUT_GRACE_MS - (Date.now() - lastInput);
+    if (delay > 0) {
+      applyTimer = setTimeout(applyWaiting, delay);
+      return;
+    }
+    stopWatching();
     editorBase = waiting;
     waiting = null;
     revisions.set(currentName, editorBase.revision);
@@ -148,19 +159,36 @@ export async function openCraft(path, editor, account) {
     loadFrame();
   }
 
-  async function sync() {
-    if (!ready || dirty || pending || failed || composing || polling) return;
-    polling = true;
+  function stopWatching() {
+    watcher?.abort();
+    watcher = null;
+  }
+
+  async function watchChanges() {
+    if (!collaborative || !ready || pending || failed || watcher) return;
+    const controller = new AbortController();
+    watcher = controller;
     const name = currentName;
     const base = editorBase;
+    let retry = 0;
     try {
-      const fresh = await snapshot(name, waiting?.revision || base.revision);
+      const fresh = await snapshot(name, waiting?.revision || base.revision, controller.signal);
       if (name === currentName && base === editorBase && !pending && !failed) {
         if (fresh) waiting = fresh;
         applyWaiting();
+        if (waiting && dirty) requestSave?.();
       }
-    } catch { /* Recheck on the next interval. */ }
-    finally { polling = false; }
+    } catch (error) {
+      if ([401, 403, 404, 415].includes(error.status)) {
+        if (watcher === controller) report(error.message, true);
+        retry = null;
+      } else retry = 1000;
+    } finally {
+      if (watcher === controller) {
+        watcher = null;
+        if (retry !== null) setTimeout(watchChanges, retry);
+      }
+    }
   }
 
   async function saveCollaborative(name, bytes) {
@@ -218,6 +246,7 @@ export async function openCraft(path, editor, account) {
         }
         currentName = name;
         if (collaborative) {
+          stopWatching();
           editorBase = { revision: revisions.get(name), bytes: bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) };
           waiting = null;
         }
@@ -236,6 +265,7 @@ export async function openCraft(path, editor, account) {
     } finally {
       pending--;
       applyWaiting();
+      watchChanges();
     }
   }
 
@@ -259,8 +289,9 @@ export async function openCraft(path, editor, account) {
 
   if (collaborative) {
     setInterval(() => requestSave?.(), AUTOSAVE_MS);
-    setInterval(sync, SYNC_MS);
-    window.addEventListener('focus', sync);
+    window.addEventListener('focus', watchChanges);
+    window.addEventListener('pagehide', stopWatching);
+    window.addEventListener('pageshow', watchChanges);
   }
 
   window.addEventListener('message', event => {
@@ -309,7 +340,7 @@ export async function openCraft(path, editor, account) {
             child.addEventListener('keydown', track, true);
             child.addEventListener('pointerdown', track, true);
             child.addEventListener('compositionstart', () => { composing = true; });
-            child.addEventListener('compositionend', () => { composing = false; lastInput = Date.now(); });
+            child.addEventListener('compositionend', () => { composing = false; lastInput = Date.now(); applyWaiting(); });
             requestSave = () => {
               if (!ready || !dirty || pending || failed || composing || !canvas.isConnected || Date.now() - lastInput < 700) return;
               // The installed web builds expose Save through their keyboard command.
@@ -321,9 +352,13 @@ export async function openCraft(path, editor, account) {
           }
         }
         report('');
+        watchChanges();
         break;
       case 'dirty':
-        if (ready) dirty = data.dirty === true;
+        if (ready) {
+          dirty = data.dirty === true;
+          applyWaiting();
+        }
         break;
       case 'failed':
         clearTimeout(timeout);

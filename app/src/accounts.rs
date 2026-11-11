@@ -474,6 +474,9 @@ impl Accounts {
                 .lock()
                 .unwrap()
                 .retain(|(_, doc), (user, _)| doc != &path || user != &change.user);
+            if let Some(full) = safe_path(&path) {
+                crate::craft::notify_document(&full);
+            }
         }
         server::json(req, json!({"ok":true}));
     }

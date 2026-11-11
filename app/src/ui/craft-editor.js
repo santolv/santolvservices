@@ -2,6 +2,7 @@ import { mountChat } from './chat.js';
 import { mountCollaboration } from './accounts.js';
 
 const AUTOSAVE_MS = 1400;
+const LIVE_SAVE_MS = 85;
 const INPUT_GRACE_MS = 150;
 const MAX_FILE = 32 * 1024 * 1024;
 const fileUrl = (route, path) => route + '?path=' + encodeURIComponent(path);
@@ -66,6 +67,11 @@ export async function openCraft(path, editor, account) {
   let composing = false;
   let watcher;
   let applyTimer;
+  let live = false;
+  let liveTimer;
+  let flushing = false;
+  let applying;
+  let applyId = 0;
   let epoch = 0;
 
   if (isWordCraft) {
@@ -143,6 +149,13 @@ export async function openCraft(path, editor, account) {
   function applyWaiting() {
     clearTimeout(applyTimer);
     if (!waiting || !ready || pending || dirty || failed || composing) return;
+    if (isWordCraft) {
+      if (!live || applying) return;
+      const bytes = waiting.bytes.slice().buffer;
+      applying = { ...waiting, id: ++applyId };
+      send('apply', { id: applying.id, name: currentName, bytes }, [bytes]);
+      return;
+    }
     const delay = INPUT_GRACE_MS - (Date.now() - lastInput);
     if (delay > 0) {
       applyTimer = setTimeout(applyWaiting, delay);
@@ -162,6 +175,14 @@ export async function openCraft(path, editor, account) {
   function stopWatching() {
     watcher?.abort();
     watcher = null;
+  }
+
+  function scheduleLiveSave() {
+    if (liveTimer) return;
+    liveTimer = setTimeout(() => {
+      liveTimer = null;
+      requestSave?.();
+    }, LIVE_SAVE_MS);
   }
 
   async function watchChanges() {
@@ -220,12 +241,12 @@ export async function openCraft(path, editor, account) {
     throw new Error('El archivo sigue cambiando. Descarga tu copia local para conservar tus cambios.');
   }
 
-  async function save({ name, bytes, id, saveAs }) {
+  async function save({ name, bytes, id, saveAs }, automatic) {
     pending++;
     try {
       const destination = localPath(name);
       const revision = revisions.get(name);
-      report('Guardando ' + name + '…');
+      if (!automatic) report('Guardando ' + name + '…');
       if (collaborative && name === currentName && editorBase) {
         await saveCollaborative(name, bytes);
       } else {
@@ -256,7 +277,9 @@ export async function openCraft(path, editor, account) {
         recovery.hidden = true;
       }
       if (id !== undefined) send('saved', { id });
-      report(failed ? 'Hay una copia sin guardar: ' + failed.name : 'Guardado en Mis archivos: ' + name, Boolean(failed));
+      if (!automatic || failed) {
+        report(failed ? 'Hay una copia sin guardar: ' + failed.name : 'Guardado en Mis archivos: ' + name, Boolean(failed));
+      }
     } catch (error) {
       failed = { name, bytes };
       recovery.hidden = false;
@@ -266,6 +289,7 @@ export async function openCraft(path, editor, account) {
       pending--;
       applyWaiting();
       watchChanges();
+      if (live && dirty) scheduleLiveSave();
     }
   }
 
@@ -284,7 +308,7 @@ export async function openCraft(path, editor, account) {
   function loadFrame() {
     clearTimeout(timeout);
     timeout = setTimeout(() => report(editor.name + ' no respondió. Comprueba que el navegador admite WebGPU o WebGL2 y vuelve a abrir el archivo.', true), 45000);
-    frame.src = '/craft/' + editor.id + '/index.html?host=parent' + (collaborative ? '&session=' + (++epoch) : '');
+    frame.src = '/craft/' + editor.id + '/index.html?host=parent' + (isWordCraft ? '&live=1' : '') + (collaborative ? '&session=' + (++epoch) : '');
   }
 
   if (collaborative) {
@@ -299,6 +323,40 @@ export async function openCraft(path, editor, account) {
     const data = event.data;
     if (typeof data?.type !== 'string' || !data.type.startsWith(prefix)) return;
     switch (data.type.slice(prefix.length)) {
+      case 'live-ready':
+        if (isWordCraft) live = true;
+        break;
+      case 'changed':
+        if (live) {
+          dirty = true;
+          scheduleLiveSave();
+        }
+        break;
+      case 'flushed':
+        flushing = false;
+        break;
+      case 'live-error':
+        report(String(data.error), true);
+        break;
+      case 'applied': {
+        if (!applying || data.id !== applying.id) break;
+        const applied = applying;
+        applying = null;
+        if (data.outcome === 'applied') {
+          stopWatching();
+          editorBase = { revision: applied.revision, bytes: applied.bytes };
+          revisions.set(currentName, applied.revision);
+          if (waiting?.revision === applied.revision) waiting = null;
+          applyWaiting();
+          watchChanges();
+        } else if (data.outcome === 'busy') {
+          dirty = true;
+          scheduleLiveSave();
+        } else if (data.outcome === 'invalid') {
+          report('WordCraft no pudo aplicar la revisión remota.', true);
+        }
+        break;
+      }
       case 'ready':
         if (ready) return;
         ready = true;
@@ -340,8 +398,19 @@ export async function openCraft(path, editor, account) {
             child.addEventListener('keydown', track, true);
             child.addEventListener('pointerdown', track, true);
             child.addEventListener('compositionstart', () => { composing = true; });
-            child.addEventListener('compositionend', () => { composing = false; lastInput = Date.now(); applyWaiting(); });
+            child.addEventListener('compositionend', () => {
+              composing = false;
+              lastInput = Date.now();
+              applyWaiting();
+              if (live && dirty) scheduleLiveSave();
+            });
             requestSave = () => {
+              if (live) {
+                if (!ready || !dirty || pending || failed || composing || flushing) return;
+                flushing = true;
+                send('flush', { name: currentName });
+                return;
+              }
               if (!ready || !dirty || pending || failed || composing || !canvas.isConnected || Date.now() - lastInput < 700) return;
               // The installed web builds expose Save through their keyboard command.
               const mac = /Mac/.test(navigator.platform);
@@ -351,7 +420,7 @@ export async function openCraft(path, editor, account) {
             };
           }
         }
-        report('');
+        report(isWordCraft && !live ? 'Instala la compilación de WordCraft con edición en directo para recibir cambios.' : '');
         watchChanges();
         break;
       case 'dirty':
@@ -377,10 +446,11 @@ export async function openCraft(path, editor, account) {
           report('El archivo supera 32 MiB.', true);
           return;
         }
+        const automatic = live && flushing && name === currentName && !data.saveAs;
         pending++;
         queue = queue.then(async () => {
           pending--;
-          await save(data);
+          await save(data, automatic);
         });
         break;
       }

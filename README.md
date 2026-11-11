@@ -72,11 +72,11 @@ cargo run
 
 Abre [Mis archivos](http://127.0.0.1:7878/) e inicia sesión como `propietario`. Abre un archivo de WordCraft, DeckCraft o GridCraft, pulsa **Compartir**, crea una cuenta de colaborador y marca su permiso de edición. Envía el enlace al archivo. El colaborador inicia sesión con su cuenta y también encuentra el documento en **Compartidos conmigo**. La lista junto a **Compartir** muestra quién tiene el archivo abierto. Desmarcar una cuenta retira su acceso en la siguiente petición.
 
-Cada persona abre el enlace desde un navegador o perfil independiente. Al guardar manualmente o por autoguardado, el servidor entrega la nueva revisión a las sesiones abiertas mediante una petición HTTP en espera. Cuando coinciden dos guardados, Yjs combina el texto compatible de un DOCX, las formas y el texto de un PPTX, o las celdas de un XLSX. Las fórmulas se conservan en su celda. El servidor Rust comprueba la revisión antes de guardar el archivo.
+Cada persona abre el enlace desde un navegador o perfil independiente. La compilación de WordCraft con edición en directo guarda en intervalos cortos mientras escribes y aplica las revisiones recibidas dentro del documento abierto, conservando el foco y ajustando la selección al texto nuevo. DeckCraft y GridCraft entregan las revisiones al guardar. Cuando coinciden dos guardados, Yjs combina el texto compatible de un DOCX, las formas y el texto de un PPTX, o las celdas de un XLSX. El servidor Rust comprueba la revisión antes de guardar el archivo.
 
 Para acceder desde otros equipos, publica el servicio detrás de un proxy HTTPS, conserva la cabecera `Host` y configura `SUPER_CEREBRO_ORIGIN` con el origen exacto, por ejemplo `https://oficina.example.com`. El modo de cuentas escucha en loopback y usa su propio inicio de sesión. Respalda el archivo de cuentas junto con la bóveda y retira los permisos antes de reemplazar o mover archivos directamente en el disco.
 
-Los editores instalados intercambian archivos completos con el anfitrión. Una sesión sin cambios pendientes abre la revisión remota en cuanto la recibe. Una sesión con cambios locales los guarda o combina primero. Recargar el archivo puede reiniciar la selección y el historial de deshacer. Si dos sesiones cambian la misma celda o una estructura incompatible, la segunda conserva sus cambios con **Descargar copia**. La presencia identifica a las personas conectadas y los cursores permanecen en el editor local.
+El puente todavía serializa el archivo completo, así que los documentos grandes pueden tardar más. Si hay cambios locales, el editor los guarda o combina primero. WordCraft limpia el historial de deshacer al aplicar una revisión remota para evitar deshacer cambios ajenos. DeckCraft y GridCraft vuelven a abrir el archivo y pueden reiniciar la selección. Si dos sesiones cambian una estructura incompatible o la misma celda, la segunda conserva sus cambios con **Descargar copia**.
 
 Para instalar las cuatro compilaciones oficiales, ejecuta desde `app`:
 
@@ -85,6 +85,15 @@ pwsh -File ./install-craft.ps1
 ```
 
 El instalador comprueba los SHA-256 y extrae los paquetes en `app/craft-apps/`. Para desplegar en otro servidor, copia esa carpeta al directorio desde el que arrancas el ejecutable o configura `SUPER_CEREBRO_CRAFT_ROOT` con su ruta absoluta. Si instalas los ZIP manualmente, deja los archivos de cada paquete, incluido `index.html`, en `wordcraft/`, `deckcraft/`, `gridcraft/` y `pdfcraft/` bajo esa ruta. Usa localhost o HTTPS y un navegador con WebGPU o WebGL2.
+
+Para compilar WordCraft 0.16.0 con el puente de edición en directo, ejecuta desde `app`:
+
+```powershell
+cargo install wasm-bindgen-cli --version 0.2.129 --locked
+pwsh -File ./build-wordcraft-live.ps1
+```
+
+El script instala la compilación en `craft-apps/wordcraft/`. Copia esa carpeta al servidor y vuelve a abrir el documento en las sesiones que ya estaban conectadas.
 
 ## Chat con IA
 

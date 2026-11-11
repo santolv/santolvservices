@@ -352,10 +352,18 @@ pub fn open(req: Request, path: &str) {
     if !valid_format(path, &bytes) {
         return json_error(req, 415, "Formato de documento no válido");
     }
+    let tag = revision(&bytes);
+    if server::header(&req, "If-None-Match") == Some(tag.as_str()) {
+        let _ = req.respond(
+            Response::empty(304)
+                .with_header(Header::from_bytes("Cache-Control", "no-store").unwrap())
+                .with_header(Header::from_bytes("ETag", tag).unwrap()),
+        );
+        return;
+    }
     if extension(path) == "docx" && !word_index_current(&full) {
         queue_text(&full);
     }
-    let tag = revision(&bytes);
     let _ = req.respond(
         Response::from_data(bytes)
             .with_header(Header::from_bytes("Content-Type", "application/octet-stream").unwrap())

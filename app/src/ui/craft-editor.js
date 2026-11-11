@@ -1,6 +1,7 @@
 import { mountChat } from './chat.js';
 
-const WORDCRAFT_AUTOSAVE_MS = 4000;
+const AUTOSAVE_MS = 1400;
+const SYNC_MS = 1200;
 const MAX_FILE = 32 * 1024 * 1024;
 const fileUrl = (route, path) => route + '?path=' + encodeURIComponent(path);
 
@@ -19,6 +20,7 @@ export async function openCraft(path, editor) {
   const back = view.querySelector('a');
   view.hidden = false;
   const isWordCraft = editor?.id === "wordcraft";
+  const collaborative = ['wordcraft', 'deckcraft', 'gridcraft'].includes(editor?.id);
   view.classList.toggle("craft-wordcraft", isWordCraft);
   document.querySelector('.hub-bar').inert = true;
   document.querySelector('.hub-layout').inert = true;
@@ -56,6 +58,12 @@ export async function openCraft(path, editor) {
   let currentName = filename;
   let requestSave;
   let presence;
+  let editorBase;
+  let waiting;
+  let lastInput = 0;
+  let composing = false;
+  let polling = false;
+  let epoch = 0;
 
   if (isWordCraft) {
     const session=Array.from(crypto.getRandomValues(new Uint8Array(16)), byte=>byte.toString(16).padStart(2,'0')).join('');
@@ -114,27 +122,103 @@ export async function openCraft(path, editor) {
     frame.contentWindow.postMessage({ type: prefix + kind, ...fields }, location.origin, transfer);
   }
 
+  async function snapshot(name, known) {
+    const response = await fetch(fileUrl('/api/craft/file', localPath(name)), {
+      cache: 'no-store',
+      headers: known ? { 'If-None-Match': known } : {},
+    });
+    if (response.status === 304) return null;
+    await requireOk(response);
+    const revision = response.headers.get('ETag');
+    if (!revision) throw new Error('No se pudo obtener la versión del archivo.');
+    return { revision, bytes: new Uint8Array(await response.arrayBuffer()) };
+  }
+
+  function applyWaiting() {
+    if (!waiting || !ready || pending || dirty || failed || composing || Date.now() - lastInput < 1400) return;
+    editorBase = waiting;
+    waiting = null;
+    revisions.set(currentName, editorBase.revision);
+    original = editorBase.bytes.slice().buffer;
+    ready = false;
+    requestSave = null;
+    report('Actualizando ' + currentName + '…');
+    loadFrame();
+  }
+
+  async function sync() {
+    if (!ready || dirty || pending || failed || composing || polling) return;
+    polling = true;
+    const name = currentName;
+    const base = editorBase;
+    try {
+      const fresh = await snapshot(name, waiting?.revision || base.revision);
+      if (name === currentName && base === editorBase && !pending && !failed) {
+        if (fresh) waiting = fresh;
+        applyWaiting();
+      }
+    } catch { /* Recheck on the next interval. */ }
+    finally { polling = false; }
+  }
+
+  async function saveCollaborative(name, bytes) {
+    const base = editorBase;
+    const local = new Uint8Array(bytes instanceof ArrayBuffer ? bytes : bytes.buffer, bytes.byteOffset || 0, bytes.byteLength);
+    let expected = base.revision;
+    let output = local;
+    let merged = false;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (!expected) {
+        const remote = await snapshot(name);
+        const { mergeOffice } = await import('./craft-merge.bundle.js');
+        output = mergeOffice(base.bytes, local, remote.bytes, editor.id);
+        expected = remote.revision;
+        merged = true;
+      }
+      const response = await fetch(fileUrl('/api/craft/file', localPath(name)), {
+        method: 'PUT', headers: { 'If-Match': expected }, body: output,
+      });
+      if (response.status === 412) { expected = null; continue; }
+      await requireOk(response);
+      const { revision } = await response.json();
+      revisions.set(name, revision);
+      // The iframe still contains the version it serialized until the merged copy is applied.
+      editorBase = { revision: merged ? null : revision, bytes: local };
+      waiting = merged ? { revision, bytes: output } : null;
+      return;
+    }
+    throw new Error('El archivo sigue cambiando. Descarga tu copia local para conservar tus cambios.');
+  }
+
   async function save({ name, bytes, id, saveAs }) {
     pending++;
     try {
       const destination = localPath(name);
       const revision = revisions.get(name);
       report('Guardando ' + name + '…');
-      const response = await requireOk(await fetch(fileUrl(revision ? '/api/craft/file' : '/api/upload', destination), {
-        method: 'PUT',
-        headers: revision ? { 'If-Match': revision } : {},
-        body: bytes,
-      }));
-      if (revision || name.toLowerCase().endsWith('.' + editor.extension)) {
-        revisions.set(name, (await response.json()).revision);
+      if (collaborative && name === currentName && editorBase) {
+        await saveCollaborative(name, bytes);
+      } else {
+        const response = await requireOk(await fetch(fileUrl(revision ? '/api/craft/file' : '/api/upload', destination), {
+          method: 'PUT',
+          headers: revision ? { 'If-Match': revision } : {},
+          body: bytes,
+        }));
+        if (revision || name.toLowerCase().endsWith('.' + editor.extension)) {
+          revisions.set(name, (await response.json()).revision);
+        }
       }
-      if (saveAs && revisions.has(name) && name.toLowerCase().endsWith('.' + editor.extension)) {
+      if ((saveAs || editor.id === 'gridcraft') && currentName !== name && revisions.has(name) && name.toLowerCase().endsWith('.' + editor.extension)) {
         title.textContent = name;
         if (presence && currentName!==name) {
           await presence(name);
           presence(currentName,true);
         }
         currentName = name;
+        if (collaborative) {
+          editorBase = { revision: revisions.get(name), bytes: bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) };
+          waiting = null;
+        }
       }
       if (failed?.name === name) {
         failed = null;
@@ -149,23 +233,32 @@ export async function openCraft(path, editor) {
       report(error.message, true);
     } finally {
       pending--;
+      applyWaiting();
     }
   }
 
   try {
-    const response = await requireOk(await fetch(fileUrl('/api/craft/file', path)));
-    const revision = response.headers.get('ETag');
-    if (!revision) throw new Error('No se pudo obtener la versión del archivo.');
-    original = await response.arrayBuffer();
-    revisions = new Map([[filename, revision]]);
+    const initial = await snapshot(filename);
+    if (collaborative) editorBase = initial;
+    original = initial.bytes.slice().buffer;
+    revisions = new Map([[filename, initial.revision]]);
   } catch (error) {
     report(error.message, true);
     return;
   }
 
-  const timeout = setTimeout(() => {
-    report(editor.name + ' no respondió. Comprueba que el navegador admite WebGPU o WebGL2 y vuelve a abrir el archivo.', true);
-  }, 45000);
+  let timeout;
+  function loadFrame() {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => report(editor.name + ' no respondió. Comprueba que el navegador admite WebGPU o WebGL2 y vuelve a abrir el archivo.', true), 45000);
+    frame.src = '/craft/' + editor.id + '/index.html?host=parent' + (collaborative ? '&session=' + (++epoch) : '');
+  }
+
+  if (collaborative) {
+    setInterval(() => requestSave?.(), AUTOSAVE_MS);
+    setInterval(sync, SYNC_MS);
+    window.addEventListener('focus', sync);
+  }
 
   window.addEventListener('message', event => {
     if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
@@ -176,7 +269,7 @@ export async function openCraft(path, editor) {
         if (ready) return;
         ready = true;
         clearTimeout(timeout);
-        send('open', { name: filename, bytes: original }, [original]);
+        send('open', { name: currentName, bytes: original }, [original]);
         original = null;
         frame.hidden = false;
         if (isWordCraft) {
@@ -202,29 +295,32 @@ export async function openCraft(path, editor) {
             slot.append(returnButton);
             childDocument.body.append(slot);
             back.closest(".craft-bar").hidden = true;
-            const canvas = childDocument.getElementById("wordcraft_canvas");
-            if (canvas) {
-              let composing = false;
-              childDocument.addEventListener("compositionstart", () => { composing = true; });
-              childDocument.addEventListener("compositionend", () => { composing = false; });
-              requestSave = () => {
-                if (!dirty || pending || failed || composing || !canvas.isConnected) return;
-                // shortcut: WordCraft 0.16 listens for Save on the canvas, use a host command when the editor exposes one.
-                const mac = /Mac/.test(navigator.platform);
-                const saveKey = { key: "s", code: "KeyS", ctrlKey: !mac, metaKey: mac, bubbles: true, cancelable: true };
-                canvas.dispatchEvent(new frame.contentWindow.KeyboardEvent("keydown", saveKey));
-                canvas.dispatchEvent(new frame.contentWindow.KeyboardEvent("keyup", saveKey));
-              };
-              setInterval(() => {
-                if (document.activeElement === frame) requestSave();
-              }, WORDCRAFT_AUTOSAVE_MS);
-            }
+          }
+        }
+        if (collaborative) {
+          const child = frame.contentDocument;
+          const canvas = child?.getElementById(editor.id + '_canvas');
+          if (canvas) {
+            composing = false;
+            const track = event => { if (event.isTrusted) lastInput = Date.now(); };
+            child.addEventListener('keydown', track, true);
+            child.addEventListener('pointerdown', track, true);
+            child.addEventListener('compositionstart', () => { composing = true; });
+            child.addEventListener('compositionend', () => { composing = false; lastInput = Date.now(); });
+            requestSave = () => {
+              if (!ready || !dirty || pending || failed || composing || !canvas.isConnected || Date.now() - lastInput < 700) return;
+              // The installed web builds expose Save through their keyboard command.
+              const mac = /Mac/.test(navigator.platform);
+              const key = { key: 's', code: 'KeyS', ctrlKey: !mac, metaKey: mac, bubbles: true, cancelable: true };
+              canvas.dispatchEvent(new frame.contentWindow.KeyboardEvent('keydown', key));
+              canvas.dispatchEvent(new frame.contentWindow.KeyboardEvent('keyup', key));
+            };
           }
         }
         report('');
         break;
       case 'dirty':
-        dirty = data.dirty === true;
+        if (ready) dirty = data.dirty === true;
         break;
       case 'failed':
         clearTimeout(timeout);
@@ -253,6 +349,6 @@ export async function openCraft(path, editor) {
     }
   });
   frame.title = editor.name;
-  frame.src = '/craft/' + editor.id + '/index.html?host=parent';
+  loadFrame();
   frame.hidden = false;
 }

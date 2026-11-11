@@ -15,6 +15,7 @@ const HUB_HTML: &str = include_str!("hub.html");
 const HUB_JS: &str = include_str!("ui/hub.js");
 const REFERENCES_JS: &str = include_str!("ui/references.js");
 const CRAFT_JS: &str = include_str!("ui/craft-editor.js");
+const CRAFT_MERGE_JS: &str = include_str!("ui/craft-merge.bundle.js");
 const CHAT_JS: &str = include_str!("ui/chat.js");
 const CHAT_CSS: &str = include_str!("ui/chat.css");
 const STAGESHOW_CSS: &str = include_str!("ui/stageshow.css");
@@ -538,6 +539,14 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
                 req,
                 "ui/craft-editor.js",
                 CRAFT_JS,
+                "text/javascript; charset=utf-8",
+            );
+        }
+        (Method::Get, "/ui/craft-merge.bundle.js") => {
+            respond_asset(
+                req,
+                "ui/craft-merge.bundle.js",
+                CRAFT_MERGE_JS,
                 "text/javascript; charset=utf-8",
             );
         }

@@ -58,7 +58,13 @@ Desde **Mis archivos**, usa **Nuevo** o elige un editor en **Herramientas**. Tam
 | GridCraft | .xlsx |
 | PdfCraft | .pdf |
 
-Los editores se ejecutan en el navegador con WebAssembly. Abren los archivos de la bóveda y **Guardar** escribe allí los cambios. Un guardado que llega desde una versión antigua se rechaza y permite descargar una copia. **Guardar como** y las exportaciones crean archivos junto al original y rechazan nombres que ya existen. El límite de carga y guardado es de 32 MiB por archivo.
+Los editores se ejecutan en el navegador con WebAssembly. Abren los archivos de la bóveda y **Guardar** escribe allí los cambios. **Guardar como** y las exportaciones crean archivos junto al original y rechazan nombres que ya existen. El límite de carga y guardado es de 32 MiB por archivo.
+
+### Colaboración en WordCraft, DeckCraft y GridCraft
+
+Abre el mismo archivo desde **Mis archivos** en dos navegadores conectados a la misma instancia. El anfitrión guarda tras una pausa breve y consulta las revisiones de otros participantes. Cuando coinciden dos guardados, combina con Yjs el texto compatible de un DOCX, las formas y el texto de un PPTX, o las celdas de un XLSX. Las fórmulas se conservan en su celda. Los archivos originales siguen siendo el almacenamiento persistente y el servidor Rust comprueba la revisión antes de sustituirlos.
+
+Los editores instalados intercambian archivos completos con el anfitrión. Una revisión remota recarga el documento cuando el editor está en reposo, por lo que puede reiniciar la selección y el historial de deshacer. Si dos sesiones cambian la misma celda o una estructura incompatible, la segunda conserva sus cambios con **Descargar copia**. La colaboración usa guardados y revisiones HTTP. No incluye presencia, cursores remotos ni cambios por pulsación. PdfCraft y el editor de notas siguen su flujo habitual.
 
 Para instalar las cuatro compilaciones oficiales, ejecuta desde `app`:
 
@@ -78,7 +84,7 @@ La interfaz está preparada para trabajar sin proveedor. La copia va al portapap
 
 En una nota, escribe @, pulsa el botón Mencionar archivo o usa Ctrl+Alt+M. El buscador muestra archivos de la bóveda. Elige uno o usa Crear archivo para añadir un documento, una presentación, una hoja de cálculo o un PDF en la carpeta de la nota. La tarjeta abre el archivo original.
 
-En WordCraft, **Mis archivos** está en la esquina superior izquierda del editor. Super Cerebro comprueba cada 4 segundos si hay cambios y guarda el DOCX mientras el editor tiene el foco. También puedes pulsar **Guardar**. WordCraft desactiva su autoguardado nativo en la versión web.
+En WordCraft, **Mis archivos** está en la esquina superior izquierda del editor. También puedes pulsar **Guardar** para enviar los cambios sin esperar al autoguardado del anfitrión.
 
 ## Dos formas de trabajar, una sola bóveda
 

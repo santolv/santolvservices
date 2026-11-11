@@ -1,4 +1,5 @@
 import { openCraft } from './craft-editor.js';
+import { mountAccount } from './accounts.js';
 
 const createLabels = { docx: 'Documento de texto', pptx: 'Presentación', xlsx: 'Hoja de cálculo', pdf: 'PDF' };
 const $ = selector => document.querySelector(selector);
@@ -240,8 +241,16 @@ $('#create-form').onsubmit = async event => {
 
 request('/api/hub').then(config => {
   editors = config.editors;
+  mountAccount(config.account);
   const path = params.get('edit');
-  if (path) return openCraft(path, editorFor(path));
+  if (path) return openCraft(path, editorFor(path), config.account);
+  if (config.account && !config.account.owner) {
+    $('#new-menu').hidden = true;
+    $('.hub-tools').hidden = true;
+    $('.hub-nav a[href="/cerebro"]').hidden = true;
+    $('.hub-heading h1').textContent = 'Compartidos conmigo';
+    return refresh();
+  }
 
   for (const editor of editors) {
     const create = labelButton('', () => promptCreate(editor));

@@ -5,7 +5,7 @@
   "scripts": {
     "build": "esbuild src/ui/app.js --bundle --minify --target=es2020 --outfile=src/ui/bundle.js && npm run build:craft",
     "build:craft": "esbuild src/ui/craft-merge.js --bundle --format=esm --minify --target=es2020 --outfile=src/ui/craft-merge.bundle.js",
-    "check": "node --check src/ui/app.js && node --check src/ui/editor.js && node --check src/ui/markdown.js && node --check src/ui/notion.js && node --check src/ui/knowledge.js && node --check src/ui/hub.js && node --check src/ui/craft-editor.js && node --check src/ui/craft-merge.js && node --check src/ui/references.js && node --check src/ui/chat.js",
+    "check": "node --check src/ui/app.js && node --check src/ui/editor.js && node --check src/ui/markdown.js && node --check src/ui/notion.js && node --check src/ui/knowledge.js && node --check src/ui/hub.js && node --check src/ui/accounts.js && node --check src/ui/craft-editor.js && node --check src/ui/craft-merge.js && node --check src/ui/references.js && node --check src/ui/chat.js",
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {

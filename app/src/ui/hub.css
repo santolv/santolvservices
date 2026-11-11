@@ -209,7 +209,20 @@
 #craft-chat-open { position:absolute; bottom:40px; right:18px; z-index:2; box-shadow:var(--hub-shadow); }
 .craft-wordcraft .craft-feedback { bottom:92px; }
 .craft-feedback { position:absolute; right:12px; bottom:32px; z-index:1; display:flex; align-items:center; flex-wrap:wrap; gap:8px; max-width:calc(100% - 24px); padding:0 12px; border:1px solid var(--hub-line); border-radius:8px; background:var(--hub-control); }
-.craft-feedback:has(#craft-message:empty):has(#craft-recovery[hidden]) { display:none; }
+.craft-feedback:has(#craft-message:empty):has(#craft-recovery[hidden]):has(#craft-collaboration[hidden]) { display:none; }
+.account-page { display:grid; place-items:center; min-height:100dvh; }
+.account-card { position:static; margin:24px; }
+.account-card label { display:block; margin:12px 0; }
+.craft-collaboration[hidden], .hub-nav a[hidden], .hub-tools[hidden], .hub-new[hidden] { display:none; }
+.hub-account, .craft-collaboration { display:flex; align-items:center; gap:6px; min-width:0; }
+.hub-account { justify-content:flex-end; }
+#account-name { max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#craft-participants { max-width:210px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#share-users label { display:flex; align-items:center; gap:8px; padding:4px 0; }
+#share-users input { width:auto; margin:0; }
+#share-dialog fieldset { border:1px solid var(--hub-line); margin-bottom:12px; }
+#share-new-user { margin-bottom:12px; }
+#share-create-user label { display:block; margin:8px 0; }
 #craft-message { margin: 8px 0; color: var(--hub-muted); }
 #craft-message:empty { display: none; }
 @media (max-width: 700px) {

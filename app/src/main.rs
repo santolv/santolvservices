@@ -7,6 +7,7 @@ use tiny_http::{Header, Method, Response, Server};
 use urlencoding::decode;
 use walkdir::WalkDir;
 
+mod accounts;
 mod craft;
 mod server;
 
@@ -16,6 +17,8 @@ const HUB_JS: &str = include_str!("ui/hub.js");
 const REFERENCES_JS: &str = include_str!("ui/references.js");
 const CRAFT_JS: &str = include_str!("ui/craft-editor.js");
 const CRAFT_MERGE_JS: &str = include_str!("ui/craft-merge.bundle.js");
+const ACCOUNT_JS: &str = include_str!("ui/accounts.js");
+const LOGIN_HTML: &str = include_str!("login.html");
 const CHAT_JS: &str = include_str!("ui/chat.js");
 const CHAT_CSS: &str = include_str!("ui/chat.css");
 const STAGESHOW_CSS: &str = include_str!("ui/stageshow.css");
@@ -500,13 +503,54 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
     if method == Method::Get && path == "/healthz" {
         return server::json(req, serde_json::json!({"ok":true}));
     }
-    if !config.authorized(&req) {
+    let account = if let Some(accounts) = &config.accounts {
+        if !accounts.host(&req) {
+            return json_error(req, 403, "Host no permitido");
+        }
+        if matches!(
+            method,
+            Method::Post | Method::Put | Method::Delete | Method::Patch
+        ) && !accounts.origin(&req)
+        {
+            return json_error(req, 403, "Origen de solicitud no permitido");
+        }
+        match (&method, path) {
+            (&Method::Get, "/login") => {
+                let response = Response::from_string(LOGIN_HTML)
+                    .with_header(Header::from_bytes("Content-Type","text/html; charset=utf-8").unwrap())
+                    .with_header(Header::from_bytes("Cache-Control","no-store").unwrap())
+                    .with_header(Header::from_bytes("Content-Security-Policy","default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'").unwrap());
+                let _ = req.respond(response);
+                return;
+            }
+            (&Method::Post, "/api/session/login") => return accounts.login(req),
+            (&Method::Post, "/api/session/logout") => return accounts.logout(req),
+            _ => {}
+        }
+        let actor = accounts.actor(&req);
+        if actor.is_none() && !(method == Method::Get && path.starts_with("/ui/")) {
+            if method == Method::Get
+                && matches!(path, "/" | "/index.html" | "/cerebro" | "/cerebro/")
+            {
+                let next = format!("/login?next={}", urlencoding::encode(&url));
+                return accounts::redirect(req, &next);
+            }
+            return json_error(req, 401, "Inicia sesión");
+        }
+        actor
+    } else if !config.authorized(&req) {
         return server::unauthorized(req);
-    }
+    } else {
+        None
+    };
     let _guard = if matches!(method, Method::Post | Method::Put | Method::Delete)
         || matches!(
             path,
-            "/api/craft/file" | "/api/craft/context" | "/api/download" | "/api/files"
+            "/api/craft/file"
+                | "/api/craft/context"
+                | "/api/download"
+                | "/api/files"
+                | "/api/craft/share"
         ) {
         if !server::trusted_origin(&req) {
             return json_error(req, 403, "Origen de solicitud no permitido");
@@ -515,6 +559,45 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
     } else {
         None
     };
+    if let (Some(accounts), Some(actor)) = (&config.accounts, &account) {
+        if !actor.owner {
+            let office = matches!(
+                (&method, path),
+                (
+                    &Method::Get,
+                    "/api/craft/file" | "/api/craft/context" | "/api/download"
+                ) | (&Method::Put, "/api/craft/file")
+                    | (
+                        &Method::Post,
+                        "/api/craft/presence" | "/api/craft/participants"
+                    )
+            );
+            let shell = method == Method::Get
+                && (matches!(path, "/" | "/index.html" | "/api/hub" | "/api/files")
+                    || path.starts_with("/ui/")
+                    || ["wordcraft", "deckcraft", "gridcraft"]
+                        .iter()
+                        .any(|editor| path.starts_with(&format!("/craft/{editor}/"))));
+            if !shell && !(office && accounts.allows(actor, &query_param(query, "path"))) {
+                return json_error(req, 403, "Este archivo o acción no está compartido contigo");
+            }
+            if method == Method::Get && path == "/api/files" {
+                return server::json(req, serde_json::json!(accounts.files(actor)));
+            }
+        }
+        match (&method, path) {
+            (&Method::Post, "/api/accounts") => return accounts.create_user(req, actor),
+            (&Method::Get | &Method::Post, "/api/craft/share") => {
+                return accounts.share(req, actor, query)
+            }
+            (&Method::Post, "/api/craft/participants")
+                if accounts.allows(actor, &query_param(query, "path")) =>
+            {
+                return accounts.participants(req, actor, query)
+            }
+            _ => {}
+        }
+    }
 
     match (method, path) {
         (Method::Get, "/") | (Method::Get, "/index.html") => {
@@ -550,6 +633,14 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
                 "text/javascript; charset=utf-8",
             );
         }
+        (Method::Get, "/ui/accounts.js") => {
+            respond_asset(
+                req,
+                "ui/accounts.js",
+                ACCOUNT_JS,
+                "text/javascript; charset=utf-8",
+            );
+        }
         (Method::Get, "/ui/hub.css") => {
             respond_asset(req, "ui/hub.css", HUB_CSS, "text/css; charset=utf-8");
         }
@@ -560,12 +651,23 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
             respond_asset(req, "ui/chat.css", CHAT_CSS, "text/css; charset=utf-8");
         }
         (Method::Get, "/ui/stageshow.css") => {
-            respond_asset(req, "ui/stageshow.css", STAGESHOW_CSS, "text/css; charset=utf-8");
+            respond_asset(
+                req,
+                "ui/stageshow.css",
+                STAGESHOW_CSS,
+                "text/css; charset=utf-8",
+            );
         }
         (Method::Get, "/api/hub") => {
+            let mut editors = craft::editors(&config.craft_root);
+            let restricted = account.as_ref().is_some_and(|actor| !actor.owner);
+            if restricted {
+                editors.retain(|editor| editor["id"] != "pdfcraft");
+            }
             server::json(
                 req,
-                serde_json::json!({"editors":craft::editors(&config.craft_root),"tools":config.tools}),
+                serde_json::json!({"editors":editors,"tools":if restricted {&[][..]} else {&config.tools[..]},
+                    "account":account.as_ref().map(|actor|serde_json::json!({"name":actor.name,"owner":actor.owner}))}),
             );
         }
         (Method::Get, path) if path.starts_with("/craft/") => {
@@ -656,7 +758,8 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
         (Method::Get, "/api/files") => {
             let data = serde_json::to_string(&list_files()).unwrap();
             let resp = Response::from_string(data)
-                .with_header(Header::from_bytes("Content-Type", "application/json").unwrap());
+                .with_header(Header::from_bytes("Content-Type", "application/json").unwrap())
+                .with_header(Header::from_bytes("Cache-Control", "no-store").unwrap());
             let _ = req.respond(resp);
         }
         (Method::Get, "/api/file") => {
@@ -700,6 +803,13 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
                     return json_error(req, status, "Solicitud no válida o demasiado grande")
                 }
             };
+            if config
+                .accounts
+                .as_ref()
+                .is_some_and(|accounts| accounts.protects(&wr.path))
+            {
+                return json_error(req, 409, "Edita este archivo desde su editor ArtCraft");
+            }
             let Some(full) = safe_path(&wr.path) else {
                 return json_error(req, 400, "Ruta no válida");
             };
@@ -713,6 +823,13 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
         }
         (Method::Delete, "/api/file") => {
             let rel = query_param(query, "path");
+            if config
+                .accounts
+                .as_ref()
+                .is_some_and(|accounts| accounts.protects(&rel))
+            {
+                return json_error(req, 409, "Retira primero el acceso compartido");
+            }
             let Some(full) = safe_path(&rel) else {
                 return json_error(req, 400, "Ruta no válida");
             };
@@ -757,6 +874,13 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
                     return json_error(req, status, "Solicitud no válida o demasiado grande")
                 }
             };
+            if config
+                .accounts
+                .as_ref()
+                .is_some_and(|accounts| accounts.protects(&rr.from))
+            {
+                return json_error(req, 409, "Retira primero el acceso compartido");
+            }
             let (Some(from), Some(to)) = (safe_path(&rr.from), safe_path(&rr.to)) else {
                 return json_error(req, 400, "Ruta no válida");
             };
@@ -815,6 +939,13 @@ fn handle(mut req: tiny_http::Request, config: &server::Config, writes: &Mutex<(
         }
         (Method::Delete, "/api/folder") => {
             let rel = query_param(query, "path");
+            if config
+                .accounts
+                .as_ref()
+                .is_some_and(|accounts| accounts.protects(&rel))
+            {
+                return json_error(req, 409, "Retira primero el acceso compartido");
+            }
             let Some(full) = safe_path(&rel) else {
                 return json_error(req, 400, "Ruta no válida");
             };
@@ -983,6 +1114,20 @@ fn respond_html(req: tiny_http::Request, path: &str, bundled: &str) {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "user-add") {
+        let name = args.get(1).ok_or("Usa user-add NOMBRE")?;
+        let password = if args.get(2).is_some_and(|arg| arg == "--password-stdin") {
+            let mut value = String::new();
+            std::io::stdin().read_line(&mut value)?;
+            value.trim_end_matches(['\n', '\r']).to_owned()
+        } else {
+            rpassword::prompt_password("Contraseña: ")?
+        };
+        accounts::add_user(name, &password)?;
+        println!("Cuenta creada: {name}");
+        return Ok(());
+    }
     let config = server::Config::from_env()?;
     fs::create_dir_all(vault_root())?;
     let server = Server::http(config.address)?;

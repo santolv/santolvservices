@@ -62,9 +62,21 @@ Los editores se ejecutan en el navegador con WebAssembly. Abren los archivos de 
 
 ### Colaboración en WordCraft, DeckCraft y GridCraft
 
-Abre el mismo archivo desde **Mis archivos** en dos navegadores conectados a la misma instancia. El anfitrión guarda tras una pausa breve y consulta las revisiones de otros participantes. Cuando coinciden dos guardados, combina con Yjs el texto compatible de un DOCX, las formas y el texto de un PPTX, o las celdas de un XLSX. Las fórmulas se conservan en su celda. Los archivos originales siguen siendo el almacenamiento persistente y el servidor Rust comprueba la revisión antes de sustituirlos.
+Para trabajar con cuentas individuales, para el servidor y arráncalo desde `app` con un archivo de cuentas fuera de la bóveda. Usa un directorio privado existente.
 
-Los editores instalados intercambian archivos completos con el anfitrión. Una revisión remota recarga el documento cuando el editor está en reposo, por lo que puede reiniciar la selección y el historial de deshacer. Si dos sesiones cambian la misma celda o una estructura incompatible, la segunda conserva sus cambios con **Descargar copia**. La colaboración usa guardados y revisiones HTTP. No incluye presencia, cursores remotos ni cambios por pulsación. PdfCraft y el editor de notas siguen su flujo habitual.
+```powershell
+$env:SUPER_CEREBRO_USERS_FILE = 'C:/ruta/privada/usuarios.json'
+cargo run -- user-add propietario
+cargo run
+```
+
+Abre [Mis archivos](http://127.0.0.1:7878/) e inicia sesión como `propietario`. Abre un archivo de WordCraft, DeckCraft o GridCraft, pulsa **Compartir**, crea una cuenta de colaborador y marca su permiso de edición. Envía el enlace al archivo. El colaborador inicia sesión con su cuenta y también encuentra el documento en **Compartidos conmigo**. La lista junto a **Compartir** muestra quién tiene el archivo abierto. Desmarcar una cuenta retira su acceso en la siguiente petición.
+
+Cada persona abre el enlace desde un navegador o perfil independiente. El anfitrión guarda tras una pausa breve y consulta las revisiones de otros participantes. Cuando coinciden dos guardados, combina con Yjs el texto compatible de un DOCX, las formas y el texto de un PPTX, o las celdas de un XLSX. Las fórmulas se conservan en su celda. El servidor Rust comprueba la revisión antes de guardar el archivo.
+
+Para acceder desde otros equipos, publica el servicio detrás de un proxy HTTPS, conserva la cabecera `Host` y configura `SUPER_CEREBRO_ORIGIN` con el origen exacto, por ejemplo `https://oficina.example.com`. El modo de cuentas escucha en loopback y usa su propio inicio de sesión. Respalda el archivo de cuentas junto con la bóveda y retira los permisos antes de reemplazar o mover archivos directamente en el disco.
+
+Los editores instalados intercambian archivos completos con el anfitrión. Una revisión remota recarga el documento cuando el editor está en reposo, por lo que puede reiniciar la selección y el historial de deshacer. Si dos sesiones cambian la misma celda o una estructura incompatible, la segunda conserva sus cambios con **Descargar copia**. La presencia identifica a las personas conectadas. El contenido se actualiza al autoguardar y los cursores permanecen en el editor local.
 
 Para instalar las cuatro compilaciones oficiales, ejecuta desde `app`:
 

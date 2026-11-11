@@ -30,9 +30,12 @@
       <svg class="hub-icon" aria-hidden="true"><use href="#icon-search"/></svg>
       <input id="file-search" type="search" aria-label="Buscar archivos" placeholder="Buscar en Mis archivos">
     </label>
-    <button id="theme-toggle" class="hub-icon-button" type="button" aria-label="Tema claro" title="Tema claro">
-      <svg class="hub-icon" aria-hidden="true"><use href="#icon-sun"/></svg>
-    </button>
+    <div class="hub-account">
+      <span id="account-name" hidden></span><button id="account-logout" class="hub-button" type="button" hidden>Cerrar sesión</button>
+      <button id="theme-toggle" class="hub-icon-button" type="button" aria-label="Tema claro" title="Tema claro">
+        <svg class="hub-icon" aria-hidden="true"><use href="#icon-sun"/></svg>
+      </button>
+    </div>
   </header>
   <div class="hub-layout">
     <aside class="hub-sidebar" aria-label="Espacios">
@@ -96,6 +99,10 @@
   <section id="craft-view" class="craft-view" hidden aria-label="Editor de documentos">
     <div class="craft-bar"><a href="/" title="Volver a Mis archivos"><span aria-hidden="true">‹</span> Mis archivos</a><strong id="craft-title"></strong></div>
     <div class="craft-feedback">
+      <div id="craft-collaboration" class="craft-collaboration" hidden>
+        <span id="craft-participants" aria-label="Personas en el archivo"></span>
+        <button id="craft-share" class="hub-button" type="button" hidden>Compartir</button>
+      </div>
       <p id="craft-message" role="status" aria-live="polite"></p>
       <button id="craft-recovery" type="button" class="hub-button" hidden>Descargar copia</button>
     </div>
@@ -105,5 +112,24 @@
     </div>
     <button id="craft-chat-open" class="hub-button" type="button" aria-controls="craft-chat" aria-expanded="false" hidden>Chat con IA</button>
   </section>
+  <dialog id="share-dialog" class="hub-dialog">
+    <h2>Compartir archivo</h2>
+    <fieldset><legend>Personas con permiso de edición</legend><div id="share-users"></div></fieldset>
+    <details id="share-new-user">
+      <summary>Crear cuenta de colaborador</summary>
+      <form id="share-create-user" method="post" action="/api/accounts">
+        <label>Cuenta nueva<input name="user" required maxlength="40" autocomplete="off"></label>
+        <label>Contraseña de la cuenta<input name="password" type="password" required minlength="12" maxlength="256" autocomplete="new-password"></label>
+        <button class="hub-button" type="submit">Crear cuenta</button>
+      </form>
+    </details>
+    <label for="share-link">Enlace al archivo</label>
+    <input id="share-link" readonly>
+    <p id="share-error" role="status"></p>
+    <div class="hub-actions">
+      <button id="share-close" class="hub-button" type="button">Cerrar</button>
+      <button id="share-copy" class="hub-button primary" type="button">Copiar enlace</button>
+    </div>
+  </dialog>
 </body>
 </html>

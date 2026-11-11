@@ -1,4 +1,5 @@
 import { mountChat } from './chat.js';
+import { mountCollaboration } from './accounts.js';
 
 const AUTOSAVE_MS = 1400;
 const SYNC_MS = 1200;
@@ -11,7 +12,7 @@ async function requireOk(response) {
   throw new Error(body.error || 'El servidor devolvió un error (' + response.status + ').');
 }
 
-export async function openCraft(path, editor) {
+export async function openCraft(path, editor, account) {
   const view = document.querySelector('#craft-view');
   const frame = document.querySelector('#craft-editor');
   const title = document.querySelector('#craft-title');
@@ -73,10 +74,11 @@ export async function openCraft(path, editor) {
     window.addEventListener('pagehide',()=>presence(currentName,true));
     window.addEventListener('pageshow',event=>{if(event.persisted)presence();});
     const launcher = view.querySelector('#craft-chat-open');
+    const storageKey = key => account ? 'sc-account:' + account.name + ':' + key : key;
     const chat = mountChat(view.querySelector('#craft-chat'), {
       storage: {
-        get(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
-        set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; } },
+        get(key, fallback) { try { return JSON.parse(localStorage.getItem(storageKey(key))) ?? fallback; } catch { return fallback; } },
+        set(key, value) { try { localStorage.setItem(storageKey(key), JSON.stringify(value)); return true; } catch { return false; } },
       },
       icon: () => '<span aria-hidden="true">×</span>',
       documentOnly: true,
@@ -246,6 +248,7 @@ export async function openCraft(path, editor) {
     report(error.message, true);
     return;
   }
+  if (collaborative && account) mountCollaboration({ account, path: () => localPath(currentName), report });
 
   let timeout;
   function loadFrame() {

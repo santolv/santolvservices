@@ -15,6 +15,7 @@ pub struct Config {
     authorization: Option<String>,
     pub tools: Vec<ToolLink>,
     pub craft_root: PathBuf,
+    pub accounts: Option<crate::accounts::Accounts>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -33,6 +34,20 @@ impl Config {
             .unwrap_or_else(|| "7878".into())
             .parse()
             .map_err(|_| "SUPER_CEREBRO_PORT no es válido")?;
+        let accounts = if env("SUPER_CEREBRO_USERS_FILE").is_some() {
+            if !host.is_loopback()
+                || env("SUPER_CEREBRO_USER").is_some()
+                || env("SUPER_CEREBRO_PASSWORD").is_some()
+            {
+                return Err(
+                    "El modo de cuentas escucha en loopback y usa su propio inicio de sesión"
+                        .into(),
+                );
+            }
+            Some(crate::accounts::Accounts::open(port)?)
+        } else {
+            None
+        };
         let authorization = match (env("SUPER_CEREBRO_USER"), env("SUPER_CEREBRO_PASSWORD")) {
             (Some(user), Some(password)) if !user.contains(':') => {
                 Some(format!("Basic {}", STANDARD.encode(format!("{user}:{password}"))))
@@ -51,6 +66,7 @@ impl Config {
         Ok(Self {
             address: SocketAddr::new(host, port),
             authorization,
+            accounts,
             tools,
             craft_root: std::env::var_os("SUPER_CEREBRO_CRAFT_ROOT")
                 .map(PathBuf::from)

@@ -86,8 +86,8 @@
 .n-chart-track i.negative { background:var(--text-muted); }
 
 .n-block-selected { outline:2px solid var(--accent); outline-offset:3px; border-radius:4px; background:var(--accent-soft); }
-.sc-calendar { width:100%; max-width:1720px; margin:auto; padding:clamp(16px,2.5vw,36px); }
-.sc-calendar-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px; }
+.sc-calendar { width:100%; max-width:1720px; margin:auto; padding:clamp(16px,2.5vw,36px); padding-top:8px; }
+.sc-calendar-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
 .sc-calendar-head h1 { margin:0; font-size:clamp(28px,4vw,44px); letter-spacing:-.04em; }
 .sc-calendar-head p { margin:4px 0 0; color:var(--text-muted); }
 .sc-calendar :is(.primary-button,.secondary-button) { display:inline-flex; align-items:center; gap:6px; flex:none; }
@@ -113,14 +113,14 @@
 .sc-calendar-agenda .secondary-button { margin-top:10px; }
 @media(max-width:920px) { .sc-calendar-layout { grid-template-columns:minmax(0,1fr); } }
 @media(max-width:550px) {
-  .sc-calendar { padding:14px; }
+  .sc-calendar { padding:8px 14px 14px; }
   .sc-calendar-grid { padding:7px; }
   .sc-calendar-grid .n-calendar-day { min-height:65px; padding:4px; font-size:11px; }
   .sc-calendar-grid .n-calendar-day > span { font-size:8px; padding:1px 2px; }
 }
 .app-body .sidebar-left { background:var(--bg-secondary); }
 .app-body .sidebar-left .sidebar-tabs { padding-inline:9px; }
-.pane:has(.sc-home) > .tab-strip,.pane:has(.sc-home) > .note-header { display:none; }
+.pane:is([data-view=home], [data-view=calendar]) > .note-header { display:none; }
 .sc-home { width:min(100% - 44px,900px); margin:0 auto; padding:clamp(30px,7vh,72px) 0 52px; }
 .sc-home > h1 { margin:0 0 35px; font-size:clamp(26px,4vw,32px); font-weight:650; text-align:center; letter-spacing:-.035em; }
 .sc-home > section + section { margin-top:34px; }
@@ -143,8 +143,6 @@
 .sc-home-pin select { max-width:100%; padding:5px 8px; background:var(--bg); border:1px solid var(--border); border-radius:5px; color:var(--text-normal); }
 @media(max-width:700px) { .sc-home { width:calc(100% - 26px); } .app-body .sidebar-left { left:0; } }
 
-.sc-home-tabs { display:none; }
-.app-titlebar:has(+ .sc-at-home) .sc-home-tabs { display:inline-flex; }
 
 .graph-controls [aria-pressed=true] { color:var(--accent-text); background:var(--accent-soft); }
 .app-body:has(.ai-chat:not([hidden])) > :is(#rightSidebar,#resizeRight) { display:none; }

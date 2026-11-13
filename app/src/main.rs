@@ -559,6 +559,19 @@ fn handle(
             writes.clone(),
         );
     }
+    if path == "/api/ai/settings" && matches!(method, Method::Get | Method::Put | Method::Delete) {
+        if !server::trusted_origin(&req)
+            || !config.allows_ai_settings(&req)
+            || account.as_ref().is_some_and(|actor| !actor.owner)
+        {
+            return json_error(
+                req,
+                403,
+                "Solo el propietario puede cambiar los ajustes de IA",
+            );
+        }
+        return config.ai.edit(req);
+    }
     if matches!(
         (&method, path),
         (&Method::Get, "/api/ai/status") | (&Method::Post, "/api/ai/chat")
@@ -575,9 +588,9 @@ fn handle(
             }
         }
         return if method == Method::Get {
-            ai::Chat::status(config.ai.as_deref(), req)
+            config.ai.status(req)
         } else {
-            ai::Chat::send(config.ai.as_ref(), req)
+            config.ai.send(req)
         };
     }
     let _guard = if matches!(method, Method::Post | Method::Put | Method::Delete)

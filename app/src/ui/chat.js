@@ -95,7 +95,7 @@ export function mountChat(panel, { storage, getDocument, icon, documentOnly = fa
       const config = await response.json();
       if (current !== opening) return;
       enabled = config.enabled;
-      model.textContent = enabled ? config.model : 'Falta la clave en el servidor';
+      model.textContent = enabled ? config.model : 'Configura la IA en Mis archivos → Ajustes';
     } catch {
       if (current !== opening) return;
       model.textContent = 'Proveedor no disponible';

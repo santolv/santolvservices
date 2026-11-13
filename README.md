@@ -99,14 +99,7 @@ El script instala la compilación en `craft-apps/wordcraft/`. Copia esa carpeta 
 
 Abre **Chat con IA** en la barra lateral o usa **Preguntar sobre este archivo** en una nota, colección o lienzo. **Enviar** manda la pregunta, los últimos turnos y el texto adjunto al proveedor. **Copiar consulta** prepara la pregunta y el texto para pegarlos en otro sitio.
 
-El servidor usa la API compatible con OpenAI de OpenCode Console, con `deepseek-v4.1-flash` como modelo predeterminado. Para activarla en PowerShell desde `app`:
-
-```powershell
-$env:OPENCODE_API_KEY = Read-Host 'Clave de OpenCode' -MaskInput
-cargo run
-```
-
-Para usar otro proveedor compatible con Chat Completions, configura `SUPER_CEREBRO_AI_BASE_URL` con la URL base que termina en `/v1`, `SUPER_CEREBRO_AI_KEY` con su clave y `SUPER_CEREBRO_AI_MODEL` con el identificador del modelo. La clave queda en el servidor. OpenCode Console reserva los modelos gratuitos para su propio cliente. [Documentación de la API de OpenCode](https://opencode.ai/docs/console/api/inference)
+En **Mis archivos → Ajustes**, elige OpenCode, OpenAI o un proveedor compatible con Chat Completions. Introduce el identificador del modelo y la clave API. Para un proveedor compatible, indica también su URL base. OpenCode propone `deepseek-v4.1-flash`. Los cambios se aplican al guardar. La clave queda en `.supercerebro-ai.json` dentro de la bóveda del servidor. Trata ese archivo y sus copias como credenciales. En modo de cuentas, solo el propietario puede cambiar los ajustes. [Documentación de la API de OpenCode](https://opencode.ai/docs/console/api/inference)
 
 La interfaz está preparada para trabajar sin proveedor. La copia va al portapapeles cuando la pides. Las consultas se guardan localmente y no generan respuestas.
 

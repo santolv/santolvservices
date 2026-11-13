@@ -22,6 +22,85 @@ function message(text, error = false) {
   $('#message').toggleAttribute('data-error', error);
 }
 
+const settings = $('#ai-settings');
+const settingsForm = $('#ai-settings-form');
+const settingsFields = settingsForm.elements;
+const settingsStatus = $('#ai-settings-status');
+const removeKey = $('#remove-ai-key');
+const saveSettings = settingsForm.querySelector('[type=submit]');
+const providers = {
+  opencode: ['https://opencode.ai/inference/openai/v1', 'deepseek-v4.1-flash'],
+  openai: ['https://api.openai.com/v1', ''],
+  compatible: ['', ''],
+};
+const settingsUrl = '/api/ai/settings';
+let configured;
+
+function showSettings(config) {
+  configured = config;
+  settingsFields.provider.value = config.provider;
+  settingsFields.base_url.value = config.base_url;
+  settingsFields.model.value = config.model;
+  settingsFields.key.value = '';
+  updateKeyField();
+  removeKey.hidden = !config.has_key;
+}
+
+function updateKeyField() {
+  settingsFields.base_url.readOnly = settingsFields.provider.value !== 'compatible';
+  const sameConnection = configured?.has_key && settingsFields.provider.value === configured.provider
+    && settingsFields.base_url.value.trim().replace(/\/+$/, '') === configured.base_url;
+  settingsFields.key.required = !sameConnection;
+  settingsFields.key.placeholder = sameConnection ? 'Clave guardada' : '';
+}
+
+async function editSettings(work, success) {
+  const controls = [saveSettings, removeKey];
+  controls.forEach(control => { control.disabled = true; });
+  settingsStatus.textContent = '';
+  delete settingsStatus.dataset.error;
+  try {
+    await work();
+    settingsStatus.textContent = success;
+  } catch (error) {
+    settingsStatus.dataset.error = '';
+    settingsStatus.textContent = error.message;
+  } finally {
+    saveSettings.disabled = !configured;
+    removeKey.disabled = false;
+  }
+}
+
+$('#hub-settings').onclick = () => {
+  configured = null;
+  settingsForm.reset();
+  removeKey.hidden = true;
+  settings.showModal();
+  editSettings(async () => showSettings(await request(settingsUrl)), '');
+};
+$('#close-settings').onclick = () => settings.close();
+settings.addEventListener('close', () => { settingsFields.key.value = ''; });
+settingsFields.provider.onchange = () => {
+  const provider = settingsFields.provider.value;
+  [settingsFields.base_url.value, settingsFields.model.value] = configured?.provider === provider
+    ? [configured.base_url, configured.model] : providers[provider];
+  settingsFields.key.value = '';
+  updateKeyField();
+};
+settingsFields.base_url.oninput = updateKeyField;
+settingsForm.onsubmit = event => {
+  event.preventDefault();
+  const body = JSON.stringify(Object.fromEntries(new FormData(settingsForm)));
+  editSettings(async () => {
+    await request(settingsUrl, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
+    showSettings(await request(settingsUrl));
+  }, 'Ajustes guardados.');
+};
+removeKey.onclick = () => editSettings(async () => {
+  await request(settingsUrl, { method: 'DELETE' });
+  showSettings(await request(settingsUrl));
+}, 'Clave retirada. El chat está desactivado.');
+
 function preferences() {
   try { return JSON.parse(localStorage.getItem('sc-preferences')) || {}; }
   catch { return {}; }
@@ -251,6 +330,7 @@ request('/api/hub').then(config => {
     $('.hub-heading h1').textContent = 'Compartidos conmigo';
     return refresh();
   }
+  $('#hub-settings').hidden = false;
 
   for (const editor of editors) {
     const create = labelButton('', () => promptCreate(editor));

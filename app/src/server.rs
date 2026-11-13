@@ -11,7 +11,7 @@ use url::Url;
 pub const MAX_FILE: u64 = 32 * 1024 * 1024;
 
 pub struct Config {
-    pub ai: Option<std::sync::Arc<crate::ai::Chat>>,
+    pub ai: std::sync::Arc<crate::ai::Settings>,
     pub address: SocketAddr,
     authorization: Option<String>,
     pub tools: Vec<ToolLink>,
@@ -65,7 +65,7 @@ impl Config {
             }
         }
         Ok(Self {
-            ai: crate::ai::Chat::from_env()?,
+            ai: crate::ai::Settings::load(crate::vault_root().join(".supercerebro-ai.json"))?,
             address: SocketAddr::new(host, port),
             authorization,
             accounts,
@@ -81,6 +81,19 @@ impl Config {
             header(req, "Authorization")
                 .is_some_and(|value| bool::from(value.as_bytes().ct_eq(expected.as_bytes())))
         })
+    }
+
+    pub fn allows_ai_settings(&self, req: &Request) -> bool {
+        self.accounts.is_some()
+            || self.authorization.is_some()
+            || header(req, "Host")
+                .and_then(|host| http_url(&format!("http://{host}")))
+                .is_some_and(|url| match url.host() {
+                    Some(url::Host::Domain("localhost")) => true,
+                    Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+                    Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+                    _ => false,
+                })
     }
 }
 

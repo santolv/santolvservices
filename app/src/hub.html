@@ -23,6 +23,7 @@
     <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M4 16v4h16v-4"/></symbol>
     <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 4v12m-5-5 5 5 5-5M4 16v4h16v-4"/></symbol>
     <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="8" cy="7" r="2" fill="var(--hub-shell)"/><circle cx="16" cy="12" r="2" fill="var(--hub-shell)"/><circle cx="10" cy="17" r="2" fill="var(--hub-shell)"/></symbol>
   </svg>
   <header class="hub-bar">
     <a class="hub-brand" href="/"><svg class="hub-icon hub-mark" aria-hidden="true"><use href="#icon-vault"/></svg>Super Cerebro</a>
@@ -32,6 +33,7 @@
     </label>
     <div class="hub-account">
       <span id="account-name" hidden></span><button id="account-logout" class="hub-button" type="button" hidden>Cerrar sesión</button>
+      <button id="hub-settings" class="hub-icon-button" type="button" aria-label="Ajustes" title="Ajustes" hidden><svg class="hub-icon" aria-hidden="true"><use href="#icon-settings"/></svg></button>
       <button id="theme-toggle" class="hub-icon-button" type="button" aria-label="Tema claro" title="Tema claro">
         <svg class="hub-icon" aria-hidden="true"><use href="#icon-sun"/></svg>
       </button>
@@ -93,6 +95,29 @@
       <div class="hub-actions">
         <button id="cancel-create" class="hub-button" type="button">Cancelar</button>
         <button class="hub-button primary" type="submit">Crear</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="ai-settings" class="hub-dialog hub-settings-dialog" aria-labelledby="ai-settings-title">
+    <form id="ai-settings-form">
+      <header class="hub-settings-header">
+        <div><h2 id="ai-settings-title">Ajustes</h2><p>Proveedor de IA</p></div>
+        <button class="hub-icon-button" id="close-settings" type="button" aria-label="Cerrar ajustes">×</button>
+      </header>
+      <div class="hub-settings-fields">
+        <div><label for="ai-provider">Proveedor</label><select id="ai-provider" name="provider">
+          <option value="opencode">OpenCode</option>
+          <option value="openai">OpenAI</option>
+          <option value="compatible">Compatible con OpenAI</option>
+        </select></div>
+        <div><label for="ai-base-url">URL base</label><input id="ai-base-url" name="base_url" type="url" maxlength="2048" required placeholder="https://servidor.example/v1"></div>
+        <div><label for="ai-model">Modelo</label><input id="ai-model" name="model" maxlength="128" required spellcheck="false" autocomplete="off"></div>
+        <div><label for="ai-key">Clave API</label><input id="ai-key" name="key" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false"></div>
+      </div>
+      <p id="ai-settings-status" role="status"></p>
+      <div class="hub-actions">
+        <button id="remove-ai-key" class="hub-button" type="button" hidden>Quitar clave</button>
+        <button class="hub-button primary" type="submit">Guardar ajustes</button>
       </div>
     </form>
   </dialog>

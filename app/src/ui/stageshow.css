@@ -89,9 +89,6 @@ body { background: var(--ss-chrome); font-family: var(--ss-font); }
 .primary-button:hover { filter: brightness(1.12); }
 kbd { background: var(--ss-chrome); border-color: var(--ss-line-control); border-radius: 4px; color: var(--ss-text); }
 
-.app-titlebar { height: 42px; padding-inline: 14px 10px; border-bottom: 0; font-size: 12px; }
-.app-mark { font-size: 13px; font-weight: 650; letter-spacing: -.015em; }
-.app-mark svg { color: var(--ss-text-strong); }
 .status-bar { height: 27px; padding-inline: 14px; border: 0; background: var(--ss-chrome); font-size: 11px; }
 .workspace {
   margin-right: 8px;
@@ -102,13 +99,15 @@ kbd { background: var(--ss-chrome); border-color: var(--ss-line-control); border
 .app-body:has(#leftSidebar.hidden) .workspace { margin-left: 8px; }
 .resize-handle { background: transparent; }
 .sidebar-right { border: 0; }
-.tab-strip {
+.workspace-bar {
+  display: flex;
+  flex: none;
   height: 41px;
-  align-items: center;
-  padding: 0 8px;
   border-bottom: 1px solid var(--ss-line);
   background: var(--ss-chrome);
 }
+.workspace-bar .tab-strip { height: 100%; flex: 1; min-width: 0; align-items: center; padding-inline: 8px; border: 0; background: none; }
+.workspace-tools { display: flex; flex: none; align-items: center; gap: 2px; padding-inline: 4px 8px; }
 .workspace-tab { height: 28px; border-radius: var(--ss-radius-sm); }
 .workspace-tab:not(.active)::after { display: none; }
 .workspace-tab.active { background: var(--ss-active); box-shadow: none; font-weight: 600; }
@@ -218,12 +217,32 @@ kbd { background: var(--ss-chrome); border-color: var(--ss-line-control); border
 .hub-table td { height: 42px; }
 .hub-action { width: 30px; height: 30px; }
 .hub-button.primary { background: var(--accent-solid); color: var(--accent-ink); }
+.hub-bar { min-height: 58px; padding-inline: 18px; }
+.hub-search { background: var(--ss-chrome); }
+.hub-account .hub-icon-button { width: 36px; height: 36px; border-radius: 9px; }
+.hub-account .hub-icon { width: 17px; height: 17px; }
+.hub-main { border-radius: 14px; }
+.hub-table th { font-size: 12px; }
+.hub-table tr:last-child td { border-bottom: 0; }
+.hub-settings-dialog { width: min(550px, calc(100vw - 24px)); padding: 22px; border: 1px solid var(--ss-line-control); border-radius: 16px; }
+.hub-settings-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+.hub-settings-header h2 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -.025em; }
+.hub-settings-header p { margin: 3px 0 0; color: var(--hub-muted); }
+.hub-settings-header button { font-size: 22px; }
+.hub-settings-fields { overflow: hidden; background: var(--ss-surface); border: 1px solid var(--ss-line); border-radius: 11px; }
+.hub-settings-fields > div { display: grid; grid-template-columns: minmax(74px, 1fr) minmax(0, 3fr); gap: 12px; align-items: center; min-height: 52px; padding: 8px 12px; }
+.hub-settings-fields > div + div { border-top: 1px solid var(--ss-line); }
+.hub-settings-fields :is(input, select) { width: 100%; min-width: 0; margin: 0; min-height: 34px; padding: 5px 8px; border: 1px solid var(--ss-line-control); border-radius: 7px; background: var(--ss-chrome); }
+.hub-settings-fields input[readonly] { color: var(--hub-muted); }
+.hub-settings-dialog .hub-actions { margin-top: 16px; }
+#ai-settings-status { margin: 10px 0 0; color: var(--hub-muted); }
+#ai-settings-status:empty { display: none; }
+#ai-settings-status[data-error] { color: var(--hub-error); }
 .craft-feedback { border-radius: var(--ss-radius-md); }
 #craft-chat-open { box-shadow: 0 0 0 1px var(--ss-line-control); background: var(--ss-raised); }
 
 @media (max-width: 760px) {
-  .app-titlebar { height: 38px; }
-  .sidebar { top: 38px; bottom: 27px; }
+  .sidebar { top: 41px; bottom: 27px; }
   .workspace,.app-body:has(#leftSidebar.hidden) .workspace { margin-inline: 0; border-inline: 0; border-radius: 0; }
   .sc-home { width: calc(100% - 28px); }
 }
@@ -234,4 +253,12 @@ kbd { background: var(--ss-chrome); border-color: var(--ss-line-control); border
   .hub-search input { font-size: 16px; }
   .hub-layout { grid-template-columns: minmax(0,1fr); }
   .hub-main { padding: 14px; }
+  .hub-account .hub-icon-button { width: 44px; height: 44px; }
+  .hub-settings-fields :is(input, select) { min-height: 44px; font-size: 16px; }
+}
+@media (max-width: 430px) {
+  .hub-settings-dialog { padding: 15px; }
+  .hub-settings-fields > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .hub-account #account-name { display: none; }
+  .hub-bar:has(#account-logout:not([hidden])) .hub-brand { font-size: 12px; gap: 5px; }
 }

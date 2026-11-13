@@ -1,8 +1,18 @@
 import { openCraft } from './craft-editor.js';
 import { mountAccount } from './accounts.js';
+import { mountChat } from './chat.js';
 
 const createLabels = { docx: 'Documento de texto', pptx: 'Presentación', xlsx: 'Hoja de cálculo', pdf: 'PDF' };
 const $ = selector => document.querySelector(selector);
+const chatDialog = $('#hub-chat-dialog');
+const chats = mountChat($('#hub-chat'), {
+  icon: () => '×',
+  onVisibility: visible => { if (!visible) chatDialog.close(); },
+});
+$('#hub-chats').onclick = () => {
+  chatDialog.showModal();
+  chats.browse();
+};
 const params = new URLSearchParams(location.search);
 const textFile = /\.(md|markdown|txt|canvas|base)$/i;
 let folder = params.get('folder') || '';

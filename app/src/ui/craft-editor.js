@@ -82,14 +82,18 @@ export async function openCraft(path, editor, account) {
     window.addEventListener('pagehide',()=>presence(currentName,true));
     window.addEventListener('pageshow',event=>{if(event.persisted)presence();});
     const launcher = view.querySelector('#craft-chat-open');
-    const storageKey = key => account ? 'sc-account:' + account.name + ':' + key : key;
     const chat = mountChat(view.querySelector('#craft-chat'), {
-      storage: {
-        get(key, fallback) { try { return JSON.parse(localStorage.getItem(storageKey(key))) ?? fallback; } catch { return fallback; } },
-        set(key, value) { try { localStorage.setItem(storageKey(key), JSON.stringify(value)); return true; } catch { return false; } },
-      },
       icon: () => '<span aria-hidden="true">×</span>',
-      documentOnly: true,
+      async beforeSend(file) {
+        const deadline = Date.now() + 8000;
+        while ((dirty || pending || flushing) && !failed && Date.now() < deadline) {
+          requestSave?.();
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        if (file !== localPath(currentName) || failed || dirty || pending || flushing) {
+          throw new Error('Guarda el documento antes de enviar la consulta.');
+        }
+      },
       onVisibility(open) {
         launcher.setAttribute('aria-expanded', String(open));
         launcher.hidden = open;

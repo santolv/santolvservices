@@ -17,6 +17,15 @@
 .ai-chat-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
 .ai-chat-composer p { margin:0; }
 .ai-chat-composer p:empty { display:none; }
+.ai-chat-status { margin:0; padding:8px 16px; color:var(--text-muted); }
+.ai-chat-status:empty { display:none; }
+.ai-chat-index { flex:1; overflow:auto; min-height:0; padding:8px; }
+.ai-chat-index button { display:block; width:100%; text-align:left; padding:10px 12px; border-radius:6px; overflow-wrap:anywhere; }
+.ai-chat-thread details { margin-top:8px; border-top:1px solid var(--border); padding-top:6px; }
+.ai-chat-thread summary { cursor:pointer; color:var(--accent-text); }
+.ai-chat-thread :is(del,ins) { display:block; margin-top:4px; }
+#hub-chat-dialog { width:min(600px,calc(100% - 24px)); padding:0; overflow:hidden; }
+#hub-chat-dialog .ai-chat { position:static; width:100%; height:min(640px,80dvh); border:0; }
 @media(max-width:760px) {
   .ai-chat { position:absolute; inset:0 0 0 auto; z-index:22; width:min(100%,400px); box-shadow:var(--shadow); }
 }

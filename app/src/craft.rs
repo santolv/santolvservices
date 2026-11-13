@@ -428,7 +428,7 @@ pub fn context(req: Request, path: &str) {
     }
 }
 
-fn read_docx_text(bytes: &[u8]) -> Result<(String, bool), (u16, &'static str)> {
+pub(crate) fn read_docx_text(bytes: &[u8]) -> Result<(String, bool), (u16, &'static str)> {
     read_docx_text_with_limit(bytes, Some(160_000))
 }
 

@@ -27,7 +27,7 @@ app.innerHTML = `<div class="app-body"><aside class="sidebar sidebar-left" id="l
     <button class="sc-side-link" data-action="home">${icon('LayoutDashboard',17)} Inicio</button>
     <button class="sc-side-link" data-action="calendar">${icon('CalendarDays',17)} Calendario</button>
     <button class="sc-side-link" data-action="daily">${icon('CalendarDays',17)} Diario</button>
-    <button class="sc-side-link" data-action="chat" aria-controls="aiChat">${icon('MessageSquare',17)} Chat con IA</button>
+    <button class="sc-side-link" data-action="chat" aria-controls="aiChat">${icon('MessageSquare',17)} Chats con IA</button>
     <button class="sc-side-link" data-action="graph">${icon('Network',17)} Grafo</button>
     <a class="sc-side-link" href="/">${icon('Files',17)} Mis archivos</a>
   </nav>
@@ -43,7 +43,13 @@ app.innerHTML = `<div class="app-body"><aside class="sidebar sidebar-left" id="l
 <div class="resize-handle" id="resizeRight" role="separator" tabindex="0" aria-label="Ancho del panel derecho" aria-orientation="vertical"></div><aside class="sidebar sidebar-right" id="rightSidebar" aria-label="Panel derecho"><div class="sidebar-tabs"><div role="tablist" aria-label="Información de la nota">${button('List', 'Esquema', 'right-outline', 'selected')}${button('Links', 'Enlaces entrantes', 'right-backlinks')}${button('ArrowUpRight', 'Enlaces salientes', 'right-outgoing')}${button('Tags', 'Etiquetas', 'right-tags')}${button('SlidersHorizontal', 'Propiedades', 'right-properties')}</div></div><div id="rightContent" class="right-content"></div></aside><aside id="aiChat" class="ai-chat" aria-label="Chat con IA" hidden></aside></div>
 <footer class="status-bar"><span id="saveStatus" role="status">Bóveda local</span><span class="status-spacer"></span><span id="fileCount"></span><span id="wordCount"></span><button id="modeStatus" data-action="cycle-mode"></button></footer><div id="overlays"></div><div id="toast" role="status"></div><input id="importFiles" type="file" accept=".md,.markdown,.txt,.canvas,.base" multiple hidden>`;
 
-const chat = mountChat($('#aiChat'), { storage: safeStorage, icon });
+const chat = mountChat($('#aiChat'), {
+  icon,
+  beforeSend: path => {
+    const doc = state.documents.get(path);
+    if (doc) return saveDocument(doc);
+  },
+});
 function chatWithFile() { const doc = activeDoc(); if (doc) chat.open(doc.path); }
 
 function notify(message, error = false) { const el = $('#toast'); el.textContent = message; el.className = error ? 'show error' : 'show'; clearTimeout(el.timer); el.timer = setTimeout(() => el.className = '', 3500); }
@@ -704,7 +710,7 @@ function mountCanvas(container, tab, inline = false) {
 }
 
 const actions = {
-  chat: () => chat.open(), 'chat-with-file': chatWithFile,
+  chat: () => chat.browse(), 'chat-with-file': chatWithFile,
   home: openHome, calendar: () => openCalendar(), 'new-page': () => createNote(), 'new-database': () => notion.createDatabase(), templates: () => notion.templates(),
   'toggle-left': () => toggleSidebar('left'), 'toggle-right': () => toggleSidebar('right'),
   'left-files': () => showLeft('files'), 'left-pages': () => showLeft('pages'), 'left-search': () => showLeft('search'), 'left-bookmarks': () => showLeft('bookmarks'), search: () => showLeft('search'),

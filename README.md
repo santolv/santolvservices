@@ -23,7 +23,7 @@ El grafo abre en 3D. Arrastra el fondo o usa las flechas con el grafo enfocado p
 
 En un bloque vacío, escribe `/calendario` para insertar un calendario con eventos, `/gráfico` para editar un gráfico de barras por pares como `Enero: 12`, o `/lienzo` para crear o incrustar un canvas editable.
 
-En WordCraft, **Chat con IA** abre un panel junto al documento. La conversación se guarda en el navegador.
+En WordCraft, **Chat con IA** abre un panel junto al documento. El chat usa el texto guardado del DOCX.
 
 ## Calendario y edición
 
@@ -97,7 +97,9 @@ El script instala la compilación en `craft-apps/wordcraft/`. Copia esa carpeta 
 
 ## Chat con IA
 
-Abre **Chat con IA** en la barra lateral o usa **Preguntar sobre este archivo** en una nota, colección o lienzo. **Enviar** manda únicamente el texto que acabas de escribir. El historial y el archivo quedan fuera de la petición. **Copiar consulta** copia el texto de la pregunta.
+Abre **Chats con IA** en santolvDrive o Super Cerebro para consultar y borrar conversaciones. En una nota, colección o lienzo también puedes usar **Preguntar sobre este archivo**. Cada conversación se guarda como `.chat-ia.json` dentro de la carpeta del documento. El chat general se guarda en la raíz de la bóveda.
+
+Para DOCX y los formatos de texto de Super Cerebro, el servidor envía el mensaje nuevo, el contenido guardado y el nombre de la cuenta activa. El historial sirve para consulta y queda fuera de las peticiones. El proveedor debe devolver una respuesta y una lista de cambios con ubicación, texto original y reemplazo. El chat muestra las propuestas para revisarlas.
 
 En **Mis archivos → Ajustes**, elige OpenCode, OpenAI, Kilo Code o un proveedor compatible con Chat Completions. Introduce el identificador del modelo y la clave API del proveedor elegido. Para un proveedor compatible, indica también su URL base. OpenCode propone `deepseek-v4.1-flash`. Los cambios se aplican al guardar. La clave queda en `.supercerebro-ai.json` dentro de la bóveda del servidor. Trata ese archivo y sus copias como credenciales. En modo de cuentas, solo el propietario puede cambiar los ajustes. [Documentación de la API de OpenCode](https://opencode.ai/docs/console/api/inference)
 

@@ -56,6 +56,7 @@
       <nav class="hub-nav" aria-label="Espacio de trabajo">
         <a class="current" href="/" aria-current="page"><svg class="hub-icon" aria-hidden="true"><use href="#icon-folder"/></svg>Mis archivos</a>
         <a href="/cerebro"><svg class="hub-icon hub-mark" aria-hidden="true"><use href="#icon-vault"/></svg>Super Cerebro</a>
+        <button id="hub-chats" type="button"><svg class="hub-icon" aria-hidden="true"><use href="#icon-file"/></svg>Chats con IA</button>
       </nav>
       <section class="hub-tools" aria-label="Herramientas">
         <p class="hub-label">Herramientas</p>
@@ -95,6 +96,7 @@
       </div>
     </main>
   </div>
+  <dialog id="hub-chat-dialog" class="hub-dialog" aria-label="Chats con IA"><section id="hub-chat" class="ai-chat" hidden></section></dialog>
   <dialog id="create-dialog" class="hub-dialog">
     <form id="create-form">
       <h2 id="create-title"></h2>

@@ -130,24 +130,23 @@ fn handle(
     }
     if matches!(
         (&method, path),
-        (&Method::Get, "/api/ai/status") | (&Method::Post, "/api/ai/chat")
+        (
+            &Method::Get,
+            "/api/ai/status" | "/api/ai/history" | "/api/ai/chats"
+        ) | (&Method::Post, "/api/ai/chat")
+            | (&Method::Delete, "/api/ai/history")
     ) {
         if !server::trusted_origin(&req) {
             return json_error(req, 403, "Origen de solicitud no permitido");
         }
-        if let (Some(accounts), Some(actor)) = (&config.accounts, &account) {
-            if !actor.owner {
-                let _guard = writes.lock().unwrap();
-                if !accounts.allows(actor, &query_param(query, "path")) {
-                    return json_error(req, 403, "Abre un documento compartido para usar la IA");
-                }
-            }
-        }
-        return if method == Method::Get {
-            config.ai.status(req)
-        } else {
-            config.ai.send(req)
-        };
+        return ai::Settings::route(
+            req,
+            path,
+            query_param(query, "path"),
+            config.clone(),
+            account,
+            writes.clone(),
+        );
     }
     let _guard = if matches!(method, Method::Post | Method::Put | Method::Delete)
         || matches!(

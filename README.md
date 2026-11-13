@@ -99,7 +99,9 @@ El script instala la compilación en `craft-apps/wordcraft/`. Copia esa carpeta 
 
 Abre **Chat con IA** en la barra lateral o usa **Preguntar sobre este archivo** en una nota, colección o lienzo. **Enviar** manda únicamente el texto que acabas de escribir. El historial y el archivo quedan fuera de la petición. **Copiar consulta** copia el texto de la pregunta.
 
-En **Mis archivos → Ajustes**, elige OpenCode, OpenAI o un proveedor compatible con Chat Completions. Introduce el identificador del modelo y la clave API. Para un proveedor compatible, indica también su URL base. OpenCode propone `deepseek-v4.1-flash`. Los cambios se aplican al guardar. La clave queda en `.supercerebro-ai.json` dentro de la bóveda del servidor. Trata ese archivo y sus copias como credenciales. En modo de cuentas, solo el propietario puede cambiar los ajustes. [Documentación de la API de OpenCode](https://opencode.ai/docs/console/api/inference)
+En **Mis archivos → Ajustes**, elige OpenCode, OpenAI, Kilo Code o un proveedor compatible con Chat Completions. Introduce el identificador del modelo y la clave API del proveedor elegido. Para un proveedor compatible, indica también su URL base. OpenCode propone `deepseek-v4.1-flash`. Los cambios se aplican al guardar. La clave queda en `.supercerebro-ai.json` dentro de la bóveda del servidor. Trata ese archivo y sus copias como credenciales. En modo de cuentas, solo el propietario puede cambiar los ajustes. [Documentación de la API de OpenCode](https://opencode.ai/docs/console/api/inference)
+
+**Kilo Code** rellena la URL de Kilo AI Gateway. Usa una clave de Kilo y un identificador de su catálogo, por ejemplo `anthropic/claude-sonnet-4.5`. [Guía de Kilo AI Gateway](https://kilo.ai/docs/gateway/quickstart)
 
 La interfaz está preparada para trabajar sin proveedor. La copia va al portapapeles cuando la pides. Las consultas se guardan localmente y no generan respuestas.
 

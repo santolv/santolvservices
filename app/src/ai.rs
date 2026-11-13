@@ -21,6 +21,7 @@ pub struct Settings {
 enum Provider {
     Opencode,
     Openai,
+    Kilo,
     Compatible,
 }
 
@@ -46,6 +47,7 @@ struct ChatInput {
 
 const OPENCODE_URL: &str = "https://opencode.ai/inference/openai/v1";
 const OPENAI_URL: &str = "https://api.openai.com/v1";
+const KILO_URL: &str = "https://ai-gateway.kilo.ai/api/v1";
 const DEFAULT_MODEL: &str = "deepseek-v4.1-flash";
 
 impl Credentials {
@@ -72,6 +74,7 @@ impl Credentials {
         let base = match self.provider {
             Provider::Opencode => OPENCODE_URL,
             Provider::Openai => OPENAI_URL,
+            Provider::Kilo => KILO_URL,
             Provider::Compatible => self.base_url.trim().trim_end_matches('/'),
         };
         let endpoint = server::http_url(&format!("{base}/chat/completions"))
@@ -108,6 +111,28 @@ impl Credentials {
             credentials: self,
             endpoint,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kilo_uses_its_gateway_with_the_selected_model() {
+        let credentials: Credentials = serde_json::from_value(json!({
+            "provider": "kilo",
+            "base_url": "https://example.invalid/v1",
+            "model": "anthropic/claude-sonnet-4.5",
+            "key": "test-key"
+        }))
+        .unwrap();
+        let connection = credentials.validate().unwrap();
+        assert_eq!(
+            connection.endpoint.as_str(),
+            "https://ai-gateway.kilo.ai/api/v1/chat/completions"
+        );
+        assert_eq!(connection.credentials.model, "anthropic/claude-sonnet-4.5");
     }
 }
 

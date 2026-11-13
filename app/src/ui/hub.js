@@ -31,6 +31,7 @@ const saveSettings = settingsForm.querySelector('[type=submit]');
 const providers = {
   opencode: ['https://opencode.ai/inference/openai/v1', 'deepseek-v4.1-flash'],
   openai: ['https://api.openai.com/v1', ''],
+  kilo: ['https://ai-gateway.kilo.ai/api/v1', ''],
   compatible: ['', ''],
 };
 const settingsUrl = '/api/ai/settings';

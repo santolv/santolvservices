@@ -117,6 +117,17 @@ function setTheme(theme) {
 }
 
 setTheme(preferences().theme === 'light' ? 'light' : 'dark');
+const viewModes = ['list', 'grid', 'gallery'];
+let view = preferences().driveView;
+if (!viewModes.includes(view)) view = 'list';
+let previewObserver;
+$('#file-views').onclick = event => {
+  const button = event.target.closest('button[data-view]');
+  if (!button || button.dataset.view === view) return;
+  view = button.dataset.view;
+  try { localStorage.setItem('sc-preferences', JSON.stringify({ ...preferences(), driveView: view })); } catch {}
+  render();
+};
 $('#theme-toggle').onclick = () => {
   const theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   setTheme(theme);
@@ -188,19 +199,58 @@ function render() {
   });
   entries.sort((a, b) => Number(b.is_dir) - Number(a.is_dir) || a.name.localeCompare(b.name, 'es'));
   const body = $('#files');
+  const cards = $('#file-cards');
+  const list = view === 'list';
+  const gallery = view === 'gallery';
+  previewObserver?.disconnect();
+  previewObserver = gallery ? new IntersectionObserver(items => {
+    for (const item of items) {
+      if (!item.isIntersecting) continue;
+      const img = item.target;
+      previewObserver.unobserve(img);
+      img.src = img.dataset.src;
+    }
+  }, { root: $('.hub-main'), rootMargin: '80px' }) : null;
+  $('.hub-table-wrap').hidden = !list;
+  cards.hidden = list;
+  cards.dataset.view = view;
+  for (const button of $('#file-views').children) button.setAttribute('aria-pressed', String(button.dataset.view === view));
   body.replaceChildren();
+  cards.replaceChildren();
+  const fragment = document.createDocumentFragment();
   for (const file of entries) {
-    const row = body.insertRow();
-    const name = row.insertCell();
-    const type = row.insertCell();
-    const actions = row.insertCell();
+    const row = document.createElement(list ? 'tr' : 'li');
+    const name = document.createElement(list ? 'td' : 'div');
+    const type = document.createElement(list ? 'td' : 'span');
+    const actions = document.createElement(list ? 'td' : 'div');
+    row.append(name, type, actions);
+    fragment.append(row);
     type.className = 'hub-type';
     const extension = file.name.includes('.') ? file.name.split('.').at(-1).toLowerCase() : '';
     const symbol = fileIcon(file.is_dir ? 'folder' : 'file');
     if (!file.is_dir && extension) symbol.dataset.extension = extension;
     const control = file.is_dir ? labelButton('', () => goToFolder(file.path)) : document.createElement('a');
     control.className = 'hub-file-name';
-    control.append(symbol, search ? file.path : file.name);
+    const label = document.createElement('span');
+    label.textContent = search ? file.path : file.name;
+    control.append(symbol, label);
+    if (gallery) {
+      const cover = document.createElement('span');
+      cover.className = 'hub-file-cover';
+      cover.append(symbol);
+      if (!file.is_dir && /\.(jpe?g|png|webp|gif|docx|pptx|xlsx)$/i.test(file.name)) {
+        const img = document.createElement('img');
+        img.alt = '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.dataset.src = fileUrl('/api/preview', file.path);
+        img.onload = () => { cover.classList.add('has-preview'); };
+        img.onerror = () => img.remove();
+        cover.append(img);
+        previewObserver.observe(img);
+      }
+      control.prepend(cover);
+    }
     name.append(control);
     if (file.is_dir) {
       type.textContent = 'Carpeta';
@@ -219,6 +269,7 @@ function render() {
     action.title = 'Descargar';
     actions.append(action);
   }
+  (list ? body : cards).append(fragment);
   const count = entries.length;
   message(count ? count + (count === 1 ? ' elemento' : ' elementos')
     : search || kind ? 'Sin resultados en esta carpeta.' : 'Esta carpeta está vacía.');

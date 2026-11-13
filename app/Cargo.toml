@@ -20,3 +20,4 @@ url = "2"
 quick-xml = "0.42"
 zip = { version = "9.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 ureq = { version = "3", features = ["json"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }

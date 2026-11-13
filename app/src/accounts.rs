@@ -173,7 +173,7 @@ fn doc_path(path: &str) -> Option<String> {
 }
 
 fn craft_file(path: &Path) -> bool {
-    crate::craft::document_path(path).is_file()
+    crate::drive::document_path(path).is_file()
 }
 
 impl Accounts {

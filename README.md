@@ -1,4 +1,4 @@
-# Super Cerebro
+# santolvDrive
 
 Espacio de conocimiento que combina la base de Obsidian con páginas, bloques y colecciones inspirados en Notion. El servidor es Rust, sin base de datos. Las páginas se guardan como archivos Markdown dentro de la bóveda.
 
@@ -9,7 +9,7 @@ cd app
 cargo run
 ```
 
-Abre [Mis archivos](http://127.0.0.1:7878/). Desde ahí puedes crear carpetas y documentos de texto, hojas de cálculo, presentaciones y PDF, subir y descargar archivos, y abrir [Super Cerebro](http://127.0.0.1:7878/cerebro). Ambos usan la misma bóveda. El gestor tiene tema claro y oscuro.
+Abre [santolvDrive](http://127.0.0.1:7878/). Desde ahí puedes crear carpetas y documentos, subir o descargar archivos y abrir [Super Cerebro](http://127.0.0.1:7878/cerebro). Ambos usan la misma bóveda. En **Mis archivos** puedes alternar entre lista, cuadrícula y galería. La galería pide miniaturas solo cerca del área visible y el servidor reutiliza las últimas 96. Admite JPG, PNG, WebP y GIF, y usa la miniatura incluida en DOCX, PPTX o XLSX si el archivo la trae. Los demás archivos muestran su icono.
 
 ## Versiones y respaldo
 
@@ -194,7 +194,12 @@ cargo run
 
 En modo debug, el servidor carga los recursos de interfaz desde `src/`: después de modificar JavaScript basta con `npm run build` y recargar el navegador; los cambios de CSS se ven al recargar. En modo release, los recursos quedan incorporados al ejecutable mediante `include_str!`; recompila Rust para actualizarlo.
 
-- `app/src/main.rs`: servidor HTTP, almacenamiento y API.
+- `app/src/main.rs`: entrada, autenticación y despacho HTTP del programa principal.
+- `app/src/drive.rs` y `app/src/drive/`: backend de santolvDrive, almacenamiento de la bóveda y miniaturas.
+- `app/src/cerebro.rs`: backend de Super Cerebro, búsqueda, enlaces, grafo y estado del espacio.
+- `app/src/craft.rs`: backend de la suite Craft, apertura, guardado, colaboración e índice de WordCraft.
+
+Los tres módulos Rust se ejecutan en un mismo servidor y comparten las cuentas, los permisos y la bóveda.
 - `app/src/ui/app.js`: espacio de trabajo y funciones de Obsidian.
 - `app/src/ui/notion.js`: escritorio, páginas, bloques y colecciones.
 - `app/src/ui/knowledge.js`: YAML, bloques, filtros, cálculos, relaciones y CSV.

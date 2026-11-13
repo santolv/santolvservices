@@ -1,4 +1,11 @@
-use crate::{json_error, safe_path, safe_path_at, server};
+#[cfg(test)]
+use crate::drive::{create_document, is_word_package};
+use crate::{
+    drive::{
+        document_path, install_package, is_file_package, safe_path, safe_path_at, write_document,
+    },
+    json_error, query_param, respond_asset, server,
+};
 use quick_xml::{events::Event, name::ResolveResult, NsReader};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -12,7 +19,7 @@ use std::sync::{
 };
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
-use tiny_http::{Header, Request, Response};
+use tiny_http::{Header, Method, Request, Response};
 
 const EDITORS: [(&str, &str, &str); 4] = [
     ("wordcraft", "WordCraft", "docx"),
@@ -84,8 +91,6 @@ fn extension(path: &str) -> String {
         .to_ascii_lowercase()
 }
 
-const FILE_MARKER: &str = ".archivo";
-const WORD_BODY: &str = ".wordcraft.docx";
 const WORD_TEXT: &str = "texto.md";
 const WORD_REVISION: &str = ".texto-revision";
 const EDITOR_LEASE: Duration = Duration::from_secs(120);
@@ -100,51 +105,7 @@ fn jobs() -> &'static Mutex<HashMap<PathBuf, WordJob>> {
     JOBS.get_or_init(Default::default)
 }
 
-pub fn is_word_package(path: &Path) -> bool {
-    path.extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("docx"))
-        && path.is_dir()
-        && path.join(WORD_BODY).is_file()
-        && !crate::linked_path(&path.join(WORD_BODY))
-}
-
-fn packaged_file(path: &Path) -> Option<PathBuf> {
-    if !path.is_dir() || crate::linked_path(path) {
-        return None;
-    }
-    let marker = path.join(FILE_MARKER);
-    if crate::linked_path(&marker) || !marker.is_file() {
-        return None;
-    }
-    let name =
-        String::from_utf8(server::read_limited(File::open(marker).ok()?, 1024).ok()?).ok()?;
-    if name.is_empty()
-        || name.starts_with('.')
-        || name.ends_with(['.', ' '])
-        || name
-            .chars()
-            .any(|ch| ch.is_control() || "/\\<>:\"|?*".contains(ch))
-    {
-        return None;
-    }
-    [path.join(name), path.join(path.file_name()?)]
-        .into_iter()
-        .find(|payload| payload.is_file() && !crate::linked_path(payload))
-}
-
-pub fn is_file_package(path: &Path) -> bool {
-    is_word_package(path) || packaged_file(path).is_some()
-}
-
-pub fn document_path(path: &Path) -> PathBuf {
-    if is_word_package(path) {
-        path.join(WORD_BODY)
-    } else {
-        packaged_file(path).unwrap_or_else(|| path.to_path_buf())
-    }
-}
-
-fn word_index_current(path: &Path) -> bool {
+pub(crate) fn word_index_current(path: &Path) -> bool {
     if !is_file_package(path) {
         return false;
     }
@@ -157,7 +118,7 @@ fn word_index_current(path: &Path) -> bool {
     matches!((modified(&marker),modified(&document_path(path))),(Ok(index),Ok(body)) if index>=body)
 }
 
-fn queue_text(path: &Path) {
+pub(crate) fn queue_text(path: &Path) {
     jobs().lock().unwrap().entry(path.into()).or_default().due =
         Some(Instant::now() + Duration::from_secs(2));
 }
@@ -184,63 +145,6 @@ pub fn editor_presence(req: Request, path: &str, session: &str, leaving: bool) {
     }
     drop(jobs);
     server::json(req, json!({"ok":true}));
-}
-
-pub fn prepare_existing_files() {
-    // Recover an interrupted migration before exposing the vault to readers.
-    let root = crate::vault_root();
-    let staging = |name: &str| name.starts_with(".wordcraft-") || name.starts_with(".sc-package-");
-    for entry in walkdir::WalkDir::new(&root)
-        .into_iter()
-        .filter_entry(|entry| {
-            let name = entry.file_name().to_string_lossy();
-            entry.depth() == 0
-                || (entry.file_type().is_dir()
-                    && !crate::linked_path(entry.path())
-                    && (staging(&name) || !is_file_package(entry.path()))
-                    && (!name.starts_with('.') || staging(&name)))
-        })
-        .filter_map(Result::ok)
-        .filter(|entry| staging(&entry.file_name().to_string_lossy()))
-    {
-        let previous = entry.path().join(".previous.docx");
-        let marker = entry.path().join(".restore-name");
-        if !previous.is_file() || crate::linked_path(&previous) || crate::linked_path(&marker) {
-            continue;
-        }
-        let Ok(name) = fs::read_to_string(marker) else {
-            continue;
-        };
-        if name.contains(['/', '\\']) {
-            continue;
-        }
-        if let Some(target) = entry
-            .path()
-            .parent()
-            .and_then(|parent| safe_path_at(parent, &name))
-            .filter(|target| !target.exists())
-        {
-            if let Err(error) = fs::rename(&previous, &target) {
-                eprintln!("No se pudo recuperar {}: {error}", previous.display());
-            }
-        }
-    }
-    for entry in crate::list_files()
-        .into_iter()
-        .filter(|entry| !entry.is_dir)
-    {
-        let Some(path) = safe_path(&entry.path) else {
-            continue;
-        };
-        if path.is_file() {
-            if let Err(error) = install_package(&path, None, true) {
-                eprintln!("No se pudo empaquetar {}: {error}", entry.path);
-            }
-        }
-        if extension(&entry.path) == "docx" && !word_index_current(&path) {
-            queue_text(&path);
-        }
-    }
 }
 
 pub fn move_word_jobs(from: &Path, to: &Path) {
@@ -311,111 +215,6 @@ pub fn index_ready_words(writes: &Mutex<()>) {
             eprintln!("WordCraft: no se pudo actualizar el índice: {error}");
         }
     }
-}
-
-pub fn create_document(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    install_package(path, Some(bytes), false)?;
-    if path
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("docx"))
-    {
-        queue_text(path);
-    }
-    Ok(())
-}
-
-pub fn write_document(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    if is_file_package(path) {
-        server::write_atomic(&document_path(path), bytes, true)
-    } else if path.is_file() {
-        install_package(path, Some(bytes), true)
-    } else {
-        create_document(path, bytes)
-    }
-}
-
-pub fn rename_document(from: &Path, to: &Path) -> std::io::Result<()> {
-    let payload = packaged_file(from).and_then(|path| path.file_name().map(|name| name.to_owned()));
-    fs::rename(from, to)?;
-    if let Some(old_name) = payload {
-        let new_name = to
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or(ErrorKind::InvalidInput)?;
-        if old_name != new_name {
-            let old = to.join(&old_name);
-            let new = to.join(new_name);
-            if let Err(error) = fs::rename(&old, &new) {
-                fs::rename(to, from)?;
-                return Err(error);
-            }
-            if let Err(error) =
-                server::write_atomic(&to.join(FILE_MARKER), new_name.as_bytes(), true)
-            {
-                fs::rename(&new, &old)?;
-                fs::rename(to, from)?;
-                return Err(error);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn install_package(path: &Path, bytes: Option<&[u8]>, migrate: bool) -> std::io::Result<()> {
-    if !migrate && path.exists() {
-        return Err(ErrorKind::AlreadyExists.into());
-    }
-    let parent = path.parent().ok_or(ErrorKind::InvalidInput)?;
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or(ErrorKind::InvalidInput)?;
-    fs::create_dir_all(parent)?;
-    let staging = tempfile::Builder::new()
-        .prefix(".sc-package-")
-        .tempdir_in(parent)?;
-    let word = path
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("docx"));
-    let payload = staging.path().join(if word { WORD_BODY } else { name });
-    if let Some(bytes) = bytes {
-        server::write_atomic(&payload, bytes, false)?;
-    } else {
-        fs::copy(path, &payload)?;
-        fs::OpenOptions::new()
-            .write(true)
-            .open(&payload)?
-            .sync_all()?;
-    }
-    if !word {
-        server::write_atomic(&staging.path().join(FILE_MARKER), name.as_bytes(), false)?;
-    }
-    let previous = staging.path().join(".previous.docx");
-    if migrate {
-        server::write_atomic(
-            &staging.path().join(".restore-name"),
-            path.file_name()
-                .ok_or(ErrorKind::InvalidInput)?
-                .to_string_lossy()
-                .as_bytes(),
-            false,
-        )?;
-        fs::rename(path, &previous)?;
-    }
-    if let Err(error) = fs::rename(staging.path(), path) {
-        if migrate && fs::rename(&previous, path).is_err() {
-            eprintln!(
-                "WordCraft: documento conservado en {}",
-                staging.keep().display()
-            );
-        }
-        return Err(error);
-    }
-    if migrate {
-        let _ = fs::remove_file(path.join(".previous.docx"));
-        let _ = fs::remove_file(path.join(".restore-name"));
-    }
-    Ok(())
 }
 
 fn valid_format(path: &str, bytes: &[u8]) -> bool {
@@ -758,33 +557,6 @@ fn read_document(path: &Path) -> Result<Vec<u8>, (u16, &'static str)> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn regular_packages_keep_names_and_payloads_through_migration_and_rename() {
-        let root = tempfile::tempdir().unwrap();
-        let original = root.path().join("Nota.md");
-        std::fs::write(&original, "texto antiguo").unwrap();
-        super::install_package(&original, None, true).unwrap();
-        assert!(super::is_file_package(&original));
-        assert!(crate::safe_path_at(root.path(), "Nota.md/Nota.md").is_none());
-        assert_eq!(
-            std::fs::read_to_string(original.join("Nota.md")).unwrap(),
-            "texto antiguo"
-        );
-
-        super::write_document(&original, b"editado").unwrap();
-        let renamed = root.path().join("Nota nueva.md");
-        super::rename_document(&original, &renamed).unwrap();
-        assert!(!original.exists());
-        assert_eq!(
-            super::document_path(&renamed),
-            renamed.join("Nota nueva.md")
-        );
-        assert_eq!(
-            std::fs::read(super::document_path(&renamed)).unwrap(),
-            b"editado"
-        );
-        assert!(super::create_document(&renamed, b"duplicado").is_err());
-    }
-    #[test]
     fn a_saved_document_only_wakes_its_own_subscribers() {
         let first = tempfile::NamedTempFile::new().unwrap();
         let second = tempfile::NamedTempFile::new().unwrap();
@@ -877,5 +649,48 @@ mod tests {
             Ok(("Proyecto & revisión\t📄\nSegunda línea".into(), false))
         );
         assert!(read_docx_text(b"not a docx").is_err());
+    }
+}
+
+const CRAFT_JS: &str = include_str!("ui/craft-editor.js");
+const CRAFT_MERGE_JS: &str = include_str!("ui/craft-merge.bundle.js");
+
+pub(crate) fn handle(
+    req: Request,
+    method: Method,
+    path: &str,
+    query: &str,
+    config: &server::Config,
+) {
+    match (method, path) {
+        (Method::Get, "/ui/craft-editor.js") => {
+            respond_asset(
+                req,
+                "ui/craft-editor.js",
+                CRAFT_JS,
+                "text/javascript; charset=utf-8",
+            );
+        }
+        (Method::Get, "/ui/craft-merge.bundle.js") => {
+            respond_asset(
+                req,
+                "ui/craft-merge.bundle.js",
+                CRAFT_MERGE_JS,
+                "text/javascript; charset=utf-8",
+            );
+        }
+        (Method::Get, path) if path.starts_with("/craft/") => {
+            asset(req, &config.craft_root, &path["/craft/".len()..]);
+        }
+        (Method::Get, "/api/craft/file") => open(req, &query_param(query, "path")),
+        (Method::Get, "/api/craft/context") => context(req, &query_param(query, "path")),
+        (Method::Put, "/api/craft/file") => save(req, &query_param(query, "path")),
+        (Method::Post, "/api/craft/presence") => editor_presence(
+            req,
+            &query_param(query, "path"),
+            &query_param(query, "session"),
+            query_param(query, "leave") == "true",
+        ),
+        _ => json_error(req, 404, "Ruta no encontrada"),
     }
 }

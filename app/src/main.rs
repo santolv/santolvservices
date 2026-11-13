@@ -8,6 +8,7 @@ use urlencoding::decode;
 use walkdir::WalkDir;
 
 mod accounts;
+mod ai;
 mod craft;
 mod server;
 
@@ -122,7 +123,7 @@ fn safe_path_at(root: &Path, rel: &str) -> Option<PathBuf> {
     }
     let mut full = root.to_path_buf();
     for part in rel.split('/') {
-        if craft::is_word_package(&full) {
+        if craft::is_file_package(&full) {
             return None;
         }
         if part.is_empty() || part.starts_with('.') || part.ends_with(['.', ' ']) {
@@ -171,7 +172,7 @@ fn visible_entry(entry: &walkdir::DirEntry) -> bool {
     entry.depth() == 0
         || (!entry.file_name().to_string_lossy().starts_with('.')
             && !linked_path(entry.path())
-            && !entry.path().parent().is_some_and(craft::is_word_package))
+            && !entry.path().parent().is_some_and(craft::is_file_package))
 }
 
 fn list_files() -> Vec<FileEntry> {
@@ -199,7 +200,7 @@ fn list_files() -> Vec<FileEntry> {
         out.push(FileEntry {
             path: rel,
             name,
-            is_dir: entry.file_type().is_dir() && !craft::is_word_package(p),
+            is_dir: entry.file_type().is_dir() && !craft::is_file_package(p),
         });
     }
     out.sort_by(|a, b| a.path.cmp(&b.path));
@@ -215,7 +216,7 @@ fn backlinks(name: &str) -> Vec<String> {
             continue;
         }
         let content = safe_path(path)
-            .and_then(|p| fs::read_to_string(p).ok())
+            .and_then(|p| fs::read_to_string(craft::document_path(&p)).ok())
             .unwrap_or_default();
         if target.is_some()
             && wiki_links(&content)
@@ -472,7 +473,7 @@ fn build_graph() -> Graph {
             Some(f) => f,
             None => continue,
         };
-        let content = fs::read_to_string(&full).unwrap_or_default();
+        let content = fs::read_to_string(craft::document_path(&full)).unwrap_or_default();
         for inner in wiki_links(&content) {
             if let Some(target) = resolve_wiki_link(inner, &paths).filter(|path| path != src) {
                 edge_set.insert((src.clone(), target));
@@ -558,6 +559,27 @@ fn handle(
             writes.clone(),
         );
     }
+    if matches!(
+        (&method, path),
+        (&Method::Get, "/api/ai/status") | (&Method::Post, "/api/ai/chat")
+    ) {
+        if !server::trusted_origin(&req) {
+            return json_error(req, 403, "Origen de solicitud no permitido");
+        }
+        if let (Some(accounts), Some(actor)) = (&config.accounts, &account) {
+            if !actor.owner {
+                let _guard = writes.lock().unwrap();
+                if !accounts.allows(actor, &query_param(query, "path")) {
+                    return json_error(req, 403, "Abre un documento compartido para usar la IA");
+                }
+            }
+        }
+        return if method == Method::Get {
+            ai::Chat::status(config.ai.as_deref(), req)
+        } else {
+            ai::Chat::send(config.ai.as_ref(), req)
+        };
+    }
     let _guard = if matches!(method, Method::Post | Method::Put | Method::Delete)
         || matches!(
             path,
@@ -566,6 +588,12 @@ fn handle(
                 | "/api/download"
                 | "/api/files"
                 | "/api/craft/share"
+                | "/api/file"
+                | "/api/search"
+                | "/api/backlinks"
+                | "/api/outline"
+                | "/api/properties"
+                | "/api/graph"
         ) {
         if !server::trusted_origin(&req) {
             return json_error(req, 403, "Origen de solicitud no permitido");
@@ -779,7 +807,7 @@ fn handle(
         }
         (Method::Get, "/api/file") => {
             let rel = query_param(query, "path");
-            match safe_path(&rel) {
+            match safe_path(&rel).map(|path| craft::document_path(&path)) {
                 Some(full) if full.is_file() => {
                     let Ok(file) = fs::File::open(&full) else {
                         return json_error(req, 404, "Archivo no encontrado");
@@ -828,7 +856,7 @@ fn handle(
             let Some(full) = safe_path(&wr.path) else {
                 return json_error(req, 400, "Ruta no válida");
             };
-            if let Err(e) = server::write_atomic(&full, wr.content.as_bytes(), true) {
+            if let Err(e) = craft::write_document(&full, wr.content.as_bytes()) {
                 return json_error(req, 500, &e.to_string());
             }
             let _ = req.respond(
@@ -848,7 +876,7 @@ fn handle(
             let Some(full) = safe_path(&rel) else {
                 return json_error(req, 400, "Ruta no válida");
             };
-            let removed = if craft::is_word_package(&full) {
+            let removed = if craft::is_file_package(&full) {
                 fs::remove_dir_all(&full)
             } else {
                 fs::remove_file(&full)
@@ -914,7 +942,7 @@ fn handle(
                 .iter()
                 .filter_map(|p| {
                     let full = safe_path(p)?;
-                    let content = fs::read_to_string(full).ok()?;
+                    let content = fs::read_to_string(craft::document_path(&full)).ok()?;
                     let updated = rewrite_links(&content, &rr.from, &rr.to, &old_paths);
                     if updated == content {
                         return None;
@@ -932,13 +960,13 @@ fn handle(
                     return json_error(req, 500, &e.to_string());
                 }
             }
-            if let Err(e) = fs::rename(&from, &to) {
+            if let Err(e) = craft::rename_document(&from, &to) {
                 return json_error(req, 500, &e.to_string());
             }
             craft::move_word_jobs(&from, &to);
             for (target, content) in updates {
                 if let Some(full) = safe_path(&target) {
-                    if let Err(e) = server::write_atomic(&full, content.as_bytes(), true) {
+                    if let Err(e) = craft::write_document(&full, content.as_bytes()) {
                         return json_error(
                             req,
                             500,
@@ -982,10 +1010,11 @@ fn handle(
                     .filter_entry(visible_entry)
                     .filter_map(|e| e.ok())
                 {
-                    if !entry.file_type().is_file() {
+                    let p = entry.path();
+                    let payload = craft::document_path(p);
+                    if !payload.is_file() {
                         continue;
                     }
-                    let p = entry.path();
                     let rel = p
                         .strip_prefix(&vault_root())
                         .unwrap()
@@ -1001,7 +1030,7 @@ fn handle(
                     ) {
                         continue;
                     }
-                    let content = fs::File::open(p)
+                    let content = fs::File::open(payload)
                         .and_then(|file| server::read_limited(file, server::MAX_FILE))
                         .ok()
                         .and_then(|bytes| String::from_utf8(bytes).ok())
@@ -1040,7 +1069,7 @@ fn handle(
         }
         (Method::Get, "/api/outline") => {
             let rel = query_param(query, "path");
-            let out = match safe_path(&rel) {
+            let out = match safe_path(&rel).map(|path| craft::document_path(&path)) {
                 Some(full) if full.is_file() => {
                     let content = fs::read_to_string(&full).unwrap_or_default();
                     parse_outline(&content)
@@ -1054,7 +1083,7 @@ fn handle(
         }
         (Method::Get, "/api/properties") => {
             let rel = query_param(query, "path");
-            let props = match safe_path(&rel) {
+            let props = match safe_path(&rel).map(|path| craft::document_path(&path)) {
                 Some(full) if full.is_file() => {
                     let content = fs::read_to_string(&full).unwrap_or_default();
                     parse_properties(&content)
@@ -1147,7 +1176,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     fs::create_dir_all(vault_root())?;
     let server = Server::http(config.address)?;
     let writes = std::sync::Arc::new(Mutex::new(()));
-    craft::schedule_existing_words();
+    craft::prepare_existing_files();
     let index_writes = std::sync::Arc::clone(&writes);
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(2));

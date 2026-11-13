@@ -86,14 +86,16 @@
 .n-chart-track i.negative { background:var(--text-muted); }
 
 .n-block-selected { outline:2px solid var(--accent); outline-offset:3px; border-radius:4px; background:var(--accent-soft); }
-.sc-calendar { max-width:1220px; margin:auto; padding:clamp(20px,5vw,48px); }
+.sc-calendar { width:100%; max-width:1720px; margin:auto; padding:clamp(16px,2.5vw,36px); }
 .sc-calendar-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px; }
-.sc-calendar-head h1 { margin:0; font-size:clamp(24px,4vw,34px); letter-spacing:-.04em; }
+.sc-calendar-head h1 { margin:0; font-size:clamp(28px,4vw,44px); letter-spacing:-.04em; }
 .sc-calendar-head p { margin:4px 0 0; color:var(--text-muted); }
 .sc-calendar :is(.primary-button,.secondary-button) { display:inline-flex; align-items:center; gap:6px; flex:none; }
-.sc-calendar-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(180px,.33fr); gap:18px; }
+.sc-calendar-layout { display:grid; grid-template-columns:minmax(0,1fr) clamp(200px,18vw,285px); gap:18px; }
 .sc-calendar-grid,.sc-calendar-agenda { min-width:0; background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; padding:12px; }
-.sc-calendar-grid .n-calendar-day { display:flex; flex-direction:column; align-items:flex-start; gap:3px; min-width:0; min-height:70px; padding:6px; text-align:left; color:var(--text-normal); }
+.sc-calendar-grid .n-calendar-controls strong { font-size:clamp(22px,2.5vw,30px); }
+.sc-calendar-grid .n-calendar-week { font-size:12px; }
+.sc-calendar-grid .n-calendar-day { display:flex; flex-direction:column; align-items:flex-start; gap:5px; min-width:0; min-height:clamp(95px,12dvh,145px); padding:8px; font-size:14px; text-align:left; color:var(--text-normal); }
 .sc-calendar-grid .n-calendar-day > span { display:block; max-width:100%; padding:2px 4px; border-radius:3px; background:var(--accent-soft); color:var(--accent-text); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .sc-calendar-grid .n-calendar-day > small { color:var(--text-muted); }
 .sc-calendar-grid button.n-calendar-day:hover { background:var(--hover); }
@@ -113,7 +115,7 @@
 @media(max-width:550px) {
   .sc-calendar { padding:14px; }
   .sc-calendar-grid { padding:7px; }
-  .sc-calendar-grid .n-calendar-day { min-height:48px; padding:3px; font-size:10px; }
+  .sc-calendar-grid .n-calendar-day { min-height:65px; padding:4px; font-size:11px; }
   .sc-calendar-grid .n-calendar-day > span { font-size:8px; padding:1px 2px; }
 }
 .app-body .sidebar-left { background:var(--bg-secondary); }

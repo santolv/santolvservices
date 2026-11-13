@@ -1,6 +1,6 @@
 # Super Cerebro
 
-Espacio de conocimiento que combina la base de Obsidian con páginas, bloques y colecciones inspirados en Notion. El servidor es Rust, sin base de datos: las páginas siguen siendo archivos Markdown en `app/vault/`.
+Espacio de conocimiento que combina la base de Obsidian con páginas, bloques y colecciones inspirados en Notion. El servidor es Rust, sin base de datos. Las páginas se guardan como archivos Markdown dentro de la bóveda.
 
 ## Ejecutar
 
@@ -23,7 +23,7 @@ El grafo abre en 3D. Arrastra el fondo o usa las flechas con el grafo enfocado p
 
 En un bloque vacío, escribe `/calendario` para insertar un calendario con eventos, `/gráfico` para editar un gráfico de barras por pares como `Enero: 12`, o `/lienzo` para crear o incrustar un canvas editable.
 
-En WordCraft, **Chat con IA** abre un panel junto al documento. **Copiar consulta** reúne la pregunta y el texto del DOCX guardado para pegarlo en el asistente que elijas. Si hay cambios pendientes, guarda primero en WordCraft. Las preguntas se guardan en el navegador.
+En WordCraft, **Chat con IA** abre un panel junto al documento y usa el texto del DOCX guardado. Si hay cambios pendientes, guarda primero en WordCraft. La conversación se guarda en el navegador.
 
 ## Calendario y edición
 
@@ -31,7 +31,7 @@ Abre **Calendario** en la barra lateral para ver eventos, fechas de las coleccio
 
 En el editor, `[[` busca enlaces y permite crear una subpágina, `@` ofrece páginas, archivos, fechas, recordatorios y menciones de texto, y `:` seguido de un nombre busca emojis. Usa `Ctrl/Cmd+F` para buscar en la nota y `Ctrl/Cmd+Mayús+L` para cambiar de tema. Si el navegador reserva un atajo, usa `Ctrl/Cmd+Alt+O` para saltar a otra nota, `Ctrl/Cmd+Alt+N` para crear una página, `Ctrl/Cmd+Alt+B` para la barra lateral y `Ctrl/Cmd+Alt+Mayús+N` para otra ventana.
 
-En la bóveda, cada DOCX se conserva dentro de una carpeta con su nombre, por ejemplo `Informe.docx/.wordcraft.docx`. La aplicación sigue mostrando un solo archivo. Rust actualiza `texto.md` al quedar libre el documento y el chat reutiliza ese texto si corresponde a la versión guardada. Los DOCX anteriores se migran en segundo plano. Copia la carpeta completa al respaldar un documento.
+En la bóveda, cada archivo visible tiene una carpeta con su nombre, por ejemplo `Notas/Idea.md/Idea.md` o `Presupuesto.xlsx/Presupuesto.xlsx`. Word conserva su formato interno `Informe.docx/.wordcraft.docx` y su índice `texto.md`. Super Cerebro mantiene el nombre y la ruta anteriores en el gestor y en los enlaces. Los archivos visibles que ya existen se migran al iniciar. Copia la carpeta completa para respaldar el archivo. Si usas Obsidian directamente sobre la bóveda, allí verás las rutas físicas nuevas.
 
 ## Servidor
 
@@ -97,7 +97,16 @@ El script instala la compilación en `craft-apps/wordcraft/`. Copia esa carpeta 
 
 ## Chat con IA
 
-Abre **Chat con IA** en la barra lateral o usa **Preguntar sobre este archivo** en una nota, colección o lienzo. Las preguntas se guardan por conversación en el navegador. **Copiar consulta** incluye la pregunta y, si hay un archivo adjunto, su contenido actual.
+Abre **Chat con IA** en la barra lateral o usa **Preguntar sobre este archivo** en una nota, colección o lienzo. **Enviar** manda la pregunta, los últimos turnos y el texto adjunto al proveedor. **Copiar consulta** prepara la pregunta y el texto para pegarlos en otro sitio.
+
+El servidor usa la API compatible con OpenAI de OpenCode Console, con `deepseek-v4.1-flash` como modelo predeterminado. Para activarla en PowerShell desde `app`:
+
+```powershell
+$env:OPENCODE_API_KEY = Read-Host 'Clave de OpenCode' -MaskInput
+cargo run
+```
+
+Para usar otro proveedor compatible con Chat Completions, configura `SUPER_CEREBRO_AI_BASE_URL` con la URL base que termina en `/v1`, `SUPER_CEREBRO_AI_KEY` con su clave y `SUPER_CEREBRO_AI_MODEL` con el identificador del modelo. La clave queda en el servidor. OpenCode Console reserva los modelos gratuitos para su propio cliente. [Documentación de la API de OpenCode](https://opencode.ai/docs/console/api/inference)
 
 La interfaz está preparada para trabajar sin proveedor. La copia va al portapapeles cuando la pides. Las consultas se guardan localmente y no generan respuestas.
 

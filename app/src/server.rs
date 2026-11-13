@@ -11,6 +11,7 @@ use url::Url;
 pub const MAX_FILE: u64 = 32 * 1024 * 1024;
 
 pub struct Config {
+    pub ai: Option<std::sync::Arc<crate::ai::Chat>>,
     pub address: SocketAddr,
     authorization: Option<String>,
     pub tools: Vec<ToolLink>,
@@ -64,6 +65,7 @@ impl Config {
             }
         }
         Ok(Self {
+            ai: crate::ai::Chat::from_env()?,
             address: SocketAddr::new(host, port),
             authorization,
             accounts,

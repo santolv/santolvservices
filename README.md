@@ -101,6 +101,8 @@ Abre **Chats con IA** en santolvDrive o Super Cerebro para consultar y borrar co
 
 Para DOCX y los formatos de texto de Super Cerebro, el servidor envía el mensaje nuevo, el contenido guardado y el nombre de la cuenta activa. El historial sirve para consulta y queda fuera de las peticiones. El proveedor debe devolver una respuesta y una lista de cambios con ubicación, texto original y reemplazo. El chat muestra las propuestas para revisarlas.
 
+La pregunta aparece al enviarla. Mientras llega el primer fragmento, el chat muestra tres puntos. Con un proveedor que responde por streaming, el texto de `response` aparece conforme llega. El servidor valida el JSON completo antes de mostrar `changes` y guardar la conversación. Si el proveedor devuelve una respuesta de una sola vez, el chat la muestra completa al recibirla.
+
 En **Mis archivos → Ajustes**, elige OpenCode, OpenAI, Kilo Code o un proveedor compatible con Chat Completions. Introduce el identificador del modelo y la clave API del proveedor elegido. Para un proveedor compatible, indica también su URL base. OpenCode propone `deepseek-v4.1-flash`. Los cambios se aplican al guardar. La clave queda en `.supercerebro-ai.json` dentro de la bóveda del servidor. Trata ese archivo y sus copias como credenciales. En modo de cuentas, solo el propietario puede cambiar los ajustes. [Documentación de la API de OpenCode](https://opencode.ai/docs/console/api/inference)
 
 **Kilo Code** rellena la URL de Kilo AI Gateway. Usa una clave de Kilo y un identificador de su catálogo, por ejemplo `anthropic/claude-sonnet-4.5`. [Guía de Kilo AI Gateway](https://kilo.ai/docs/gateway/quickstart)

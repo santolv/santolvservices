@@ -7,6 +7,42 @@ async function request(route, path, options) {
   return result;
 }
 
+async function streamChat(path, message, onText) {
+  const response = await fetch(endpoint('chat', path), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  });
+  if (!response.ok) {
+    const { error } = await response.json();
+    throw new Error(error || 'La IA no pudo responder.');
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let turns;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        const event = JSON.parse(line);
+        if (event.error) throw new Error(event.error);
+        if (event.delta) onText(event.delta);
+        if (event.turns) turns = event.turns;
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+  if (!turns) throw new Error('La respuesta se interrumpió antes de guardarse.');
+  return turns;
+}
+
 export function mountChat(panel, { icon, onVisibility = () => {}, beforeSend = () => {} }) {
   panel.innerHTML = [
     '<header class="ai-chat-header"><div><h2>Chat con IA</h2><span data-model></span></div>',
@@ -145,21 +181,45 @@ export function mountChat(panel, { icon, onVisibility = () => {}, beforeSend = (
     const current = generation;
     pending = true;
     send.disabled = true;
-    status.textContent = 'Esperando respuesta…';
+    status.textContent = '';
+    composer.value = '';
+    const wasEmpty = !find('[data-empty]').hidden;
+    find('[data-empty]').hidden = true;
+    const question = document.createElement('li');
+    question.textContent = message;
+    const answer = document.createElement('li');
+    answer.dataset.role = 'assistant';
+    const dots = document.createElement('span');
+    dots.className = 'ai-chat-thinking';
+    dots.setAttribute('role', 'status');
+    dots.setAttribute('aria-label', 'La IA está preparando la respuesta');
+    dots.innerHTML = '<i></i><i></i><i></i>';
+    answer.append(dots);
+    const text = document.createTextNode('');
+    answer.append(text);
+    find('ol').append(question, answer);
+    thread.scrollTop = thread.scrollHeight;
     try {
       await beforeSend(file);
-      const result = await request('chat', file, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+      const turns = await streamChat(file, message, delta => {
+        if (current !== generation) return;
+        const nearBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 36;
+        dots.remove();
+        text.appendData(delta);
+        if (nearBottom) thread.scrollTop = thread.scrollHeight;
       });
       if (current === generation) {
-        if (composer.value === message) composer.value = '';
-        render(result.turns);
+        render(turns);
         status.textContent = '';
       }
     } catch (error) {
-      if (current === generation) status.textContent = error.message;
+      if (current === generation) {
+        question.remove();
+        answer.remove();
+        find('[data-empty]').hidden = !wasEmpty;
+        if (!composer.value) composer.value = message;
+        status.textContent = error.message;
+      }
     } finally {
       pending = false;
       send.disabled = !enabled;

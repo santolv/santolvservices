@@ -1,15 +1,15 @@
-/* Shared Stageshow look. The neutral palette follows the Linear study. */
+/* Shared surfaces for santolvDrive and Super Cerebro. */
 :root {
-  --ss-well: #0b0b0b;
-  --ss-chrome: #0e0e0e;
-  --ss-surface: #121212;
-  --ss-raised: #1c1c1c;
+  --ss-well: #000;
+  --ss-chrome: #1c1c1e;
+  --ss-surface: #000;
+  --ss-raised: #1c1c1e;
   --ss-line: #222221;
   --ss-line-control: #343433;
   --ss-text-strong: #ededec;
   --ss-text: #a3a3a0;
   --ss-text-faint: #898986;
-  --ss-hover: #191919;
+  --ss-hover: rgb(255 255 255 / .08);
   --ss-active: #282827;
   --ss-accent-soft: rgb(94 106 210 / .24);
   --ss-accent-text: #aeb7ff;

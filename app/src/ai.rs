@@ -40,14 +40,8 @@ struct Connection {
 }
 
 #[derive(Deserialize)]
-struct Turn {
-    role: String,
-    content: String,
-}
-
-#[derive(Deserialize)]
-struct Conversation {
-    messages: Vec<Turn>,
+struct ChatInput {
+    message: String,
 }
 
 const OPENCODE_URL: &str = "https://opencode.ai/inference/openai/v1";
@@ -203,9 +197,13 @@ impl Settings {
         let Some(connection) = self.current.lock().unwrap().clone() else {
             return json_error(req, 503, "Configura la IA en Mis archivos → Ajustes");
         };
-        let input = match server::read_json::<Conversation>(&mut req, 192 * 1024) {
-            Ok(input) if input.valid() => input,
-            Ok(_) => return json_error(req, 400, "Conversación no válida"),
+        let input = match server::read_json::<ChatInput>(&mut req, 64 * 1024) {
+            Ok(input)
+                if !input.message.trim().is_empty() && input.message.chars().count() <= 8000 =>
+            {
+                input
+            }
+            Ok(_) => return json_error(req, 400, "Escribe un mensaje de hasta 8000 caracteres"),
             Err(status) => return json_error(req, status, "Solicitud de IA no válida"),
         };
         if self.active.fetch_add(1, Ordering::Relaxed) >= 2 {
@@ -221,7 +219,7 @@ impl Settings {
                 }
             }
             let _slot = Slot(&chat.active);
-            match chat.complete(connection, input) {
+            match chat.complete(connection, input.message) {
                 Ok(text) => server::json(req, json!({"content": text})),
                 Err((code, message)) => json_error(req, code, message),
             }
@@ -231,15 +229,15 @@ impl Settings {
     fn complete(
         &self,
         connection: Connection,
-        input: Conversation,
+        message: String,
     ) -> Result<String, (u16, &'static str)> {
-        let messages: Vec<_> = input
-            .messages
-            .into_iter()
-            .map(|turn| json!({"role":turn.role,"content":turn.content}))
-            .collect();
         let invalid = (502, "El proveedor de IA devolvió una respuesta no válida");
-        let mut payload = json!({"model": connection.credentials.model, "messages": messages});
+        let free_opencode = matches!(connection.credentials.provider, Provider::Opencode)
+            && connection.credentials.model.ends_with("-free");
+        let mut payload = json!({
+            "model": connection.credentials.model,
+            "messages": [{"role": "user", "content": message}],
+        });
         let limit = match connection.credentials.provider {
             Provider::Openai => "max_completion_tokens",
             _ => "max_tokens",
@@ -254,6 +252,9 @@ impl Settings {
             )
             .send_json(payload)
             .map_err(|error| match error {
+                ureq::Error::StatusCode(403) if free_opencode => (
+                    502, "OpenCode reserva este modelo gratuito para su cliente. Elige un modelo habilitado para la API en Mis archivos → Ajustes.",
+                ),
                 ureq::Error::StatusCode(401 | 403) => {
                     (502, "El proveedor rechazó la clave o el modelo")
                 }
@@ -277,17 +278,5 @@ impl Settings {
             .filter(|text| !text.trim().is_empty())
             .map(str::to_owned)
             .ok_or(invalid)
-    }
-}
-
-impl Conversation {
-    fn valid(&self) -> bool {
-        !self.messages.is_empty()
-            && self.messages.len() <= 13
-            && self.messages.last().is_some_and(|turn| turn.role == "user")
-            && self.messages.iter().all(|turn| {
-                matches!(turn.role.as_str(), "user" | "assistant")
-                    && !turn.content.trim().is_empty()
-            })
     }
 }

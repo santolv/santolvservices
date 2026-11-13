@@ -23,7 +23,7 @@ El grafo abre en 3D. Arrastra el fondo o usa las flechas con el grafo enfocado p
 
 En un bloque vacío, escribe `/calendario` para insertar un calendario con eventos, `/gráfico` para editar un gráfico de barras por pares como `Enero: 12`, o `/lienzo` para crear o incrustar un canvas editable.
 
-En WordCraft, **Chat con IA** abre un panel junto al documento y usa el texto del DOCX guardado. Si hay cambios pendientes, guarda primero en WordCraft. La conversación se guarda en el navegador.
+En WordCraft, **Chat con IA** abre un panel junto al documento. La conversación se guarda en el navegador.
 
 ## Calendario y edición
 
@@ -97,7 +97,7 @@ El script instala la compilación en `craft-apps/wordcraft/`. Copia esa carpeta 
 
 ## Chat con IA
 
-Abre **Chat con IA** en la barra lateral o usa **Preguntar sobre este archivo** en una nota, colección o lienzo. **Enviar** manda la pregunta, los últimos turnos y el texto adjunto al proveedor. **Copiar consulta** prepara la pregunta y el texto para pegarlos en otro sitio.
+Abre **Chat con IA** en la barra lateral o usa **Preguntar sobre este archivo** en una nota, colección o lienzo. **Enviar** manda únicamente el texto que acabas de escribir. El historial y el archivo quedan fuera de la petición. **Copiar consulta** copia el texto de la pregunta.
 
 En **Mis archivos → Ajustes**, elige OpenCode, OpenAI o un proveedor compatible con Chat Completions. Introduce el identificador del modelo y la clave API. Para un proveedor compatible, indica también su URL base. OpenCode propone `deepseek-v4.1-flash`. Los cambios se aplican al guardar. La clave queda en `.supercerebro-ai.json` dentro de la bóveda del servidor. Trata ese archivo y sus copias como credenciales. En modo de cuentas, solo el propietario puede cambiar los ajustes. [Documentación de la API de OpenCode](https://opencode.ai/docs/console/api/inference)
 

@@ -1,16 +1,4 @@
-export function buildChatPrompt(question, document) {
-  if (!document) return question.trim();
-  return [
-    question.trim(),
-    'Usa el archivo adjunto como material de referencia.',
-    'Archivo: ' + document.path,
-    ...(document.truncated ? ['El texto está recortado por longitud.'] : []),
-    '',
-    document.content,
-  ].join('\n');
-}
-
-export function mountChat(panel, { storage, getDocument, icon, documentOnly = false, onVisibility = () => {} }) {
+export function mountChat(panel, { storage, icon, documentOnly = false, onVisibility = () => {} }) {
   panel.innerHTML = [
     '<header class="ai-chat-header"><div><h2>Chat con IA</h2><span data-chat-model></span></div>',
     '<button class="icon-button" type="button" data-chat-close aria-label="Cerrar chat">' + icon('X', 17) + '</button></header>',
@@ -120,30 +108,26 @@ export function mountChat(panel, { storage, getDocument, icon, documentOnly = fa
   };
   form.onsubmit = async event => {
     event.preventDefault();
-    const text = composer.value.trim();
+    const text = composer.value;
     const threadKey = key();
     const filePath = path;
-    if (!text || !enabled || pending.has(threadKey)) return;
+    if (!text.trim() || !enabled || pending.has(threadKey)) return;
     const history = questions();
     pending.add(threadKey);
     render();
     status.textContent = 'Esperando respuesta…';
     try {
-      const file = filePath ? await getDocument(filePath) : null;
-      if (filePath && !file) throw new Error('Vuelve a abrir el chat desde el archivo para usar su contenido.');
-      const context = file && { path: file.path, content: file.content.slice(0, 20000), truncated: file.truncated || file.content.length > 20000 };
-      const recent = history.slice(-12).map(message => ({ ...message, content: message.content.slice(0, 2000) }));
       const response = await fetch(endpoint('chat', filePath), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...recent, { role: 'user', content: buildChatPrompt(text, context) }] }),
+        body: JSON.stringify({ message: text }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'La IA no pudo responder.');
       store(threadKey, [...history, { role: 'user', content: text }, { role: 'assistant', content: result.content }]);
-      if ((drafts.get(threadKey) ?? text).trim() === text) {
+      if ((drafts.get(threadKey) ?? text) === text) {
         drafts.delete(threadKey);
-        if (key() === threadKey && composer.value.trim() === text) composer.value = '';
+        if (key() === threadKey && composer.value === text) composer.value = '';
       }
       if (key() === threadKey) status.textContent = '';
     } catch (error) {
@@ -157,27 +141,13 @@ export function mountChat(panel, { storage, getDocument, icon, documentOnly = fa
     const text = question();
     if (!text) return;
     const threadKey = key();
-    let prompt;
-    copy.disabled = true;
-    status.textContent = 'Preparando consulta…';
     try {
-      const file = path ? await getDocument(path) : null;
-      if (path && !file) throw new Error('Vuelve a abrir el chat desde el archivo para usar su contenido.');
-      prompt = buildChatPrompt(text, file);
-    } catch (error) {
-      if (!panel.hidden && key() === threadKey) status.textContent = error.message;
-      return;
-    } finally {
-      if (!panel.hidden && key() === threadKey) copy.disabled = !question();
-    }
-    if (panel.hidden || key() !== threadKey) return;
-    try {
-      await navigator.clipboard.writeText(prompt);
+      await navigator.clipboard.writeText(text);
       if (panel.hidden || key() !== threadKey) return;
-      status.textContent = path ? 'Consulta y archivo copiados.' : 'Consulta copiada.';
+      status.textContent = 'Consulta copiada.';
     } catch {
       if (panel.hidden || key() !== threadKey) return;
-      preview.value = prompt;
+      preview.value = text;
       preview.hidden = false;
       preview.focus();
       preview.select();

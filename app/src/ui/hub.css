@@ -1,8 +1,8 @@
 .hub {
-  --hub-shell: #1b1b1b;
-  --hub-surface: #131314;
-  --hub-search: #28292a;
-  --hub-control: #37393b;
+  --hub-shell: #1c1c1e;
+  --hub-surface: #000;
+  --hub-search: #1c1c1e;
+  --hub-control: #1c1c1e;
   --hub-text: #e3e3e3;
   --hub-muted: #c4c7c5;
   --hub-line: #3c4043;

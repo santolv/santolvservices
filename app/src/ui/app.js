@@ -43,7 +43,7 @@ app.innerHTML = `<div class="app-body"><aside class="sidebar sidebar-left" id="l
 <div class="resize-handle" id="resizeRight" role="separator" tabindex="0" aria-label="Ancho del panel derecho" aria-orientation="vertical"></div><aside class="sidebar sidebar-right" id="rightSidebar" aria-label="Panel derecho"><div class="sidebar-tabs"><div role="tablist" aria-label="Información de la nota">${button('List', 'Esquema', 'right-outline', 'selected')}${button('Links', 'Enlaces entrantes', 'right-backlinks')}${button('ArrowUpRight', 'Enlaces salientes', 'right-outgoing')}${button('Tags', 'Etiquetas', 'right-tags')}${button('SlidersHorizontal', 'Propiedades', 'right-properties')}</div></div><div id="rightContent" class="right-content"></div></aside><aside id="aiChat" class="ai-chat" aria-label="Chat con IA" hidden></aside></div>
 <footer class="status-bar"><span id="saveStatus" role="status">Bóveda local</span><span class="status-spacer"></span><span id="fileCount"></span><span id="wordCount"></span><button id="modeStatus" data-action="cycle-mode"></button></footer><div id="overlays"></div><div id="toast" role="status"></div><input id="importFiles" type="file" accept=".md,.markdown,.txt,.canvas,.base" multiple hidden>`;
 
-const chat = mountChat($('#aiChat'), { storage: safeStorage, getDocument: path => state.documents.get(path), icon });
+const chat = mountChat($('#aiChat'), { storage: safeStorage, icon });
 function chatWithFile() { const doc = activeDoc(); if (doc) chat.open(doc.path); }
 
 function notify(message, error = false) { const el = $('#toast'); el.textContent = message; el.className = error ? 'show error' : 'show'; clearTimeout(el.timer); el.timer = setTimeout(() => el.className = '', 3500); }

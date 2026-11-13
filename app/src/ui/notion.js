@@ -577,7 +577,7 @@ export function createNotion(ctx) {
       };
       const convert=(label,icon,type,detail,raw,aliases='')=>({label,icon,detail,aliases,action:()=>changeType(block,{type,raw})});
       const choices=customChoices||[
-        ...(typing ? [{label:'Preguntar a la IA',icon:'MessageSquare',detail:'Abre el chat con esta nota como contexto.',aliases:'ai ask chat',action:()=>ctx.chatWithNote(doc.path)}] : []),
+        ...(typing ? [{label:'Preguntar a la IA',icon:'MessageSquare',detail:'Abre el chat de esta nota.',aliases:'ai ask chat',action:()=>ctx.chatWithNote(doc.path)}] : []),
         {group:'Bloques básicos'},
         convert('Texto','Type','text','Escribe un párrafo.',plain,'paragraph text'),
         ...[1,2,3].map(n=>convert('Encabezado '+n,'H'+n,'h'+n,['Título principal.','Título de sección.','Título de subsección.'][n-1],'#'.repeat(n)+' '+plain,'titulo heading h'+n)),

@@ -94,21 +94,8 @@ export async function openCraft(path, editor, account) {
         launcher.setAttribute('aria-expanded', String(open));
         launcher.hidden = open;
       },
-      async getDocument(file) {
-        if (file !== localPath(currentName)) throw new Error('Abre el chat del documento actual para usar su texto.');
-        if (failed || dirty || pending) throw new Error('Guarda el documento en WordCraft y vuelve a pulsar Copiar consulta.');
-        const response = await requireOk(await fetch(fileUrl('/api/craft/context', file), {
-          headers: { 'If-Match': revisions.get(currentName) },
-        }));
-        const context = await response.json();
-        if (!context.content.trim()) throw new Error('El documento guardado aún no contiene texto.');
-        return context;
-      },
     });
-    launcher.onclick = () => {
-      requestSave?.();
-      chat.open(localPath(currentName));
-    };
+    launcher.onclick = () => chat.open(localPath(currentName));
   }
 
   window.addEventListener('beforeunload', event => {

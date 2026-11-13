@@ -1,8 +1,8 @@
 :root {
   color-scheme: dark;
-  --bg: #1C1C1C;
-  --bg-secondary: #232323;
-  --sidebar: #282828;
+  --bg: #000;
+  --bg-secondary: #1c1c1e;
+  --sidebar: #1c1c1e;
   --border: #333333;
   --accent: #8A5CF5;
   --text-normal: #DADADA;

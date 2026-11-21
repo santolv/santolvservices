@@ -1,0 +1,9 @@
+/target/
+/dist/
+/data/
+.env
+server.json
+/santolvdrive-server/
+*.pem
+*.key
+*.log

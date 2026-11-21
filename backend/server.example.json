@@ -1,0 +1,11 @@
+{
+  "database_url": "postgres://drive:replace-me@127.0.0.1:5432/drive",
+  "app_origin": "https://drive.example.com:8443",
+  "bind": "0.0.0.0:8443",
+  "storage_root": "data",
+  "tls_cert_file": "certificate.pem",
+  "tls_key_file": "private-key.pem",
+  "default_quota_bytes": 10737418240,
+  "trash_retention_days": 30,
+  "allow_insecure_localhost": false
+}

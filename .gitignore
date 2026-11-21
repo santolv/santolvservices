@@ -1,4 +1,0 @@
-/preview*.png
-.env
-.env.*
-!.env.example

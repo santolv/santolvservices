@@ -7,16 +7,18 @@ const html = fs.readFileSync(path.join(__dirname, '../../frontend/pruebahtml/ind
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/\nconnectAPI\(\);\s*$/, '');
 const elements = new Map();
 function element(id) {
+  const classes=new Set();
   if (!elements.has(id)) elements.set(id, { hidden:false, disabled:false, value:'', textContent:'', innerHTML:'', style:{}, dataset:{}, open:false,
-    listeners:{}, attributes:{}, classList:{toggle(){},add(){},remove(){},contains(){return false}},
-    addEventListener(type,handler){this.listeners[type]=handler}, querySelector(selector){return selector==='[type=submit]'?element('modal-submit'):null},
+    offsetWidth:250,offsetHeight:240,focus(){},getBoundingClientRect(){return {left:20,bottom:100}},
+    listeners:{}, attributes:{}, classList:{toggle(c,value){if(value??!classes.has(c))classes.add(c);else classes.delete(c)},add(c){classes.add(c)},remove(c){classes.delete(c)},contains(c){return classes.has(c)}},
+    addEventListener(type,handler){this.listeners[type]=handler}, querySelectorAll(){return []},querySelector(selector){return selector==='[type=submit]'?element('modal-submit'):null},
     setAttribute(name,value){this.attributes[name]=String(value)},removeAttribute(name){delete this.attributes[name]},
     showModal(){this.open=true},close(){this.open=false} });
   return elements.get(id);
 }
 const requests = [];
 const context = vm.createContext({ console, Headers, Blob, ArrayBuffer, Uint8Array, AbortSignal, URL, DOMException, FormData:class extends Map{constructor(){super()}},crypto:require('node:crypto').webcrypto,
-  setTimeout:()=>0, clearTimeout(){}, location:{protocol:'http:'},
+  setTimeout:()=>0, clearTimeout(){}, location:{protocol:'http:'},innerWidth:800,innerHeight:600,
   document:{body:element('body'),getElementById:element, addEventListener(){}, querySelectorAll(){return []}, querySelector(){return null}},
   window:{addEventListener(){}}, sessionStorage:{getItem(){return null},setItem(){},removeItem(){}},
   fetch:async (url, options={}) => { requests.push({url, options}); return {ok:true,status:200,json:async()=>({items:[],next_cursor:null})}; }
@@ -97,6 +99,27 @@ vm.runInContext(script, context);
   assert.equal(element('detail').open,true);
   assert(element('detail').innerHTML.includes('http://localhost:8443/api/v1/nodes/file-1/content'));
   assert(element('detail').innerHTML.includes('Budget &lt;2027&gt;.pdf'));
+  assert(!element('detail').innerHTML.includes('Historial de versiones'));
+  vm.runInContext("actions['new-menu']($('newBtn'))",context);
+  assert.equal(element('new-menu').classList.contains('show'),true);
+  assert(html.includes('right:auto;bottom:auto;width:250px'));
+  vm.runInContext("state.rows=[{id:'folder-1',name:'Trabajo',kind:'folder',revision:1}];nodeMenu({preventDefault(){},clientX:790,clientY:590},{dataset:{node:'folder-1'},getBoundingClientRect(){return {left:20,bottom:100}}})",context);
+  assert.equal(element('new-menu').classList.contains('show'),false);
+  assert.equal(element('node-menu').classList.contains('show'),true);
+  for(const action of ['inspect','rename','move','share','trash'])assert(element('node-menu').innerHTML.includes('data-action="'+action+'"'));
+  assert.equal(element('node-menu').style.left,'538px');assert.equal(element('node-menu').style.top,'348px');
+  vm.runInContext("state.rows[0].trashed_at='2026-11-22';nodeMenu({preventDefault(){}},{dataset:{node:'folder-1'},getBoundingClientRect(){return {left:20,bottom:100}}})",context);
+  assert(element('node-menu').innerHTML.includes('data-action="restore"'));
+  assert(element('node-menu').innerHTML.includes('data-action="purge"'));
+  assert(!element('node-menu').innerHTML.includes('data-action="rename"'));
+  vm.runInContext('closeMenus()',context);assert.equal(element('node-menu').classList.contains('show'),false);
+  const moveRequests=[];
+  context.fetch=async(url,options={})=>{moveRequests.push({url,options});return {ok:true,status:200,json:async()=>({items:[{id:'destination',name:'Destino',kind:'folder'}],next_cursor:null})}};
+  vm.runInContext("state.space='space';state.selected={id:'folder-1',space_id:'space',kind:'folder',name:'Trabajo',revision:1}",context);
+  await vm.runInContext('moveDialog()',context);
+  assert(moveRequests[0].url.startsWith('http://localhost:8443/api/v1/spaces/space/nodes?'));
+  assert(element('dialog-body').innerHTML.includes('data-destination="destination"'));
+  assert(!element('dialog-body').innerHTML.includes('Identificador'));
   vm.runInContext('signedOut()',context);
   assert.equal(element('detail').open,false);
   const deletionRequests=[];

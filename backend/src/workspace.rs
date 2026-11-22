@@ -39,74 +39,117 @@ pub async fn publish(s: &App, node: Uuid, mut value: serde_json::Value) -> serde
     value
 }
 
-async fn move_directory(old: &Path, target: &Path, stage: &Path, node: Uuid) -> Result<()> {
-    if tokio::fs::try_exists(stage).await? {
-        if marker(stage).await? != Some(node) || old.exists() || target.exists() {
-            return Err(Error::conflict("workspace_path_occupied"));
-        }
-    } else if tokio::fs::try_exists(old).await? {
-        if marker(old).await? != Some(node) {
-            return Err(Error::conflict("workspace_path_occupied"));
-        }
-        tokio::fs::rename(old, stage).await?;
-        storage::sync_dir(old.parent().unwrap()).await?;
-        storage::sync_dir(stage.parent().unwrap()).await?;
-        if tokio::fs::try_exists(target).await? {
-            tokio::fs::rename(stage, old).await?;
-            storage::sync_dir(old.parent().unwrap()).await?;
-            storage::sync_dir(stage.parent().unwrap()).await?;
+async fn move_directory(s: &App, old: &Path, target: &Path, node: Uuid) -> Result<()> {
+    // A bounded wait lets a cold pool open a connection without exhausting it in a lock cycle.
+    let mut journal = tokio::time::timeout(std::time::Duration::from_millis(250), s.db.acquire())
+        .await
+        .map_err(|_| Error::unavailable())??;
+    let intent: Option<(String, String)> =
+        sqlx::query_as("SELECT source,target FROM workspace_moves WHERE node_id=$1")
+            .bind(node)
+            .fetch_optional(&mut *journal)
+            .await?;
+    let source = old.to_string_lossy().to_string();
+    let destination = target.to_string_lossy().to_string();
+    let stage = s.root.join(".temporal/movimientos").join(node.to_string());
+    if let Some((a, b)) = &intent {
+        if Path::new(a) != old || Path::new(b) != target {
             return Err(Error::conflict("workspace_path_occupied"));
         }
     } else {
-        return Ok(());
-    }
-    tokio::fs::rename(stage, target).await?;
-    storage::sync_dir(stage.parent().unwrap()).await?;
-    storage::sync_dir(target.parent().unwrap()).await?;
-    Ok(())
-}
-
-async fn marker(path: &Path) -> Result<Option<Uuid>> {
-    let file = path.join(".drive-node");
-    match tokio::fs::symlink_metadata(&file).await {
-        Ok(info) if info.is_file() && !info.file_type().is_symlink() && info.len() <= 64 => {
-            Ok(tokio::fs::read_to_string(file).await?.trim().parse().ok())
+        if !tokio::fs::try_exists(old).await? && !tokio::fs::try_exists(&stage).await? {
+            return Err(Error::unavailable());
         }
-        Ok(_) => Err(Error::conflict("workspace_path_occupied")),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.into()),
+        sqlx::query("INSERT INTO workspace_moves(node_id,source,target) VALUES($1,$2,$3)")
+            .bind(node)
+            .bind(&source)
+            .bind(&destination)
+            .execute(&mut *journal)
+            .await?;
     }
+    drop(journal);
+    if !tokio::fs::try_exists(&stage).await? {
+        if !tokio::fs::try_exists(old).await?
+            && intent.is_some()
+            && tokio::fs::try_exists(target).await?
+        {
+            return Ok(());
+        }
+        tokio::fs::rename(old, &stage).await?;
+        storage::sync_dir(old.parent().unwrap()).await?;
+        storage::sync_dir(stage.parent().unwrap()).await?;
+    }
+    if tokio::fs::try_exists(target).await? {
+        if !tokio::fs::try_exists(old).await? {
+            tokio::fs::rename(&stage, old).await?;
+        }
+        return Err(Error::conflict("workspace_path_occupied"));
+    }
+    tokio::fs::rename(&stage, target).await?;
+    storage::sync_dir(stage.parent().unwrap()).await?;
+    storage::sync_dir(target.parent().unwrap()).await
 }
 
-async fn owned_directory(path: &Path, node: Uuid) -> Result<()> {
+async fn owned_directory(path: &Path, known: bool) -> Result<()> {
+    let existed = tokio::fs::try_exists(path).await?;
     storage::private_dir(path).await?;
-    if let Some(owner) = marker(path).await? {
-        return if owner == node {
-            Ok(())
-        } else {
-            Err(Error::conflict("workspace_path_occupied"))
-        };
-    }
-    if tokio::fs::read_dir(path)
-        .await?
-        .next_entry()
-        .await?
-        .is_some()
+    if existed
+        && !known
+        && tokio::fs::read_dir(path)
+            .await?
+            .next_entry()
+            .await?
+            .is_some()
     {
         return Err(Error::conflict("workspace_path_occupied"));
     }
-    let mut file = tokio::fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(path.join(".drive-node"))
-        .await?;
-    use tokio::io::AsyncWriteExt;
-    file.write_all(node.to_string().as_bytes()).await?;
-    file.sync_all().await?;
-    storage::sync_dir(path).await
+    // Compatibility: remove the previous identity sidecar only on an already registered node.
+    if known {
+        storage::remove(&path.join(".drive-node")).await?;
+    }
+    Ok(())
 }
 
-async fn entry_path(tx: &mut Transaction<'_, Postgres>, home: &Path, id: Uuid) -> Result<PathBuf> {
+pub async fn content_path(s: &App, directory: &str, object: Uuid, name: &str) -> Result<PathBuf> {
+    let mut tx = s.db.begin().await?;
+    content_path_tx(&mut tx, &s.root, directory, object, name).await
+}
+
+pub async fn content_path_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    root: &Path,
+    directory: &str,
+    object: Uuid,
+    name: &str,
+) -> Result<PathBuf> {
+    let entry: Option<Entry> =
+        sqlx::query_as("SELECT * FROM workspace_entries WHERE object_id=$1 LIMIT 1")
+            .bind(object)
+            .fetch_optional(&mut **tx)
+            .await?;
+    if let Some(e) = entry {
+        let path = entry_path(tx, &root.join(directory), e.node_id).await?;
+        if let Some(content_name) = e.content_name {
+            let path = path.join(content_name);
+            if let Ok(info) = tokio::fs::symlink_metadata(&path).await {
+                if !info.is_file() || info.file_type().is_symlink() {
+                    return Err(Error::unavailable());
+                }
+                return Ok(path);
+            }
+            if !tokio::fs::try_exists(storage::object(root, directory, object, name)).await? {
+                return Ok(path);
+            }
+        }
+    }
+    Ok(storage::object(root, directory, object, name))
+}
+
+pub(crate) async fn entry_path(
+    tx: &mut Transaction<'_, Postgres>,
+    home: &Path,
+    id: Uuid,
+) -> Result<PathBuf> {
     let entries:Vec<Entry>=sqlx::query_as("WITH RECURSIVE c AS (SELECT e.*,0 depth,ARRAY[e.node_id] seen FROM workspace_entries e WHERE node_id=$1 UNION ALL SELECT e.*,c.depth+1,c.seen||e.node_id FROM workspace_entries e JOIN c ON e.node_id=c.parent_id WHERE NOT c.trashed AND c.depth<128 AND NOT e.node_id=ANY(c.seen)) SELECT node_id,space_id,parent_id,component,source_name,kind,object_id,content_name,trashed FROM c ORDER BY depth DESC")
         .bind(id).fetch_all(&mut **tx).await?;
     let first = entries
@@ -117,7 +160,12 @@ async fn entry_path(tx: &mut Transaction<'_, Postgres>, home: &Path, id: Uuid) -
     }
     let space = first.space_id;
     let mut path = if first.trashed {
-        home.join(".papelera").join(first.node_id.to_string())
+        let legacy = home.join(".papelera").join(first.node_id.to_string());
+        if tokio::fs::try_exists(&legacy).await? {
+            legacy
+        } else {
+            home.join("papelera")
+        }
     } else {
         home.join("archivos")
     };
@@ -162,10 +210,20 @@ pub async fn sync_node(s: &App, id: Uuid) -> Result<()> {
         if let Some(entry) = old {
             let path = entry_path(&mut tx, &home, id).await?;
             if tokio::fs::try_exists(&path).await? {
-                if marker(&path).await? != Some(id) {
-                    return Err(Error::conflict("workspace_path_occupied"));
+                if let (Some(object), Some(name)) = (entry.object_id, entry.content_name.as_ref()) {
+                    let retained:Option<String>=sqlx::query_scalar("SELECT original_name FROM objects o WHERE id=$1 AND EXISTS(SELECT 1 FROM versions v WHERE v.object_id=o.id)")
+                        .bind(object).fetch_optional(&mut *tx).await?;
+                    if let Some(original) = retained {
+                        let source = path.join(name);
+                        let target =
+                            storage::prepare_object(&s.root, &directory, object, &original).await?;
+                        if !tokio::fs::try_exists(&target).await? {
+                            tokio::fs::rename(source, &target).await?;
+                            storage::sync_dir(target.parent().unwrap()).await?;
+                        }
+                    }
                 }
-                // Only a server-managed directory with the matching node marker may be removed.
+                // The path is resolved from the durable registry, with every ancestor checked.
                 tokio::fs::remove_dir_all(&path).await?;
                 storage::sync_dir(path.parent().unwrap()).await?;
             }
@@ -178,6 +236,10 @@ pub async fn sync_node(s: &App, id: Uuid) -> Result<()> {
         }
         for node in nodes {
             sync_entry(s, &mut tx, &home, &directory, &node).await?;
+            sqlx::query("DELETE FROM workspace_moves WHERE node_id=$1")
+                .bind(node.id)
+                .execute(&mut *tx)
+                .await?;
         }
     }
     sqlx::query("DELETE FROM workspace_jobs WHERE node_id=$1")
@@ -201,9 +263,7 @@ async fn sync_entry(
         .await?;
     let trashed = node.trashed_at.is_some();
     let parent = if trashed {
-        let base = home.join(".papelera");
-        storage::private_dir(&base).await?;
-        let base = base.join(node.id.to_string());
+        let base = home.join("papelera");
         storage::private_dir(&base).await?;
         base
     } else if let Some(id) = node.parent_id {
@@ -217,7 +277,7 @@ async fn sync_entry(
     }
     let mut component = old
         .as_ref()
-        .filter(|e| e.source_name == node.name)
+        .filter(|e| e.source_name == node.name && e.trashed == trashed)
         .map(|e| e.component.clone())
         .unwrap_or_else(|| name.clone());
     if component.to_ascii_lowercase().starts_with(".drive-") {
@@ -234,16 +294,59 @@ async fn sync_entry(
         }
         component = prefix + &suffix;
     }
+    if trashed {
+        let mut number = 1;
+        loop {
+            let occupied: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workspace_entries WHERE space_id=$1 AND trashed AND lower(component)=lower($2) AND node_id<>$3)")
+                .bind(node.space_id).bind(&component).bind(node.id).fetch_one(&mut **tx).await?;
+            if !occupied {
+                break;
+            }
+            number += 1;
+            let suffix = format!(" ({number})");
+            let mut prefix = name.clone();
+            while prefix.len() + suffix.len() > 255 {
+                prefix.pop();
+            }
+            component = prefix + &suffix;
+        }
+    }
     let path = parent.join(&component);
     if let Some(entry) = &old {
         let old_path = entry_path(tx, home, entry.node_id).await?;
         if old_path != path {
-            let moves = home.join(".moves");
-            storage::private_dir(&moves).await?;
-            move_directory(&old_path, &path, &moves.join(node.id.to_string()), node.id).await?;
+            let legacy = home.join(".moves").join(node.id.to_string());
+            if tokio::fs::try_exists(&legacy).await? {
+                let info = tokio::fs::symlink_metadata(&legacy).await?;
+                if !info.is_dir()
+                    || info.file_type().is_symlink()
+                    || tokio::fs::read_to_string(legacy.join(".drive-node"))
+                        .await?
+                        .trim()
+                        != node.id.to_string()
+                {
+                    return Err(Error::conflict("workspace_path_occupied"));
+                }
+                let stage = s
+                    .root
+                    .join(".temporal/movimientos")
+                    .join(node.id.to_string());
+                if tokio::fs::try_exists(&stage).await? {
+                    return Err(Error::conflict("workspace_path_occupied"));
+                }
+                tokio::fs::rename(&legacy, &stage).await?;
+                storage::sync_dir(stage.parent().unwrap()).await?;
+                storage::sync_dir(legacy.parent().unwrap()).await?;
+            }
+            move_directory(s, &old_path, &path, node.id).await?;
+            // Remove only empty directories left by the previous trash layout.
+            if old_path.starts_with(home.join(".papelera")) {
+                let _ = tokio::fs::remove_dir(old_path.parent().unwrap()).await;
+                let _ = tokio::fs::remove_dir(home.join(".papelera")).await;
+            }
         }
     }
-    owned_directory(&path, node.id).await?;
+    owned_directory(&path, old.is_some()).await?;
     let mut content = None;
     if let Some(version) = node.current_version {
         let row=sqlx::query("SELECT o.id,o.original_name,o.size,o.sha256 FROM versions v JOIN objects o ON o.id=v.object_id WHERE v.id=$1 AND o.state='ready'")
@@ -260,7 +363,24 @@ async fn sync_entry(
         }
         let previous = previous_name.map(|n| path.join(n));
         if known && previous.as_ref() != Some(&target) {
-            let stage = path.join(".drive-rename");
+            let stage = s
+                .root
+                .join(".temporal/movimientos")
+                .join(format!("{}.contenido", node.id));
+            let legacy = path.join(".drive-rename");
+            if tokio::fs::try_exists(&legacy).await? {
+                let info = tokio::fs::symlink_metadata(&legacy).await?;
+                if !info.is_file()
+                    || info.file_type().is_symlink()
+                    || stage.exists()
+                    || storage::checksum(&legacy).await?.1 != row.get::<String, _>("sha256")
+                {
+                    return Err(Error::conflict("workspace_path_occupied"));
+                }
+                tokio::fs::rename(&legacy, &stage).await?;
+                storage::sync_dir(&path).await?;
+                storage::sync_dir(stage.parent().unwrap()).await?;
+            }
             if stage.exists() {
                 let info = tokio::fs::symlink_metadata(&stage).await?;
                 if !info.is_file()
@@ -277,13 +397,15 @@ async fn sync_entry(
             } else if previous.as_ref().is_some_and(|p| p.exists()) {
                 tokio::fs::rename(previous.as_ref().unwrap(), &stage).await?;
                 storage::sync_dir(&path).await?;
+                storage::sync_dir(stage.parent().unwrap()).await?;
                 if target.exists() {
                     tokio::fs::rename(&stage, previous.as_ref().unwrap()).await?;
                     return Err(Error::conflict("workspace_path_occupied"));
                 }
             }
             if stage.exists() {
-                tokio::fs::rename(stage, &target).await?;
+                tokio::fs::rename(&stage, &target).await?;
+                storage::sync_dir(stage.parent().unwrap()).await?;
             }
         }
         let valid = match tokio::fs::symlink_metadata(&target).await {
@@ -295,37 +417,35 @@ async fn sync_entry(
             Err(e) => return Err(e.into()),
         };
         if !known || !valid {
-            storage::capacity(&s.root, row.get::<i64, _>("size") as u64).await?;
-            let temporary = path.join(".drive-copy");
-            if tokio::fs::try_exists(&temporary).await? {
-                let info = tokio::fs::symlink_metadata(&temporary).await?;
-                if !info.is_file() || info.file_type().is_symlink() {
+            let source = storage::object(&s.root, directory, object, row.get("original_name"));
+            if tokio::fs::try_exists(&source).await? {
+                if let Ok(info) = tokio::fs::symlink_metadata(&target).await
+                    && (!info.is_file() || info.file_type().is_symlink())
+                {
                     return Err(Error::conflict("workspace_path_occupied"));
                 }
-                storage::remove(&temporary).await?;
+                tokio::fs::rename(&source, &target).await?;
+                storage::sync_dir(source.parent().unwrap()).await?;
+                tokio::fs::remove_dir(source.parent().unwrap()).await?;
+                if let Some(previous) = previous.filter(|p| p != &target) {
+                    storage::remove(&previous).await?;
+                }
+            } else {
+                let (size, hash) = storage::checksum(&target).await?;
+                if size != row.get::<i64, _>("size") || hash != row.get::<String, _>("sha256") {
+                    return Err(Error::unavailable());
+                }
             }
+        } else {
+            // Remove a redundant copy left by the old layout only after verifying the live bytes.
             let source = storage::object(&s.root, directory, object, row.get("original_name"));
-            tokio::fs::copy(&source, &temporary).await?;
-            let f = tokio::fs::OpenOptions::new()
-                .write(true)
-                .open(&temporary)
-                .await?;
-            f.sync_all().await?;
-            drop(f);
-            if !known && target.exists() && previous.as_ref() != Some(&target) {
+            if tokio::fs::try_exists(&source).await? {
                 let (_, hash) = storage::checksum(&target).await?;
                 if hash != row.get::<String, _>("sha256") {
-                    return Err(Error::conflict("workspace_path_occupied"));
+                    return Err(Error::conflict("file_integrity_mismatch"));
                 }
-            }
-            if let Ok(info) = tokio::fs::symlink_metadata(&target).await
-                && (!info.is_file() || info.file_type().is_symlink())
-            {
-                return Err(Error::conflict("workspace_path_occupied"));
-            }
-            tokio::fs::rename(&temporary, &target).await?;
-            if let Some(previous) = previous.filter(|p| p != &target) {
-                storage::remove(&previous).await?;
+                storage::remove_object(&s.root, directory, object, row.get("original_name"))
+                    .await?;
             }
         }
         storage::sync_dir(&path).await?;

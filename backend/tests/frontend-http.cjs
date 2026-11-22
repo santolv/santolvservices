@@ -36,8 +36,8 @@ async function main(){
  const saved=path.join(root,'data','usuarios','file-user','archivos','informe ñ.custom','informe ñ.custom');assert.deepEqual(fs.readFileSync(saved),payload);
  const downloaded=await fetch(api+'/api/v1/nodes/'+status.result_node+'/content',{headers});assert.equal(downloaded.status,200);assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),payload);
  assert(downloaded.headers.get('content-disposition').includes("filename*=UTF-8''informe%20%C3%B1.custom"));
- const archive=path.join(root,'data','usuarios','file-user','.versions',upload.id,'informe ñ.custom');assert.deepEqual(fs.readFileSync(archive),payload);
- const trashed=path.join(root,'data','usuarios','file-user','.papelera',status.result_node,'informe ñ.custom','informe ñ.custom');
+ const archive=path.join(root,'data','usuarios','file-user','.versions',upload.id,'informe ñ.custom');assert(!fs.existsSync(archive));assert(!fs.existsSync(path.join(path.dirname(saved),'.drive-node')));
+ const trashed=path.join(root,'data','usuarios','file-user','papelera','informe ñ.custom','informe ñ.custom');
  const nodePath=api+'/api/v1/nodes/'+status.result_node;
  const mutateHeaders={...headers,'Idempotency-Key':crypto.randomUUID(),'If-Match':'"1"'};
  assert.equal((await fetch(nodePath+'/trash',{method:'POST',headers:mutateHeaders})).status,200);

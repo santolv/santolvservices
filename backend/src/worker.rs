@@ -117,7 +117,7 @@ pub async fn tick(s: &App, cursor: &mut Uuid, cancelled_cursor: &mut Uuid) -> Re
     }
     garbage_collect(s).await?;
     let objects = sqlx::query(
-        "SELECT o.id,o.size,o.sha256,o.state,o.original_name,s.storage_directory FROM objects o JOIN spaces s ON s.id=o.space_id WHERE o.state IN ('ready','missing') AND o.id>$1 ORDER BY o.id LIMIT 100",
+        "SELECT o.id,o.space_id,o.size,o.sha256,o.state,o.original_name,s.storage_directory FROM objects o JOIN spaces s ON s.id=o.space_id WHERE o.state IN ('ready','missing') AND o.id>$1 ORDER BY o.id LIMIT 100",
     )
     .bind(*cursor)
     .fetch_all(&s.db)
@@ -127,28 +127,38 @@ pub async fn tick(s: &App, cursor: &mut Uuid, cancelled_cursor: &mut Uuid) -> Re
         let size: i64 = r.get("size");
         let directory: &str = r.get("storage_directory");
         let name: &str = r.get("original_name");
+        let mut tx = s.db.begin().await?;
+        files::lock(&mut tx, r.get("space_id")).await?;
+        let state: Option<String> = sqlx::query_scalar(
+            "SELECT state FROM objects WHERE id=$1 AND state IN ('ready','missing')",
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(state) = state else { continue };
         storage::relocate_legacy(&s.root, directory, id, name).await?;
-        let valid = match tokio::fs::metadata(storage::object(&s.root, directory, id, name)).await {
-            Ok(m) => m.len() == size as u64,
+        let path = crate::workspace::content_path_tx(&mut tx, &s.root, directory, id, name).await?;
+        let valid = match tokio::fs::symlink_metadata(&path).await {
+            Ok(m) => m.is_file() && !m.file_type().is_symlink() && m.len() == size as u64,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
             Err(e) => return Err(e.into()),
         };
         if !valid {
             sqlx::query("UPDATE objects SET state='missing' WHERE id=$1 AND state='ready'")
                 .bind(id)
-                .execute(&s.db)
+                .execute(&mut *tx)
                 .await?;
             tracing::error!(object=%id,"content missing or truncated; restore backup required");
-        } else if r.get::<String, _>("state") == "missing" {
-            let (_, hash) =
-                storage::checksum(&storage::object(&s.root, directory, id, name)).await?;
+        } else if state == "missing" {
+            let (_, hash) = storage::checksum(&path).await?;
             if hash == r.get::<String, _>("sha256") {
                 sqlx::query("UPDATE objects SET state='ready' WHERE id=$1 AND state='missing'")
                     .bind(id)
-                    .execute(&s.db)
+                    .execute(&mut *tx)
                     .await?;
             }
         }
+        tx.commit().await?;
         *cursor = id;
     }
     if objects.len() < 100 {
@@ -177,6 +187,9 @@ async fn purge_leaf(s: &App) -> Result<bool> {
     let Some(root) = root else { return Ok(false) };
     let n = files::node(&mut tx, root).await?;
     files::lock(&mut tx, n.space_id).await?;
+    if files::workspace_ready(&mut tx, n.space_id).await.is_err() {
+        return Ok(false);
+    }
     if n.trashed_at.is_none() {
         sqlx::query("DELETE FROM purge_jobs WHERE node_id=$1")
             .bind(root)
@@ -216,6 +229,11 @@ async fn purge_leaf(s: &App) -> Result<bool> {
             .await?;
     }
     tx.commit().await?;
+    if let Some(id) = leaf
+        && let Err(e) = crate::workspace::sync_node(s, id).await
+    {
+        tracing::warn!(node=%id,code=e.1,"physical deletion deferred");
+    }
     Ok(leaf.is_some())
 }
 async fn garbage_collect(s: &App) -> Result<()> {

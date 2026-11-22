@@ -101,21 +101,9 @@ pub fn document() -> Value {
             "user_id?,subject_space_id?",
         ),
         (
-            "/api/v1/nodes/{id}/versions",
-            "get",
-            "List immutable versions by UUID cursor",
-            "",
-        ),
-        (
-            "/api/v1/nodes/{id}/versions/{version}/restore",
-            "post",
-            "Create version referencing previous immutable content",
-            "",
-        ),
-        (
             "/api/v1/nodes/{id}/content",
             "get",
-            "Stream current or selected version; single byte range supported",
+            "Stream current content; single byte range supported",
             "",
         ),
         (
@@ -189,12 +177,11 @@ pub fn document() -> Value {
             p.push(json!({"name":"If-Match","in":"header","required":true,"description":"Quoted node revision, e.g. \"1\"","schema":{"type":"string"}}));
         }
         if path == "/api/v1/uploads" {
-            p.push(json!({"name":"If-Match","in":"header","description":"Required for node_id (new file version)","schema":{"type":"string"}}));
+            p.push(json!({"name":"If-Match","in":"header","description":"Required for node_id (replace file)","schema":{"type":"string"}}));
         }
         if method == "get"
             && (path.ends_with("/nodes")
                 || path.ends_with("/shared")
-                || path.ends_with("/versions")
                 || path.ends_with("/members")
                 || path == "/api/v1/spaces"
                 || path.ends_with("/grants"))
@@ -214,11 +201,7 @@ pub fn document() -> Value {
             }
         }
         if method == "get" && path.ends_with("/content") {
-            for (name, location) in [
-                ("Range", "header"),
-                ("If-Range", "header"),
-                ("version", "query"),
-            ] {
+            for (name, location) in [("Range", "header"), ("If-Range", "header")] {
                 p.push(json!({"name":name,"in":location,"schema":{"type":"string"}}));
             }
         }

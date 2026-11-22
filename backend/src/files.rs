@@ -670,56 +670,6 @@ pub async fn grants(
 pub struct VersionQuery {
     after: Option<Uuid>,
 }
-pub async fn versions(
-    State(s): State<App>,
-    u: User,
-    Path(id): Path<Uuid>,
-    Query(q): Query<VersionQuery>,
-) -> Result<Json<Value>> {
-    let mut tx = s.db.begin().await?;
-    access(&mut tx, id, u.id, 1, false).await?;
-    let v:Vec<Value>=sqlx::query_scalar("SELECT to_jsonb(v) FROM versions v WHERE node_id=$1 AND ($2::uuid IS NULL OR id>$2) ORDER BY id LIMIT 101").bind(id).bind(q.after).fetch_all(&mut *tx).await?;
-    Ok(page(v, "id"))
-}
-pub async fn restore_version(
-    State(s): State<App>,
-    u: User,
-    Path((id, version)): Path<(Uuid, Uuid)>,
-    h: HeaderMap,
-) -> Result<Json<Value>> {
-    let fp = format!("version:{id}:{version}:{}", revision(&h)?);
-    let mut tx = s.db.begin().await?;
-    let (key, old) = replay(&mut tx, u.id, &h, &fp).await?;
-    if let Some(v) = old {
-        return Ok(Json(v));
-    }
-    let n = node(&mut tx, id).await?;
-    lock(&mut tx, n.space_id).await?;
-    let n = access(&mut tx, id, u.id, 2, false).await?;
-    workspace_ready(&mut tx, n.space_id).await?;
-    check_revision(&n, &h)?;
-    let object:Uuid=sqlx::query_scalar("SELECT v.object_id FROM versions v JOIN objects o ON o.id=v.object_id WHERE v.id=$1 AND v.node_id=$2 AND o.state='ready'").bind(version).bind(id).fetch_optional(&mut *tx).await?.ok_or_else(Error::denied)?;
-    let new = Uuid::new_v4();
-    sqlx::query("INSERT INTO versions(id,node_id,object_id,created_by) VALUES($1,$2,$3,$4)")
-        .bind(new)
-        .bind(id)
-        .bind(object)
-        .bind(u.id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("UPDATE nodes SET current_version=$1,revision=revision+1 WHERE id=$2")
-        .bind(new)
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
-    let v = json!({"id":id,"version_id":new,"revision":n.revision+1});
-    audit(&mut tx, u.id, n.space_id, "version_restored", id).await?;
-    crate::workspace::schedule(&mut tx, id, n.space_id).await?;
-    remember(&mut tx, u.id, &key, &fp, &v).await?;
-    tx.commit().await?;
-    Ok(Json(crate::workspace::publish(&s, id, v).await))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

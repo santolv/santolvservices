@@ -77,7 +77,7 @@ Bootstrap solo funciona una vez y nunca promueve una cuenta existente. `reset-ad
 
 ## Datos existentes y migración
 
-Se conservan las migraciones SQL, cuentas, permisos, versiones y contenido. Para adaptar una configuración anterior: detener el servidor y ejecutar `santolvdrive configure-local --config /ruta/server.json`. Conserva credenciales SQL, rutas y cuotas, guarda el original como `server.before-local.json` y sustituye únicamente la configuración de acceso por HTTP de loopback. No elimina ni convierte los datos. Reiniciar con el mismo archivo. Proteger también el backup, que contiene las credenciales SQL.
+Se conservan las migraciones SQL, cuentas, permisos y el contenido actual. La migración 0007 retira el historial anterior, como parte de la simplificación solicitada. Para adaptar una configuración anterior: detener el servidor y ejecutar `santolvdrive configure-local --config /ruta/server.json`. Conserva credenciales SQL, rutas y cuotas, guarda el original como `server.before-local.json` y sustituye únicamente la configuración de acceso por HTTP de loopback. No elimina ni convierte los datos. Reiniciar con el mismo archivo. Proteger también el backup, que contiene las credenciales SQL.
 
 La migración `0002` de cuentas sigue conservando IDs y contraseñas y sustituyendo el identificador anterior por `username`; los clientes usan `{username,password}`. No hay emails, verificaciones ni recuperación pública. El administrador del servidor administra cuentas y no es un gestor de espacios.
 
@@ -96,25 +96,25 @@ Los nombres se normalizan a Unicode NFC, aceptan hasta 255 bytes UTF-8 y rechaza
 
 `GET /nodes/{id}` devuelve ETag con revisión (`"1"`). En renombrado, movimiento, papelera, restauración y restauración de versión enviar `If-Match`. Falta de cabecera: `428`; versión obsoleta: `412`; ciclo de carpetas: `409`. Estas escrituras y la creación de organizaciones/carpetas/cargas requieren `Idempotency-Key` (1–128 bytes), válido 7 días. Repetir clave/payload devuelve el resultado original; cambiar payload con la misma clave devuelve `409`. Las operaciones de asignar/quitar permisos tienen semántica de estado final y son naturalmente repetibles.
 
-`GET /nodes/{id}/versions` lista versiones; `POST /nodes/{id}/versions/{version}/restore` crea una versión nueva que referencia el contenido anterior sin copiar bytes. Las versiones se conservan hasta eliminar definitivamente el archivo. Los listados devuelven `items` y `next_cursor`, con orden UUID estable. Son vistas en vivo, no snapshots: una creación/movimiento concurrente puede requerir refrescar desde el inicio para ver todo.
+No hay historial ni restauración de versiones. Reemplazar un archivo conserva únicamente el contenido nuevo; el ETag de metadatos sigue detectando escrituras simultáneas. Los listados devuelven `items` y `next_cursor`, con orden UUID estable. Son vistas en vivo: una creación o movimiento concurrente puede requerir refrescar desde el inicio.
 
-`GET /nodes/{id}/content?version=UUID` descarga la versión elegida o actual, siempre como adjunto binario. Soporta un solo `Range` (incluido sufijo), `If-Range` y streaming de 64 KiB. El ETag de **contenido** es el SHA-256; para modificar usar la revisión ETag de **metadatos**. Cancelar la descarga deja de leer el archivo. Una revocación impide nuevas solicitudes; no recupera bytes ya entregados ni detiene una respuesta ya autorizada.
+`GET /nodes/{id}/content` descarga el contenido actual, siempre como adjunto binario. Soporta un solo `Range` (incluido sufijo), `If-Range` y streaming de 64 KiB. El ETag de **contenido** es el SHA-256; para modificar usar la revisión ETag de **metadatos**. Cancelar la descarga deja de leer el archivo. Una revocación impide nuevas solicitudes; no recupera bytes ya entregados ni detiene una respuesta ya autorizada.
 
 ## Consistencia y mantenimiento
 
-Los temporales y objetos viven en el mismo volumen persistente. Publicar hace rename y sincroniza archivo/directorios en Linux antes de confirmar en PostgreSQL. El estado `pending` nunca aparece en listados de archivos; solo las versiones `ready` son descargables. Si se pierde el commit tras publicar, el mismo upload ID permite al reconciliador completar la operación. Si el disco pierde contenido confirmado, se marca `missing` y se falla de forma cerrada: hace falta restaurar una copia, no inventar bytes.
+Los temporales y objetos viven en el mismo volumen persistente. Publicar hace rename y sincroniza archivo/directorios en Linux antes de confirmar en PostgreSQL. El estado `pending` nunca aparece en listados de archivos; solo los contenidos `ready` son descargables. Si se pierde el commit tras publicar, el mismo upload ID permite al reconciliador completar la operación. Si el disco pierde contenido confirmado, se marca `missing` y se falla de forma cerrada: hace falta restaurar una copia, no inventar bytes.
 
 El trabajador recupera publicaciones interrumpidas, expira cargas, reintenta borrados y detecta contenido ausente o truncado. La integridad SHA-256 se verifica en cada bloque y finalización. El mantenimiento de fondo comprueba existencia/tamaño; no hace lectura/hash periódico de todo el disco. Los temporales sin confirmar se truncan al offset confirmado en el siguiente reintento.
 
-Mover a la papelera permite restaurar. Un gestor puede confirmar POST /nodes/{id}/purge con If-Match sin esperar: devuelve 202 vacío, oculta el elemento y encola el borrado físico por lotes. Las versiones sin otras referencias se eliminan del disco y liberan cuota al confirmar su retirada. Las que todavía estén referenciadas se conservan. No se añade borrado automático: la papelera se vacía mediante la acción explícita del usuario. TRASH_RETENTION_DAYS se conserva para compatibilidad de configuración, pero no bloquea esa confirmación manual. Los contenidos huérfanos que no procedan de un borrado solicitado mantienen la recogida de seguridad tras 24 horas. Las reservas no preasignan capacidad física; no se publican archivos incompletos si el volumen se llena.
+Mover a la papelera permite restaurar. Un gestor puede confirmar POST /nodes/{id}/purge con If-Match sin esperar: devuelve 202 vacío, oculta el elemento y encola el borrado físico por lotes. El contenido se elimina del disco y libera cuota al confirmar su retirada. Las referencias compartidas heredadas se conservan mientras sigan en uso. No se añade borrado automático: la papelera se vacía mediante la acción explícita del usuario. TRASH_RETENTION_DAYS se conserva para compatibilidad de configuración, pero no bloquea esa confirmación manual. Los contenidos huérfanos que no procedan de un borrado solicitado mantienen la recogida de seguridad tras 24 horas. Las reservas no preasignan capacidad física; no se publican archivos incompletos si el volumen se llena.
 
 Las escrituras estructurales se serializan por espacio con advisory locks PostgreSQL para impedir ciclos y movimientos incompatibles. Las cargas se bloquean por sesión; la transferencia no bloquea todo el espacio. Los valores iniciales son 16 conexiones SQL, 128 solicitudes, 8 transferencias y 2 hashes Argon2id simultáneos por proceso. Son límites conservadores iniciales, no una capacidad garantizada. El cierre espera solicitudes HTTP activas; un corte forzado se recupera desde estado persistente.
 
 ## Copias, actualizaciones y operación
 
-La garantía de durabilidad de producción requiere Linux y un sistema de archivos local que respete fsync y rename atómico, con `.uploads/` y `archivos/` en el mismo volumen. En Windows se pueden desarrollar y probar los flujos, pero no se sincronizan directorios y no se promete resistencia equivalente a pérdida de energía. Mantener el almacenamiento accesible solo por el usuario de servicio y no permitir escrituras de otros usuarios. Los archivos se entregan sin ejecución, extracción, inspección activa ni renderizado de HTML.
+La garantía de durabilidad de producción requiere Linux y un sistema de archivos local que respete fsync y rename atómico, con `.temporal/` y `archivos/` en el mismo volumen. En Windows se pueden desarrollar y probar los flujos, pero no se sincronizan directorios y no se promete resistencia equivalente a pérdida de energía. Mantener el almacenamiento accesible solo por el usuario de servicio y no permitir escrituras de otros usuarios. Los archivos se entregan sin ejecución, extracción, inspección activa ni renderizado de HTML.
 
-Para una copia consistente inicial: detener el backend/trabajador, crear `pg_dump` y copiar todo `STORAGE_ROOT` mientras sigue detenido, cifrar y enviar ambas partes a un destino independiente, y arrancar de nuevo. Guardar identificador de pareja y checksum de ambos backups. Para restaurar, parar el backend, restaurar PostgreSQL y el directorio de la **misma** copia en un entorno aislado, iniciar reconciliación y verificar cuentas, permisos, versiones y descargas antes de reabrir acceso. El reconciliador no sustituye una copia de seguridad.
+Para una copia consistente inicial: detener el backend/trabajador, crear `pg_dump` y copiar todo `STORAGE_ROOT` mientras sigue detenido, cifrar y enviar ambas partes a un destino independiente, y arrancar de nuevo. Guardar identificador de pareja y checksum de ambos backups. Para restaurar, parar el backend, restaurar PostgreSQL y el directorio de la **misma** copia en un entorno aislado, iniciar reconciliación y verificar cuentas, permisos y descargas antes de reabrir acceso. El reconciliador no sustituye una copia de seguridad.
 
 Proteger las credenciales de PostgreSQL, la configuración y la clave privada TLS. El cifrado del volumen y backups corresponde al administrador; esta versión no incluye cifrado de extremo a extremo ni gestión propia de claves. No exponer PostgreSQL, métricas ni logs con datos sensibles en Internet.
 
@@ -131,35 +131,31 @@ cargo test --locked
 
 Los tests SQLx crean bases aisladas y aplican migraciones automáticamente. No usar credenciales de producción. El CI añade `cargo audit`. Las consultas usan parámetros enlazados y se prueban contra PostgreSQL; no se generan metadatos SQLx offline de comprobación de queries en compilación.
 
-Para medir tu VPS: usar un build release, poblar carpetas e historiales crecientes y aumentar carga concurrente de listados y transferencias; registrar p50/p95/p99, MB/s, RAM, CPU, IOPS, esperas SQL, respuestas 429 y errores. El test de carga ignorado en `tests/load.rs` permite obtener una primera línea base de listados contra una BD de pruebas. No equivale a una prueba de red ni a una capacidad máxima certificada.
+Para medir tu VPS: usar un build release, poblar carpetas y volúmenes de archivos crecientes y aumentar carga concurrente de listados y transferencias; registrar p50/p95/p99, MB/s, RAM, CPU, IOPS, esperas SQL, respuestas 429 y errores. El test de carga ignorado en `tests/load.rs` permite obtener una primera línea base de listados contra una BD de pruebas. No equivale a una prueba de red ni a una capacidad máxima certificada.
 
 La primera entrega no incorpora S3, búsquedas de contenido, previews, enlaces públicos, comentarios ni clientes. Tampoco se ha auditado externamente. Para múltiples instancias, todas deben usar el mismo almacenamiento coherente y DB; los límites locales se multiplican por proceso y hay que volver a medirlos. El bloqueo por espacio prioriza consistencia y puede convertirse en el límite de escritura de una organización muy activa.
 
 ## Almacenamiento físico por usuario
 
 ```text
-usuarios/nombre_usuario/
-  archivos/
-    Trabajo/                         # Carpeta creada en el Drive
-      informe.pdf/                   # Carpeta del archivo
-        informe.pdf                  # Copia de trabajo del archivo actual
-        .drive-node                  # Identidad interna; no modificar
-  .versions/UUID/nombre_original.ext  # Historial inmutable
-  .uploads/                          # Subidas temporales
-  .papelera/                         # Elementos movidos a la papelera
-  .moves/                            # Movimientos interrumpidos, recuperables
+data/
+  usuarios/nombre_usuario/
+    archivos/
+      Trabajo/
+        informe.pdf/
+          informe.pdf             # Único contenido del archivo
+    papelera/                     # Elementos eliminados, por nombre
+  .temporal/                      # Solo operaciones en curso del servidor
 ```
 
-Los espacios de organizaciones tienen la misma estructura bajo organizaciones/UUID. El superusuario no recibe espacio de archivos. Los contenidos se mantienen en el espacio propietario aunque los modifique un colaborador.
+Cada usuario tiene una rama propia. Las organizaciones tienen una rama independiente en `organizaciones/<id>`. Los IDs de nodos y permisos permanecen en PostgreSQL; no hay marcadores `.drive-node` en las carpetas. Se conserva la carpeta por archivo solicitada anteriormente para posibles datos auxiliares. Mover o renombrar conserva el directorio completo.
 
-La jerarquía de carpetas lógica se refleja en archivos/. Cada archivo se presenta como nombre.ext/nombre.ext. Crear, renombrar, mover, restaurar, cambiar de versión y eliminar actualizan el árbol. Las carpetas de los archivos pueden contener metadatos auxiliares; se conservan al moverlas o renombrarlas. El prefijo .drive- está reservado al servidor. No editar ni eliminar esos marcadores ni los directorios internos. Las modificaciones de la copia de trabajo realizadas fuera de la API no se incorporan al historial: usar la API para actualizar el documento y escribir datos auxiliares en archivos distintos.
+No se generan copias de seguridad ni se conserva historial. Reemplazar un archivo retira el contenido anterior. Mover a la papelera permite restaurar; confirmar la eliminación definitiva retira los bytes mediante una tarea reanudable. Dos elementos con igual nombre en la papelera se distinguen con sufijos `(2)`, `(3)`, etc. Restaurar sobre un nombre ocupado devuelve un conflicto.
 
-El historial queda separado en .versions. La copia de trabajo es independiente, sin enlaces duros, para que un procesador externo no pueda alterar versiones anteriores accidentalmente. Solo se vuelve a copiar cuando cambia el contenido o falta/se trunca la copia. La copia usa operaciones de disco con memoria acotada; los movimientos y renombrados conservan el directorio completo. Esta estructura necesita espacio adicional para la versión actual. Las cuotas siguen siendo lógicas (contenidos e historial); el espacio físico se comprueba también antes de generar cada copia.
+La migración 0007 retira referencias históricas y encola los nodos existentes. El trabajador adopta el archivo actual, comprueba su integridad antes de retirar una copia redundante y limpia únicamente los directorios internos antiguos que queden vacíos. Conserva las cuentas, permisos, carpetas y el estado de papelera. No ejecutar binarios antiguos después de migrar. La retirada del historial es irreversible.
 
-La migración 0006 conserva todos los metadatos y encola los nodos existentes. Los contenidos del formato anterior se trasladan a .versions sin perder versiones y el trabajador genera las rutas por nombres. No iniciar binarios antiguos después de migrar. Respaldar PostgreSQL y todo el directorio de datos, incluidos los internos.
+PostgreSQL registra la ubicación de cada nodo y las operaciones pendientes. Un movimiento usa una intención persistente en la base de datos antes de cambiar el disco; después confirma la ubicación. `.temporal` contiene exclusivamente subidas incompletas, publicaciones pendientes y pasos de renombrado en curso. No es un historial y queda fuera de las carpetas de usuarios. El servidor necesita esta zona para rechazar contenido incompleto y reanudar una operación interrumpida.
 
-La base de datos es la autoridad. workspace_jobs registra de forma durable las operaciones pendientes y workspace_entries enlaza cada directorio con su identidad y su padre. Los movimientos pasan por .moves y la identidad permite reanudarlos después de un reinicio. La respuesta storage_pending indica que aún hay una tarea de sincronización; no se descarta ante errores de disco. Se retienen cambios de estructura adicionales del espacio hasta completar la operación pendiente, evitando perder la ubicación anterior. Un destino no gestionado y ocupado nunca se sobrescribe. El trabajador registra el código de error y vuelve a intentarlo; los datos ajenos al Drive deben moverse a otra ubicación por el operador si bloquean un nombre.
+La respuesta `storage_pending` indica trabajo pendiente en disco. Los cambios estructurales del espacio esperan a que se complete. Los destinos ocupados por contenido no registrado no se sobrescriben. Las rutas se validan, se rechazan enlaces simbólicos y los permisos del directorio de datos deben restringirse al proceso del servidor. Toda modificación de la estructura debe hacerse mediante la API.
 
-Los nombres nuevos deben ser representables de forma portable en disco. Dentro de una carpeta se rechazan con 409 los nombres ocupados, incluidas diferencias únicamente de mayúsculas; una carga pendiente también reserva su nombre. Restaurar un elemento con nombre ocupado no sobrescribe el existente. Los duplicados heredados se conservan en directorios independientes con sufijo estable, sin modificar su nombre lógico. Renombrar solo las mayúsculas funciona mediante un paso temporal seguro. Las rutas largas de Windows se usan en formato nativo también al aplicar permisos.
-
-La API sigue siendo solo datos y contenidos, sin servir HTML. El frontend se abre por file:// y mantiene el diseño existente, mostrando avisos de nombre ocupado y sincronización pendiente. No se añaden programas ni dependencias externas: los nuevos componentes son Rust y PostgreSQL continúa siendo la excepción ya autorizada.
+La API entrega solo datos y contenidos, sin HTML. El frontend independiente se abre por `file://`; incluye menú Nuevo de ancho fijo, acciones con clic derecho y teclado, y selector de carpetas para mover. No se añaden dependencias ni programas: el backend sigue en Rust y PostgreSQL continúa siendo la excepción autorizada.

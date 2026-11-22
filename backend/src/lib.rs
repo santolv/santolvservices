@@ -197,11 +197,6 @@ pub fn router(s: App) -> Router {
             "/api/v1/nodes/{id}/grants/revoke",
             post(files::revoke_grant),
         )
-        .route("/api/v1/nodes/{id}/versions", get(files::versions))
-        .route(
-            "/api/v1/nodes/{id}/versions/{version}/restore",
-            post(files::restore_version),
-        )
         .route("/api/v1/nodes/{id}/content", get(uploads::download))
         .route("/api/v1/uploads", post(uploads::create))
         .route(

@@ -269,6 +269,18 @@ fn id(v: &Value, key: &str) -> Uuid {
     v[key].as_str().unwrap().parse().unwrap()
 }
 
+async fn current_object(
+    h: &Harness,
+    _root: &std::path::Path,
+    directory: &str,
+    object: Uuid,
+    name: &str,
+) -> std::path::PathBuf {
+    santolvdrive::workspace::content_path(&h.app, directory, object, name)
+        .await
+        .unwrap()
+}
+
 #[sqlx::test]
 async fn independent_frontend_cors_keeps_cookie_authentication_and_csrf(pool: PgPool) {
     let h = Harness::new(pool).await;
@@ -606,7 +618,7 @@ async fn empty_files_and_competing_version_publications(pool: PgPool) {
         .fetch_one(&h.app.db)
         .await
         .unwrap();
-    assert_eq!(n, 2);
+    assert_eq!(n, 1);
     assert_eq!(
         h.req(
             "DELETE",
@@ -797,12 +809,16 @@ async fn organizations_expiration_missing_objects_and_pagination(pool: PgPool) {
     let (s, v) = h.complete(&org, up).await;
     assert_eq!(s, StatusCode::OK);
     let file = id(&v, "id");
-    storage::remove(&storage::object(
-        &h.app.root,
-        &h.directory(up).await,
-        up,
-        &h.original_name(up).await,
-    ))
+    storage::remove(
+        &current_object(
+            &h,
+            &h.app.root,
+            &h.directory(up).await,
+            up,
+            &h.original_name(up).await,
+        )
+        .await,
+    )
     .await
     .unwrap();
     cursor = Uuid::nil();
@@ -822,12 +838,14 @@ async fn organizations_expiration_missing_objects_and_pagination(pool: PgPool) {
         StatusCode::SERVICE_UNAVAILABLE
     );
     tokio::fs::write(
-        storage::object(
+        current_object(
+            &h,
             &h.app.root,
             &h.directory(up).await,
             up,
             &h.original_name(up).await,
-        ),
+        )
+        .await,
         b"abc",
     )
     .await
@@ -944,12 +962,14 @@ async fn files_permissions_concurrency_and_recovery(pool: PgPool) {
     .unwrap();
     tokio::fs::rename(
         storage::temp(&h.app.root, &h.directory(upload).await, upload),
-        storage::object(
+        current_object(
+            &h,
             &h.app.root,
             &h.directory(upload).await,
             upload,
             &h.original_name(upload).await,
-        ),
+        )
+        .await,
     )
     .await
     .unwrap();
@@ -1034,16 +1054,11 @@ async fn files_permissions_concurrency_and_recovery(pool: PgPool) {
         .0,
         StatusCode::NOT_FOUND
     );
-    let (_, old) = h
-        .json(
-            "GET",
-            &format!("/api/v1/nodes/{file}/versions"),
-            Some(&a.token),
-            &[],
-            json!(null),
-        )
-        .await;
-    let old_version = id(&old["items"][0], "id");
+    let old_version: Uuid = sqlx::query_scalar("SELECT current_version FROM nodes WHERE id=$1")
+        .bind(file)
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap();
     let upload2 = h
         .start(
             &a,
@@ -1066,7 +1081,7 @@ async fn files_permissions_concurrency_and_recovery(pool: PgPool) {
             json!({}),
         )
         .await;
-    assert_eq!(s, StatusCode::OK);
+    assert_eq!(s, StatusCode::NOT_FOUND);
     assert_eq!(
         h.req(
             "GET",
@@ -1077,7 +1092,7 @@ async fn files_permissions_concurrency_and_recovery(pool: PgPool) {
         )
         .await
         .2,
-        b"abcdef"
+        b"new"
     );
     let (s, _) = h
         .json(
@@ -1727,7 +1742,7 @@ async fn user_storage_isolated_shared_edits_and_legacy_content_survive(pool: PgP
     let b = h.account("bob").await;
     let directory = format!("usuarios/{}", a.username);
     assert!(h.app.root.join(&directory).join("archivos").is_dir());
-    assert!(h.app.root.join("usuarios/bob/.uploads").is_dir());
+    assert!(!h.app.root.join("usuarios/bob/.uploads").exists());
     assert!(!h.app.root.join("usuarios/director").exists());
     let data = b"custom\0binary\xff\r\n";
     let upload = h
@@ -1745,20 +1760,24 @@ async fn user_storage_isolated_shared_edits_and_legacy_content_survive(pool: PgP
     let (status, node) = h.complete(&a, upload).await;
     assert_eq!(status, StatusCode::OK);
     let node = id(&node, "id");
-    let path = storage::object(
+    let path = current_object(
+        &h,
         &h.app.root,
         &directory,
         upload,
         &h.original_name(upload).await,
-    );
+    )
+    .await;
     assert_eq!(tokio::fs::read(&path).await.unwrap(), data);
     assert!(
-        !storage::object(
+        !current_object(
+            &h,
             &h.app.root,
             "usuarios/bob",
             upload,
             &h.original_name(upload).await
         )
+        .await
         .exists()
     );
     assert_eq!(
@@ -1773,18 +1792,13 @@ async fn user_storage_isolated_shared_edits_and_legacy_content_survive(pool: PgP
         .0,
         StatusCode::NOT_FOUND
     );
-    let version: Uuid = sqlx::query_scalar("SELECT id FROM versions WHERE object_id=$1")
-        .bind(upload)
-        .fetch_one(&h.app.db)
-        .await
-        .unwrap();
     tokio::fs::rename(&path, h.app.root.join("objects").join(upload.to_string()))
         .await
         .unwrap();
     let downloaded = h
         .req(
             "GET",
-            &format!("/api/v1/nodes/{node}/content?version={version}"),
+            &format!("/api/v1/nodes/{node}/content"),
             Some(&a.token),
             &[],
             Body::empty(),
@@ -1792,6 +1806,9 @@ async fn user_storage_isolated_shared_edits_and_legacy_content_survive(pool: PgP
         .await;
     assert_eq!(downloaded.0, StatusCode::OK);
     assert_eq!(downloaded.2, data);
+    santolvdrive::workspace::sync_node(&h.app, node)
+        .await
+        .unwrap();
     assert!(path.exists());
     assert!(!h.app.root.join("objects").join(upload.to_string()).exists());
     assert_eq!(
@@ -1829,21 +1846,25 @@ async fn user_storage_isolated_shared_edits_and_legacy_content_survive(pool: PgP
     );
     assert_eq!(h.complete(&editor, revision).await.0, StatusCode::OK);
     assert!(
-        storage::object(
+        current_object(
+            &h,
             &h.app.root,
             &directory,
             revision,
             &h.original_name(revision).await
         )
+        .await
         .exists()
     );
     assert!(
-        !storage::object(
+        !current_object(
+            &h,
             &h.app.root,
             "usuarios/bob",
             revision,
             &h.original_name(revision).await
         )
+        .await
         .exists()
     );
     let pending = h
@@ -1867,12 +1888,16 @@ async fn user_storage_isolated_shared_edits_and_legacy_content_survive(pool: PgP
     assert_eq!(h.chunk(&a, pending, 1, b"bc", true).await, StatusCode::OK);
     assert_eq!(h.complete(&a, pending).await.0, StatusCode::OK);
     assert_eq!(
-        tokio::fs::read(storage::object(
-            &h.app.root,
-            &directory,
-            pending,
-            &h.original_name(pending).await
-        ))
+        tokio::fs::read(
+            current_object(
+                &h,
+                &h.app.root,
+                &directory,
+                pending,
+                &h.original_name(pending).await
+            )
+            .await
+        )
         .await
         .unwrap(),
         b"abc"
@@ -1926,12 +1951,14 @@ async fn permanent_delete_removes_named_content_only_after_last_reference(pool: 
         .execute(&h.app.db)
         .await
         .unwrap();
-    let path = storage::object(
+    let path = current_object(
+        &h,
         &h.app.root,
         &h.directory(upload).await,
         upload,
         "original.txt",
-    );
+    )
+    .await;
     let mut cursor = Uuid::nil();
     let mut cancelled = Uuid::nil();
     for node in [first, second] {
@@ -1978,7 +2005,17 @@ async fn permanent_delete_removes_named_content_only_after_last_reference(pool: 
             .await
             .unwrap();
         if node == first {
-            assert!(path.exists());
+            assert!(
+                current_object(
+                    &h,
+                    &h.app.root,
+                    &h.directory(upload).await,
+                    upload,
+                    "original.txt"
+                )
+                .await
+                .exists()
+            );
             let download = h
                 .req(
                     "GET",
@@ -2100,9 +2137,7 @@ async fn named_workspace_folders_files_rename_move_and_restore(pool: PgPool) {
     assert!(
         h.app
             .root
-            .join(format!(
-                "usuarios/named-owner/.papelera/{work}/Trabajo/Proyectos 2026"
-            ))
+            .join("usuarios/named-owner/papelera/Trabajo/Proyectos 2026")
             .exists()
     );
     assert_eq!(
@@ -2187,6 +2222,13 @@ async fn named_workspace_folders_files_rename_move_and_restore(pool: PgPool) {
     assert_eq!(tokio::fs::read(&moved).await.unwrap(), b"original");
     // Simulate a crash after moving the wrapper, before its entry and content name commit.
     let recovered = root.join("Destino/recuperado.pdf");
+    sqlx::query("INSERT INTO workspace_moves(node_id,source,target) VALUES($1,$2,$3)")
+        .bind(file)
+        .bind(moved.parent().unwrap().to_string_lossy().to_string())
+        .bind(recovered.to_string_lossy().to_string())
+        .execute(&h.app.db)
+        .await
+        .unwrap();
     tokio::fs::rename(moved.parent().unwrap(), &recovered)
         .await
         .unwrap();
@@ -2234,10 +2276,18 @@ async fn named_workspace_folders_files_rename_move_and_restore(pool: PgPool) {
         }
     }
     assert!(exact);
-    let staging = h
-        .app
-        .root
-        .join(format!("usuarios/named-owner/.moves/{file}"));
+    let staging = h.app.root.join(format!(".temporal/movimientos/{file}"));
+    sqlx::query("INSERT INTO workspace_moves(node_id,source,target) VALUES($1,$2,$3)")
+        .bind(file)
+        .bind(uppercase.to_string_lossy().to_string())
+        .bind(
+            root.join("Destino/reanudado.pdf")
+                .to_string_lossy()
+                .to_string(),
+        )
+        .execute(&h.app.db)
+        .await
+        .unwrap();
     tokio::fs::rename(&uppercase, &staging).await.unwrap();
     let mut tx = h.app.db.begin().await.unwrap();
     sqlx::query("UPDATE nodes SET name='reanudado.pdf',revision=revision+1 WHERE id=$1")
@@ -2277,39 +2327,20 @@ async fn named_workspace_folders_files_rename_move_and_restore(pool: PgPool) {
     assert_eq!(h.complete(&a, next).await.0, StatusCode::OK);
     let current = root.join("Destino/reanudado.pdf/reanudado.pdf");
     assert_eq!(tokio::fs::read(&current).await.unwrap(), b"new version");
-    let first: Uuid =
-        sqlx::query_scalar("SELECT id FROM versions WHERE object_id=$1 ORDER BY id LIMIT 1")
-            .bind(upload)
-            .fetch_one(&h.app.db)
-            .await
-            .unwrap();
-    let (status, result) = h
-        .json(
-            "POST",
-            &format!("/api/v1/nodes/{file}/versions/{first}/restore"),
-            Some(&a.token),
-            &[
-                ("if-match", "\"9\""),
-                ("idempotency-key", "restore-named-version"),
-            ],
-            json!({}),
-        )
-        .await;
-    assert_eq!(status, StatusCode::OK, "{result}");
-    assert_eq!(result["storage_pending"], false);
-    assert_eq!(tokio::fs::read(&current).await.unwrap(), b"original");
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM versions WHERE node_id=$1")
+        .bind(file)
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+    assert!(!h.app.root.join("usuarios/named-owner/.versions").exists());
+    assert!(!current.parent().unwrap().join(".drive-node").exists());
     assert!(current.parent().unwrap().join("analisis.json").exists());
     let long = "Carpeta".repeat(13);
     let one = h.folder(&a, None, &long, "long-one").await;
     let two = h.folder(&a, Some(one), &long, "long-two").await;
     h.folder(&a, Some(two), &long, "long-three").await;
-    assert!(
-        root.join(&long)
-            .join(&long)
-            .join(&long)
-            .join(".drive-node")
-            .exists()
-    );
+    assert!(root.join(&long).join(&long).join(&long).is_dir());
 }
 
 #[sqlx::test]
@@ -2354,7 +2385,8 @@ async fn named_workspace_does_not_overwrite_unmanaged_directories(pool: PgPool) 
         .await
         .unwrap();
     santolvdrive::workspace::process(&h.app, 100).await.unwrap();
-    assert!(root.join("Ocupada/.drive-node").exists());
+    assert!(root.join("Ocupada").is_dir());
+    assert!(!root.join("Ocupada/.drive-node").exists());
     assert_eq!(
         tokio::fs::read(root.join("Contenido externo/keep.txt"))
             .await
@@ -2363,4 +2395,108 @@ async fn named_workspace_does_not_overwrite_unmanaged_directories(pool: PgPool) 
     );
     h.folder(&a, None, "Después", "after-recovery").await;
     assert!(root.join("Después").exists());
+}
+
+#[sqlx::test]
+async fn simple_storage_adopts_legacy_copy_and_trash_names_are_distinct(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let a = h.account("simple-owner").await;
+    let upload = h
+        .start(
+            &a,
+            "original.pdf",
+            b"pdf content",
+            "simple-upload",
+            None,
+            None,
+            "\"1\"",
+        )
+        .await;
+    assert_eq!(
+        h.chunk(&a, upload, 0, b"pdf content", true).await,
+        StatusCode::OK
+    );
+    let (_, created) = h.complete(&a, upload).await;
+    let node = id(&created, "id");
+    let home = h.app.root.join("usuarios/simple-owner");
+    let live = home.join("archivos/original.pdf/original.pdf");
+    // Simulate the preceding release's archive plus independent working copy.
+    let legacy = home.join(".versions").join(upload.to_string());
+    tokio::fs::create_dir_all(&legacy).await.unwrap();
+    tokio::fs::copy(&live, legacy.join("original.pdf"))
+        .await
+        .unwrap();
+    tokio::fs::write(live.parent().unwrap().join(".drive-node"), node.to_string())
+        .await
+        .unwrap();
+    santolvdrive::workspace::sync_node(&h.app, node)
+        .await
+        .unwrap();
+    storage::prepare_space(&h.app.root, "usuarios/simple-owner")
+        .await
+        .unwrap();
+    assert_eq!(tokio::fs::read(&live).await.unwrap(), b"pdf content");
+    assert!(!home.join(".versions").exists());
+    assert!(!live.parent().unwrap().join(".drive-node").exists());
+    assert!(
+        !storage::object(&h.app.root, "usuarios/simple-owner", upload, "original.pdf").exists()
+    );
+    assert_eq!(
+        h.req(
+            "GET",
+            &format!("/api/v1/nodes/{node}/versions"),
+            Some(&a.token),
+            &[],
+            Body::empty()
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let one = h.folder(&a, None, "Uno", "one").await;
+    let two = h.folder(&a, None, "Dos", "two").await;
+    let first = h
+        .folder(&a, Some(one), "Documentos", "first-documents")
+        .await;
+    let second = h
+        .folder(&a, Some(two), "Documentos", "second-documents")
+        .await;
+    for node in [first, second] {
+        assert_eq!(
+            h.json(
+                "POST",
+                &format!("/api/v1/nodes/{node}/trash"),
+                Some(&a.token),
+                &[
+                    ("if-match", "\"1\""),
+                    ("idempotency-key", &node.to_string())
+                ],
+                json!({})
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+    }
+    assert!(home.join("papelera/Documentos").is_dir());
+    assert!(home.join("papelera/Documentos (2)").is_dir());
+    for node in [first, second] {
+        assert_eq!(
+            h.json(
+                "POST",
+                &format!("/api/v1/nodes/{node}/restore"),
+                Some(&a.token),
+                &[
+                    ("if-match", "\"2\""),
+                    ("idempotency-key", &format!("restore-{node}"))
+                ],
+                json!({})
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+    }
+    assert!(home.join("archivos/Uno/Documentos").is_dir());
+    assert!(home.join("archivos/Dos/Documentos").is_dir());
 }

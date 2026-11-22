@@ -352,6 +352,13 @@ pub async fn finish(s: &App, id: Uuid, user: Uuid) -> Result<Value> {
         .execute(&mut *tx)
         .await?;
     sqlx::query("UPDATE nodes SET current_version=$1,revision=revision+CASE WHEN $3 THEN 1 ELSE 0 END WHERE id=$2").bind(version).bind(node).bind(v.node_id.is_some()).execute(&mut *tx).await?;
+    sqlx::query("UPDATE objects o SET state='deleting' WHERE id IN(SELECT object_id FROM versions WHERE node_id=$1 AND id<>$2) AND NOT EXISTS(SELECT 1 FROM versions v WHERE v.object_id=o.id AND (v.node_id<>$1 OR v.id=$2))")
+        .bind(node).bind(version).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM versions WHERE node_id=$1 AND id<>$2")
+        .bind(node)
+        .bind(version)
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("UPDATE uploads SET state='ready',result_node=$1,complete_requested=false,completion_error=NULL WHERE id=$2")
         .bind(node)
         .bind(id)
@@ -415,7 +422,11 @@ pub async fn download(
         .map_err(|_| Error(StatusCode::TOO_MANY_REQUESTS, "transfer_capacity"))?;
     let mut tx = s.db.begin().await?;
     let n = files::access(&mut tx, id, u.id, 1, false).await?;
-    let version = q.version.or(n.current_version).ok_or_else(Error::denied)?;
+    if q.version.is_some() {
+        return Err(Error::bad("history_not_supported"));
+    }
+    files::lock(&mut tx, n.space_id).await?;
+    let version = n.current_version.ok_or_else(Error::denied)?;
     let r=sqlx::query("SELECT o.id,o.size,o.sha256,o.state,o.original_name,s.storage_directory FROM versions v JOIN objects o ON o.id=v.object_id JOIN spaces s ON s.id=o.space_id WHERE v.id=$1 AND v.node_id=$2").bind(version).bind(id).fetch_optional(&mut *tx).await?.ok_or_else(Error::denied)?;
     if r.get::<String, _>("state") != "ready" {
         return Err(Error::unavailable());
@@ -432,8 +443,11 @@ pub async fn download(
     let directory: String = r.get("storage_directory");
     let original_name: &str = r.get("original_name");
     storage::relocate_legacy(&s.root, &directory, object, original_name).await?;
-    let mut file =
-        tokio::fs::File::open(storage::object(&s.root, &directory, object, original_name)).await?;
+    let mut file = tokio::fs::File::open(
+        crate::workspace::content_path_tx(&mut tx, &s.root, &directory, object, original_name)
+            .await?,
+    )
+    .await?;
     if file.metadata().await?.len() != size {
         return Err(Error::unavailable());
     }

@@ -4,12 +4,13 @@ use std::path::{Path, PathBuf};
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
-pub fn temp(root: &Path, directory: &str, id: Uuid) -> PathBuf {
-    root.join(directory).join(".uploads").join(id.to_string())
+pub fn temp(root: &Path, _directory: &str, id: Uuid) -> PathBuf {
+    root.join(".temporal").join("cargas").join(id.to_string())
 }
 pub fn object(root: &Path, directory: &str, id: Uuid, name: &str) -> PathBuf {
-    root.join(directory)
-        .join(".versions")
+    let _ = directory;
+    root.join(".temporal")
+        .join("publicaciones")
         .join(id.to_string())
         .join(disk_filename(name))
 }
@@ -114,14 +115,50 @@ pub async fn prepare_space(root: &Path, directory: &str) -> Result<()> {
     private_dir(&root.join(branch)).await?;
     let home = root.join(directory);
     private_dir(&home).await?;
-    private_dir(&home.join(".uploads")).await?;
     private_dir(&home.join("archivos")).await?;
-    private_dir(&home.join(".versions")).await?;
+    private_dir(&root.join(".temporal")).await?;
+    for name in ["cargas", "publicaciones", "movimientos"] {
+        private_dir(&root.join(".temporal").join(name)).await?;
+    }
     cleanup_legacy_roots(&home).await?;
     Ok(())
 }
 pub async fn cleanup_legacy_roots(root: &Path) -> Result<()> {
-    for kind in ["objects", "uploads"] {
+    for kind in [
+        "objects",
+        "uploads",
+        ".uploads",
+        ".versions",
+        ".moves",
+        ".papelera",
+    ] {
+        let base = root.join(kind);
+        if matches!(kind, ".versions" | ".moves" | ".papelera")
+            && let Ok(mut entries) = tokio::fs::read_dir(&base).await
+        {
+            for _ in 0..100 {
+                let Some(entry) = entries.next_entry().await? else {
+                    break;
+                };
+                if entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|n| n.parse::<Uuid>().is_ok())
+                    && entry.file_type().await?.is_dir()
+                {
+                    match tokio::fs::remove_dir(entry.path()).await {
+                        Ok(()) => sync_dir(&base).await?,
+                        Err(e)
+                            if matches!(
+                                e.kind(),
+                                std::io::ErrorKind::NotFound
+                                    | std::io::ErrorKind::DirectoryNotEmpty
+                            ) => {}
+                        Err(e) => return Err(e.into()),
+                    }
+                }
+            }
+        }
         match tokio::fs::remove_dir(root.join(kind)).await {
             Ok(()) => sync_dir(root).await?,
             Err(e)
@@ -145,13 +182,45 @@ pub async fn remove_object(root: &Path, directory: &str, id: Uuid, name: &str) -
     let path = object(root, directory, id, name);
     remove(&path).await?;
     match tokio::fs::remove_dir(path.parent().unwrap()).await {
-        Ok(()) => sync_dir(&root.join(directory).join(".versions")).await?,
+        Ok(()) => sync_dir(&root.join(".temporal/publicaciones")).await?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         Err(e) => return Err(e.into()),
     }
     Ok(())
 }
 pub async fn relocate_legacy(root: &Path, directory: &str, id: Uuid, name: &str) -> Result<()> {
+    for (old, new) in [
+        (
+            root.join(directory).join(".uploads").join(id.to_string()),
+            temp(root, directory, id),
+        ),
+        (
+            root.join(directory)
+                .join(".versions")
+                .join(id.to_string())
+                .join(disk_filename(name)),
+            object(root, directory, id, name),
+        ),
+    ] {
+        if tokio::fs::try_exists(&old).await? {
+            prepare_object(root, directory, id, name).await?;
+            if tokio::fs::try_exists(&new).await? {
+                return Err(Error::conflict("storage_layout_conflict"));
+            }
+            tokio::fs::rename(&old, &new).await?;
+            sync_dir(new.parent().unwrap()).await?;
+            sync_dir(old.parent().unwrap()).await?;
+            // An archive directory is removed only when empty.
+            if old
+                .parent()
+                .unwrap()
+                .file_name()
+                .is_some_and(|n| n == id.to_string().as_str())
+            {
+                let _ = tokio::fs::remove_dir(old.parent().unwrap()).await;
+            }
+        }
+    }
     let previous = root
         .join(directory)
         .join("archivos")

@@ -30,6 +30,9 @@ pub struct Create {
 }
 #[derive(Serialize, FromRow, Clone)]
 pub struct Upload {
+    pub storage_pending: bool,
+    #[serde(skip)]
+    pub storage_directory: String,
     pub id: Uuid,
     pub user_id: Uuid,
     pub space_id: Uuid,
@@ -51,7 +54,7 @@ pub async fn upload(tx: &mut Transaction<'_, Postgres>, id: Uuid, user: Uuid) ->
         .bind(format!("upload:{id}"))
         .execute(&mut **tx)
         .await?;
-    sqlx::query_as("SELECT * FROM uploads WHERE id=$1 AND user_id=$2")
+    sqlx::query_as("SELECT u.*,s.storage_directory,EXISTS(SELECT 1 FROM workspace_jobs j WHERE j.node_id=u.result_node AND NOT j.audit) AS storage_pending FROM uploads u JOIN spaces s ON s.id=u.space_id WHERE u.id=$1 AND u.user_id=$2")
         .bind(id)
         .bind(user)
         .fetch_optional(&mut **tx)
@@ -108,14 +111,21 @@ pub async fn create(
         Some(n.revision)
     } else {
         files::folder(&mut tx, c.space_id, c.parent_id, u.id, 2).await?;
+        files::name_available(&mut tx, c.space_id, c.parent_id, &name, None, None).await?;
         None
     };
+    files::workspace_ready(&mut tx, c.space_id).await?;
     storage::capacity(&s.root, c.size as u64).await?;
     let reserved=sqlx::query("UPDATE spaces SET reserved_bytes=reserved_bytes+$1 WHERE id=$2 AND $1<=quota-used_bytes-reserved_bytes").bind(c.size).bind(c.space_id).execute(&mut *tx).await?;
     if reserved.rows_affected() == 0 {
         return Err(Error::conflict("quota_exceeded"));
     }
     let id = Uuid::new_v4();
+    let directory: String = sqlx::query_scalar("SELECT storage_directory FROM spaces WHERE id=$1")
+        .bind(c.space_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    storage::prepare_space(&s.root, &directory).await?;
     sqlx::query("INSERT INTO uploads(id,user_id,space_id,parent_id,node_id,name,expected_revision,size,sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)")
         .bind(id).bind(u.id).bind(c.space_id).bind(c.parent_id).bind(c.node_id).bind(name).bind(expected).bind(c.size).bind(c.sha256.to_lowercase()).execute(&mut *tx).await?;
     let v = json!({"id":id,"offset":0,"max_chunk_bytes":8388608,"expires_in":86400});
@@ -125,7 +135,7 @@ pub async fn create(
 }
 pub async fn status(State(s): State<App>, u: User, Path(id): Path<Uuid>) -> Result<Json<Upload>> {
     let mut tx = s.db.begin().await?;
-    let v: Upload = sqlx::query_as("SELECT * FROM uploads WHERE id=$1 AND user_id=$2")
+    let v: Upload = sqlx::query_as("SELECT u.*,s.storage_directory,EXISTS(SELECT 1 FROM workspace_jobs j WHERE j.node_id=u.result_node AND NOT j.audit) AS storage_pending FROM uploads u JOIN spaces s ON s.id=u.space_id WHERE u.id=$1 AND u.user_id=$2")
         .bind(id)
         .bind(u.id)
         .fetch_optional(&mut *tx)
@@ -174,7 +184,11 @@ pub async fn append(
         return Err(Error::bad("chunk_exceeds_expected_size"));
     }
     storage::capacity(&s.root, len as u64).await?;
-    let p = storage::temp(&s.root, id);
+    storage::relocate_legacy(&s.root, &v.storage_directory, id, &v.name).await?;
+    let p = storage::temp(&s.root, &v.storage_directory, id);
+    if !tokio::fs::try_exists(p.parent().unwrap()).await? {
+        storage::prepare_space(&s.root, &v.storage_directory).await?;
+    }
     let mut file = tokio::fs::OpenOptions::new()
         .create(true)
         .write(true)
@@ -205,7 +219,7 @@ pub async fn append(
         }
         file.flush().await?;
         file.sync_all().await?;
-        storage::sync_dir(&s.root.join("uploads")).await?;
+        storage::sync_dir(p.parent().unwrap()).await?;
         Ok::<_, Error>(())
     })
     .await
@@ -224,7 +238,7 @@ pub async fn complete(
     Path(id): Path<Uuid>,
 ) -> Result<(StatusCode, Json<Value>)> {
     let mut tx = s.db.begin().await?;
-    let v: Upload = sqlx::query_as("SELECT * FROM uploads WHERE id=$1 AND user_id=$2")
+    let v: Upload = sqlx::query_as("SELECT u.*,s.storage_directory,EXISTS(SELECT 1 FROM workspace_jobs j WHERE j.node_id=u.result_node AND NOT j.audit) AS storage_pending FROM uploads u JOIN spaces s ON s.id=u.space_id WHERE u.id=$1 AND u.user_id=$2")
         .bind(id)
         .bind(u.id)
         .fetch_optional(&mut *tx)
@@ -270,12 +284,14 @@ pub async fn finish(s: &App, id: Uuid, user: Uuid) -> Result<Value> {
     if v.received != v.size {
         return Err(Error::conflict("upload_incomplete"));
     }
-    let src = storage::temp(&s.root, id);
-    let dst = storage::object(&s.root, id);
+    storage::relocate_legacy(&s.root, &v.storage_directory, id, &v.name).await?;
+    storage::prepare_space(&s.root, &v.storage_directory).await?;
+    let src = storage::temp(&s.root, &v.storage_directory, id);
+    let dst = storage::prepare_object(&s.root, &v.storage_directory, id, &v.name).await?;
     if v.size == 0 && !tokio::fs::try_exists(&src).await? && !tokio::fs::try_exists(&dst).await? {
         let f = tokio::fs::File::create(&src).await?;
         f.sync_all().await?;
-        storage::sync_dir(&s.root.join("uploads")).await?;
+        storage::sync_dir(src.parent().unwrap()).await?;
     }
     let published = tokio::fs::try_exists(&dst).await?;
     let (size, hash) = storage::checksum(if published { &dst } else { &src }).await?;
@@ -289,6 +305,7 @@ pub async fn finish(s: &App, id: Uuid, user: Uuid) -> Result<Value> {
     }
     files::lock(&mut tx, v.space_id).await?;
     allowed(&mut tx, &v, user).await?;
+    files::workspace_ready(&mut tx, v.space_id).await?;
     let node = if let Some(n) = v.node_id {
         let current = files::access(&mut tx, n, user, 2, false).await?;
         if Some(current.revision) != v.expected_revision {
@@ -296,21 +313,25 @@ pub async fn finish(s: &App, id: Uuid, user: Uuid) -> Result<Value> {
         }
         n
     } else {
+        files::name_available(&mut tx, v.space_id, v.parent_id, &v.name, None, Some(id)).await?;
         Uuid::new_v4()
     };
     // Both directories are under one persistent volume; sync the rename before committing ready.
     if !published {
         tokio::fs::rename(&src, &dst).await?;
-        storage::sync_dir(&s.root.join("objects")).await?;
-        storage::sync_dir(&s.root.join("uploads")).await?;
+        storage::sync_dir(dst.parent().unwrap()).await?;
+        storage::sync_dir(src.parent().unwrap()).await?;
     }
-    sqlx::query("INSERT INTO objects(id,space_id,size,sha256) VALUES($1,$2,$3,$4)")
-        .bind(id)
-        .bind(v.space_id)
-        .bind(v.size)
-        .bind(&v.sha256)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "INSERT INTO objects(id,space_id,size,sha256,original_name) VALUES($1,$2,$3,$4,$5)",
+    )
+    .bind(id)
+    .bind(v.space_id)
+    .bind(v.size)
+    .bind(&v.sha256)
+    .bind(&v.name)
+    .execute(&mut *tx)
+    .await?;
     if v.node_id.is_none() {
         sqlx::query(
             "INSERT INTO nodes(id,space_id,parent_id,name,kind) VALUES($1,$2,$3,$4,'file')",
@@ -344,8 +365,9 @@ pub async fn finish(s: &App, id: Uuid, user: Uuid) -> Result<Value> {
     .execute(&mut *tx)
     .await?;
     files::audit(&mut tx, user, v.space_id, "upload_completed", node).await?;
+    crate::workspace::schedule(&mut tx, node, v.space_id).await?;
     tx.commit().await?;
-    Ok(json!({"id":node,"upload_id":id}))
+    Ok(crate::workspace::publish(s, node, json!({"id":node,"upload_id":id})).await)
 }
 pub async fn cancel(State(s): State<App>, u: User, Path(id): Path<Uuid>) -> Result<StatusCode> {
     cancel_upload(&s, id, u.id).await?;
@@ -370,8 +392,9 @@ pub async fn cancel_upload(s: &App, id: Uuid, user: Uuid) -> Result<()> {
             .await?;
     }
     tx.commit().await?;
-    storage::remove(&storage::temp(&s.root, id)).await?;
-    storage::remove(&storage::object(&s.root, id)).await?;
+    storage::relocate_legacy(&s.root, &v.storage_directory, id, &v.name).await?;
+    storage::remove(&storage::temp(&s.root, &v.storage_directory, id)).await?;
+    storage::remove_object(&s.root, &v.storage_directory, id, &v.name).await?;
     Ok(())
 }
 #[derive(Deserialize)]
@@ -393,7 +416,7 @@ pub async fn download(
     let mut tx = s.db.begin().await?;
     let n = files::access(&mut tx, id, u.id, 1, false).await?;
     let version = q.version.or(n.current_version).ok_or_else(Error::denied)?;
-    let r=sqlx::query("SELECT o.id,o.size,o.sha256,o.state FROM versions v JOIN objects o ON o.id=v.object_id WHERE v.id=$1 AND v.node_id=$2").bind(version).bind(id).fetch_optional(&mut *tx).await?.ok_or_else(Error::denied)?;
+    let r=sqlx::query("SELECT o.id,o.size,o.sha256,o.state,o.original_name,s.storage_directory FROM versions v JOIN objects o ON o.id=v.object_id JOIN spaces s ON s.id=o.space_id WHERE v.id=$1 AND v.node_id=$2").bind(version).bind(id).fetch_optional(&mut *tx).await?.ok_or_else(Error::denied)?;
     if r.get::<String, _>("state") != "ready" {
         return Err(Error::unavailable());
     }
@@ -406,7 +429,11 @@ pub async fn download(
     });
     let (start, len, partial) = storage::range(range, size)?;
     // Open before releasing the snapshot: a concurrent purge cannot serve another object's bytes.
-    let mut file = tokio::fs::File::open(storage::object(&s.root, object)).await?;
+    let directory: String = r.get("storage_directory");
+    let original_name: &str = r.get("original_name");
+    storage::relocate_legacy(&s.root, &directory, object, original_name).await?;
+    let mut file =
+        tokio::fs::File::open(storage::object(&s.root, &directory, object, original_name)).await?;
     if file.metadata().await?.len() != size {
         return Err(Error::unavailable());
     }
@@ -425,7 +452,12 @@ pub async fn download(
     };
     let hh = response.headers_mut();
     hh.insert("content-type", "application/octet-stream".parse().unwrap());
-    hh.insert("content-disposition", "attachment".parse().unwrap());
+    hh.insert(
+        "content-disposition",
+        storage::attachment(&n.name)
+            .parse()
+            .expect("ASCII attachment header"),
+    );
     hh.insert("accept-ranges", "bytes".parse().unwrap());
     hh.insert("content-length", len.to_string().parse().unwrap());
     hh.insert("etag", etag.parse().unwrap());

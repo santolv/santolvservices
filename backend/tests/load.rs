@@ -21,6 +21,7 @@ async fn metadata_baseline(pool: PgPool) {
         db: pool.clone(),
         root: root.path().into(),
         origin: "http://localhost".into(),
+        frontend_origin: santolvdrive::web::default_frontend_origin(),
         secure: false,
         hashes: Arc::new(Semaphore::new(2)),
         transfers: Arc::new(Semaphore::new(8)),
@@ -34,7 +35,7 @@ async fn metadata_baseline(pool: PgPool) {
         .await
         .unwrap();
     sqlx::query(
-        "INSERT INTO spaces(id,name,kind,owner_id,quota) VALUES($1,'Load','personal',$2,1024)",
+        "INSERT INTO spaces(id,name,kind,owner_id,quota,storage_directory) VALUES($1,'Load','personal',$2,1024,'usuarios/load-user')",
     )
     .bind(space)
     .bind(user)

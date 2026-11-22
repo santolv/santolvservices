@@ -32,10 +32,39 @@ pub fn name(n: &str) -> Result<String> {
         || n == "."
         || n == ".."
         || n.chars().any(|c| c.is_control() || matches!(c, '/' | '\\'))
+        || crate::storage::disk_filename(&n) != n
+        || n.to_ascii_lowercase().starts_with(".drive-")
     {
         return Err(Error::bad("invalid_name"));
     }
     Ok(n)
+}
+pub async fn name_available(
+    tx: &mut Transaction<'_, Postgres>,
+    space: Uuid,
+    parent: Option<Uuid>,
+    name: &str,
+    node: Option<Uuid>,
+    upload: Option<Uuid>,
+) -> Result<()> {
+    let occupied:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM nodes WHERE space_id=$1 AND COALESCE(parent_id,'00000000-0000-0000-0000-000000000000'::uuid)=COALESCE($2,'00000000-0000-0000-0000-000000000000'::uuid) AND lower(name)=lower($3) AND trashed_at IS NULL AND ($4::uuid IS NULL OR id<>$4)) OR EXISTS(SELECT 1 FROM uploads WHERE space_id=$1 AND parent_id IS NOT DISTINCT FROM $2 AND lower(name)=lower($3) AND node_id IS NULL AND state='pending' AND expires_at>now() AND ($5::uuid IS NULL OR id<>$5))")
+        .bind(space).bind(parent).bind(name).bind(node).bind(upload).fetch_one(&mut **tx).await?;
+    if occupied {
+        return Err(Error::conflict("name_already_exists"));
+    }
+    Ok(())
+}
+pub async fn workspace_ready(tx: &mut Transaction<'_, Postgres>, space: Uuid) -> Result<()> {
+    let pending: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM workspace_jobs WHERE space_id=$1 AND NOT audit)",
+    )
+    .bind(space)
+    .fetch_one(&mut **tx)
+    .await?;
+    if pending {
+        return Err(Error::conflict("workspace_sync_pending"));
+    }
+    Ok(())
 }
 pub fn revision(h: &HeaderMap) -> Result<i64> {
     h.get("if-match")
@@ -188,7 +217,7 @@ pub async fn spaces(
     u: User,
     Query(q): Query<VersionQuery>,
 ) -> Result<Json<Value>> {
-    let v:Vec<Value>=sqlx::query_scalar("SELECT to_jsonb(s) FROM spaces s JOIN members m ON m.space_id=s.id WHERE m.user_id=$1 AND ($2::uuid IS NULL OR s.id>$2) ORDER BY s.id LIMIT 101").bind(u.id).bind(q.after).fetch_all(&s.db).await?;
+    let v:Vec<Value>=sqlx::query_scalar("SELECT (to_jsonb(s)-'storage_directory')||jsonb_build_object('storage_pending',EXISTS(SELECT 1 FROM workspace_jobs j WHERE j.space_id=s.id AND NOT j.audit)) FROM spaces s JOIN members m ON m.space_id=s.id WHERE m.user_id=$1 AND ($2::uuid IS NULL OR s.id>$2) ORDER BY s.id LIMIT 101").bind(u.id).bind(q.after).fetch_all(&s.db).await?;
     Ok(page(v, "id"))
 }
 pub async fn shared(
@@ -227,13 +256,15 @@ pub async fn create_space(
         return Ok(Json(v));
     }
     let id = Uuid::new_v4();
+    let directory = format!("organizaciones/{id}");
     sqlx::query(
-        "INSERT INTO spaces(id,name,kind,owner_id,quota) VALUES($1,$2,'organization',$3,$4)",
+        "INSERT INTO spaces(id,name,kind,owner_id,quota,storage_directory) VALUES($1,$2,'organization',$3,$4,$5)",
     )
     .bind(id)
     .bind(name)
     .bind(u.id)
     .bind(s.quota)
+    .bind(&directory)
     .execute(&mut *tx)
     .await?;
     sqlx::query("INSERT INTO members VALUES($1,$2,3)")
@@ -241,6 +272,7 @@ pub async fn create_space(
         .bind(u.id)
         .execute(&mut *tx)
         .await?;
+    crate::storage::prepare_space(&s.root, &directory).await?;
     let result = json!({"id":id});
     remember(&mut tx, u.id, &key, &fp, &result).await?;
     tx.commit().await?;
@@ -353,6 +385,7 @@ pub async fn list(
         "SELECT id,space_id,parent_id,name,kind,revision,trashed_at,current_version FROM nodes WHERE space_id=",
     );
     query.push_bind(space);
+    query.push(" AND NOT EXISTS(SELECT 1 FROM purge_jobs p WHERE p.node_id=nodes.id)");
     if q.trash {
         query.push(" AND trashed_at IS NOT NULL");
     } else {
@@ -399,6 +432,8 @@ pub async fn create_folder(
     }
     lock(&mut tx, space).await?;
     folder(&mut tx, space, c.parent_id, u.id, 2).await?;
+    workspace_ready(&mut tx, space).await?;
+    name_available(&mut tx, space, c.parent_id, &name, None, None).await?;
     let id = Uuid::new_v4();
     sqlx::query("INSERT INTO nodes(id,space_id,parent_id,name,kind) VALUES($1,$2,$3,$4,'folder')")
         .bind(id)
@@ -409,9 +444,10 @@ pub async fn create_folder(
         .await?;
     let v = json!({"id":id,"revision":1});
     audit(&mut tx, u.id, space, "folder_created", id).await?;
+    crate::workspace::schedule(&mut tx, id, space).await?;
     remember(&mut tx, u.id, &key, &fp, &v).await?;
     tx.commit().await?;
-    Ok(Json(v))
+    Ok(Json(crate::workspace::publish(&s, id, v).await))
 }
 pub async fn get_node(
     State(s): State<App>,
@@ -451,6 +487,7 @@ pub async fn edit_node(
     let n = node(&mut tx, id).await?;
     lock(&mut tx, n.space_id).await?;
     let n = access(&mut tx, id, u.id, 2, false).await?;
+    workspace_ready(&mut tx, n.space_id).await?;
     check_revision(&n, &h)?;
     let target = if c.move_to_root {
         None
@@ -468,6 +505,7 @@ pub async fn edit_node(
         Some(n) => name(&n)?,
         None => n.name,
     };
+    name_available(&mut tx, n.space_id, target, &name, Some(id), None).await?;
     sqlx::query("UPDATE nodes SET name=$1,parent_id=$2,revision=revision+1 WHERE id=$3")
         .bind(name)
         .bind(target)
@@ -476,9 +514,10 @@ pub async fn edit_node(
         .await?;
     let v = json!({"id":id,"revision":n.revision+1});
     audit(&mut tx, u.id, n.space_id, "node_updated", id).await?;
+    crate::workspace::schedule(&mut tx, id, n.space_id).await?;
     remember(&mut tx, u.id, &key, &fp, &v).await?;
     tx.commit().await?;
-    Ok(Json(v))
+    Ok(Json(crate::workspace::publish(&s, id, v).await))
 }
 async fn trash_action(
     s: App,
@@ -496,9 +535,11 @@ async fn trash_action(
     let n = node(&mut tx, id).await?;
     lock(&mut tx, n.space_id).await?;
     let n = access(&mut tx, id, u.id, 2, true).await?;
+    workspace_ready(&mut tx, n.space_id).await?;
     check_revision(&n, &h)?;
     if restore {
         folder(&mut tx, n.space_id, n.parent_id, u.id, 2).await?;
+        name_available(&mut tx, n.space_id, n.parent_id, &n.name, Some(id), None).await?;
     }
     sqlx::query("UPDATE nodes SET trashed_at=CASE WHEN $2 THEN NULL ELSE now() END,revision=revision+1 WHERE id=$1").bind(id).bind(restore).execute(&mut *tx).await?;
     let v = json!({"id":id,"revision":n.revision+1});
@@ -511,8 +552,9 @@ async fn trash_action(
     )
     .await?;
     remember(&mut tx, u.id, &key, &fp, &v).await?;
+    crate::workspace::schedule(&mut tx, id, n.space_id).await?;
     tx.commit().await?;
-    Ok(Json(v))
+    Ok(Json(crate::workspace::publish(&s, id, v).await))
 }
 pub async fn trash(
     State(s): State<App>,
@@ -540,11 +582,10 @@ pub async fn purge(
     let n = node(&mut tx, id).await?;
     lock(&mut tx, n.space_id).await?;
     let n = access(&mut tx, id, u.id, 3, true).await?;
+    workspace_ready(&mut tx, n.space_id).await?;
     check_revision(&n, &h)?;
-    if !n.trashed_at.is_some_and(|t| {
-        t < time::OffsetDateTime::now_utc() - time::Duration::days(s.retention_days)
-    }) {
-        return Err(Error::conflict("trash_retention_active"));
+    if n.trashed_at.is_none() {
+        return Err(Error::conflict("trash_required_before_purge"));
     }
     // A durable task is requested; the worker deletes one leaf at a time.
     sqlx::query("INSERT INTO purge_jobs(node_id) VALUES($1) ON CONFLICT DO NOTHING")
@@ -655,6 +696,7 @@ pub async fn restore_version(
     let n = node(&mut tx, id).await?;
     lock(&mut tx, n.space_id).await?;
     let n = access(&mut tx, id, u.id, 2, false).await?;
+    workspace_ready(&mut tx, n.space_id).await?;
     check_revision(&n, &h)?;
     let object:Uuid=sqlx::query_scalar("SELECT v.object_id FROM versions v JOIN objects o ON o.id=v.object_id WHERE v.id=$1 AND v.node_id=$2 AND o.state='ready'").bind(version).bind(id).fetch_optional(&mut *tx).await?.ok_or_else(Error::denied)?;
     let new = Uuid::new_v4();
@@ -672,9 +714,10 @@ pub async fn restore_version(
         .await?;
     let v = json!({"id":id,"version_id":new,"revision":n.revision+1});
     audit(&mut tx, u.id, n.space_id, "version_restored", id).await?;
+    crate::workspace::schedule(&mut tx, id, n.space_id).await?;
     remember(&mut tx, u.id, &key, &fp, &v).await?;
     tx.commit().await?;
-    Ok(Json(v))
+    Ok(Json(crate::workspace::publish(&s, id, v).await))
 }
 
 #[cfg(test)]

@@ -45,18 +45,47 @@ pub async fn serve(
     app: axum::Router,
     shutdown: impl std::future::Future<Output = ()>,
 ) -> io::Result<()> {
+    serve_listener(TlsListener::new(socket, config), app, shutdown).await
+}
+
+pub async fn serve_http(
+    socket: TcpListener,
+    app: axum::Router,
+    shutdown: impl std::future::Future<Output = ()>,
+) -> io::Result<()> {
+    if !socket.local_addr()?.ip().is_loopback() {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "HTTP requires loopback",
+        ));
+    }
+    serve_listener(
+        HttpListener {
+            socket,
+            connections: Arc::new(Semaphore::new(256)),
+        },
+        app,
+        shutdown,
+    )
+    .await
+}
+
+async fn serve_listener(
+    mut listener: impl Listener<Addr = SocketAddr>,
+    app: axum::Router,
+    shutdown: impl std::future::Future<Output = ()>,
+) -> io::Result<()> {
     use hyper_util::{
         rt::{TokioIo, TokioTimer},
         service::TowerToHyperService,
     };
-    let mut listener = TlsListener::new(socket, config);
     let mut tasks = JoinSet::new();
     let (stop, signal) = tokio::sync::watch::channel(false);
     tokio::pin!(shutdown);
     loop {
         tokio::select! {
             _=&mut shutdown=>break,
-            Some(result)=tasks.join_next(),if !tasks.is_empty()=>{if let Err(error)=result{tracing::error!(%error,"HTTPS connection task failed");}}
+            Some(result)=tasks.join_next(),if !tasks.is_empty()=>{if let Err(error)=result{tracing::error!(%error,"HTTP connection task failed");}}
             (io,peer)=listener.accept()=>{
                 let app=app.clone().layer(axum::Extension(axum::extract::ConnectInfo(peer)));let mut signal=signal.clone();
                 tasks.spawn(async move {
@@ -67,7 +96,7 @@ pub async fn serve(
                         result=&mut connection=>result,
                         _=signal.changed()=>{connection.as_mut().graceful_shutdown();connection.await}
                     };
-                    if let Err(error)=result{tracing::debug!(%error,"HTTPS connection closed");}
+                    if let Err(error)=result{tracing::debug!(%error,"HTTP connection closed");}
                 });
             }
         }
@@ -128,12 +157,53 @@ impl Listener for TlsListener {
         }
     }
 }
-pub struct TlsIo {
-    stream: TlsStream<TcpStream>,
+pub struct LimitedIo<S> {
+    stream: S,
     _permit: OwnedSemaphorePermit,
     idle: Pin<Box<Sleep>>,
 }
-impl TlsIo {
+type TlsIo = LimitedIo<TlsStream<TcpStream>>;
+
+struct HttpListener {
+    socket: TcpListener,
+    connections: Arc<Semaphore>,
+}
+impl Listener for HttpListener {
+    type Io = LimitedIo<TcpStream>;
+    type Addr = SocketAddr;
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.socket.local_addr()
+    }
+    async fn accept(&mut self) -> (Self::Io, SocketAddr) {
+        loop {
+            let permit = self
+                .connections
+                .clone()
+                .acquire_owned()
+                .await
+                .expect("connection semaphore stays open");
+            match self.socket.accept().await {
+                Ok((stream, peer)) => {
+                    let _ = stream.set_nodelay(true);
+                    return (
+                        LimitedIo {
+                            stream,
+                            _permit: permit,
+                            idle: Box::pin(tokio::time::sleep(Duration::from_secs(60))),
+                        },
+                        peer,
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "HTTP loopback accept failed");
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            }
+        }
+    }
+}
+
+impl<S> LimitedIo<S> {
     fn expired(&mut self, cx: &mut Context<'_>) -> bool {
         self.idle.as_mut().poll(cx).is_ready()
     }
@@ -143,7 +213,7 @@ impl TlsIo {
             .reset(Instant::now() + Duration::from_secs(60));
     }
 }
-impl AsyncRead for TlsIo {
+impl<S: AsyncRead + Unpin> AsyncRead for LimitedIo<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -160,7 +230,7 @@ impl AsyncRead for TlsIo {
         result
     }
 }
-impl AsyncWrite for TlsIo {
+impl<S: AsyncWrite + Unpin> AsyncWrite for LimitedIo<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

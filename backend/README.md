@@ -1,49 +1,68 @@
-# SantolvDrive: backend nativo en Rust
+# SantolvDrive: backend local en Rust
 
-Axum + Tokio + Tower + Rustls. La aplicación y su instalador están escritos en Rust y se ejecutan como un único proceso nativo. **PostgreSQL es la única excepción externa autorizada.** No se necesita Docker, Caddy, Nginx, winget, scripts de instalación ni intérpretes para ejecutar el producto. No se añaden ni descargan otros programas.
+Axum + Tokio + Tower + Rustls. El backend y el instalador están escritos en Rust. La única dependencia externa es PostgreSQL, que se prepara automáticamente si falta. La API usa **http://localhost:8443** y el HTML se abre con doble clic como archivo local, únicamente desde el mismo equipo. No requiere dominio, túneles ni cuentas de servicios externos. No utiliza Docker.
 
-## Instalar y arrancar
+## Instalación local
 
-Distribuir el ejecutable correspondiente al sistema y arquitectura. Los paquetes Linux/macOS se generan con `.github/workflows/installers.yml`; el artefacto local Windows está en `dist/`. Los instaladores antiguos basados en contenedores quedan sustituidos.
+En Windows, ejecutar desde la carpeta del instalador:
 
-```text
-santolvdrive install --directory /ruta/santolvdrive --origin https://drive.tudominio.com:8443
-# Windows
-.\santolvdrive.exe install --directory C:\SantolvDrive --origin https://drive.tudominio.com:8443
-# Inspección sin escribir configuración ni instalar programas
-santolvdrive install --check
+```powershell
+.\santolvdrive-windows-x64.exe install --directory .\servidor
+.\servidor\santolvdrive.exe serve --config .\servidor\server.json
 ```
 
-Antes de ejecutar el instalador, tener PostgreSQL disponible y un certificado/cadena y clave privada en formato PEM para el dominio. El instalador pide la URL de PostgreSQL de forma oculta, las rutas PEM y las credenciales del primer administrador. Crea un directorio privado, copia el certificado y la clave, escribe `server.json`, aplica las migraciones y copia el propio ejecutable. No compila código en el servidor, lanza gestores de paquetes ni instala servicios del sistema.
+En Linux/macOS, usar el binario correspondiente:
 
-Arrancar el ejecutable instalado con `serve --config /ruta/server.json`. HTTPS termina directamente en Rustls; no se necesita proxy. El puerto lo controla `bind`: los puertos bajos como 443 pueden exigir permisos del sistema. El 8443 permite un despliegue sin privilegios de administrador del sistema si las reglas de red lo permiten. Ajustar el DNS y el firewall al puerto publicado.
+```text
+./santolvdrive install --directory ./servidor
+./servidor/santolvdrive serve --config ./servidor/server.json
+```
 
-La configuración no almacena la contraseña del administrador; PostgreSQL y las sesiones solo conservan sus verificadores. La URL SQL sí puede incluir una contraseña y debe mantenerse privada. El directorio se restringe al propietario en Unix y al propietario/SYSTEM mediante las APIs nativas de seguridad de Windows, sin invocar programas auxiliares. Reanudar una instalación conserva archivos existentes y rechaza reemplazos con distinto contenido. Actualizar un ejecutable requiere parar el proceso y un procedimiento explícito.
+El instalador solo pide las credenciales iniciales del administrador Drive. Prepara PostgreSQL, un clúster privado, contraseñas aleatorias, el rol limitado de aplicación, las migraciones y `server.json`. No solicita URL SQL, dominio ni certificados. El ejecutable instalado se conserva al reanudar; una versión diferente requiere reemplazarlo explícitamente con el servidor detenido.
 
-## Configuración y TLS
+La API se inicia con `serve --config ...` y escucha en http://localhost:8443. Abrir frontend/pruebahtml/index.html con doble clic: solicita los datos por fetch, sin redirecciones ni servidor de HTML. El backend no sirve páginas; / devuelve JSON y /index.html no existe. El comando frontend se ha retirado.
 
-`server.example.json` es una plantilla sin credenciales reales. Las rutas relativas se resuelven desde el directorio de configuración. `--config` funciona con `serve`, `bootstrap-admin`, `reset-admin` y `admin-initialized`. Alternativamente se pueden exportar las variables de `.env.example`; el binario no interpreta `.env` automáticamente.
+Para una configuración anterior, detener el proceso y ejecutar con el binario nuevo:
 
-En producción se requiere un origen HTTPS y una cadena y clave PEM válidas y concordantes. Rustls admite TLS 1.2/1.3 y HTTP/1.1 con keep-alive. El certificado debe cubrir el dominio y ser confiable para los clientes. La emisión y renovación no son automáticas: sustituir los PEM de forma coordinada y reiniciar para cargarlos. No se instala software de certificados ni se omite la validación TLS. Los certificados autofirmados generados en las pruebas solo se confían en el cliente de pruebas.
+```text
+santolvdrive configure-local --config ./servidor/server.json
+santolvdrive serve --config ./servidor/server.json
+```
 
-El listener limita a 256 conexiones y 64 handshakes simultáneos; cada handshake tiene 10 segundos, las cabeceras HTTP tienen un plazo de 30 segundos y un buffer máximo de 32 KiB, y las conexiones sin progreso de E/S caducan en 60 segundos. La aplicación conserva límites de solicitudes, transferencias, contraseñas y consultas. Las cabeceras `X-Forwarded-For` no se usan como identidad: los límites por IP emplean el peer de la conexión aceptada.
+Se conserva una copia `server.before-local.json` y no se alteran cuentas ni archivos. Usar el archivo de configuración que realmente contenga la instalación anterior. El programa no desinstala programas ajenos ni elimina secretos de otros directorios.
 
-HTTP sin TLS solo se permite explícitamente para desarrollo con `allow_insecure_localhost=true`, origen HTTP de loopback y bind de loopback. No hay fallback automático de HTTPS a HTTP si falla el certificado.
+## Dependencias y configuración
 
-PostgreSQL debe usar un rol de aplicación sin permisos de superusuario, creación de roles ni bases. El rol necesita permisos sobre su propio esquema para las migraciones. Las conexiones remotas exigen `sslmode=verify-full`; las conexiones de loopback pueden usar el servidor local autorizado. El instalador no descarga PostgreSQL ni cambia sus roles: se reutiliza la instancia que indique el administrador. No se ha implementado todavía registro automático como servicio ni emisión ACME.
+`install --check` informa sin escribir archivos. `install --directory ./servidor --dependencies-only` prepara solamente PostgreSQL, sin crear cuentas ni bases. Si ya hay binarios PostgreSQL, los reutiliza; `POSTGRES_BIN` permite indicar su directorio. Si falta: Windows x64 descarga EDB portable 17.12 por HTTPS con hash fijado, límites y extracción segura de runtime/licencias sin pgAdmin; Linux usa apt/dnf; macOS utiliza Homebrew si existe. Otros sistemas requieren PostgreSQL previamente instalado. Los gestores del sistema pueden solicitar contraseña administrativa y crear su servicio predeterminado; Drive mantiene su clúster independiente. En Unix ejecutar Drive como usuario sin privilegios root, como exige initdb.
+
+`server.example.json` y `.env.example` son plantillas avanzadas. Las rutas relativas se resuelven desde el archivo de configuración. Las variables deben exportarse: el binario no interpreta `.env`. HTTP exige `allow_insecure_localhost=true`, origen de loopback y escucha de loopback; se rechazan `0.0.0.0`, `::` y direcciones de red. HTTPS local mediante Rustls sigue disponible con `allow_insecure_localhost=false` y certificado/clave válidos. No hay fallback a HTTP si falla TLS.
+
+El archivo local usa credentials: omit y recibe, tras validar usuario y contraseña con local_file: true, un token bearer de 30 minutos. Solo se guarda en memoria y cada petición lo presenta en Authorization. CORS permite el origen opaco null sin Access-Control-Allow-Credentials; cualquier petición null con cookies se rechaza. Null no acredita que sea nuestro HTML: también puede representar documentos aislados, por lo que siempre se requiere autenticación y nunca se acepta una sesión ambiental. Los clientes web alojados conservan cookies HttpOnly, SameSite=Strict y CSRF con su frontend_origin explícito. Se conservan límites de intentos, roles y revocación de sesiones. HTTP solo se permite en loopback.
+
+Los listeners conservan límites de 256 conexiones, cabeceras de 32 KiB con 30 segundos de plazo e inactividad de 60 segundos. PostgreSQL escucha en 127.0.0.1 con SCRAM-SHA-256 y rol limitado. `serve` lo arranca cuando hace falta; `database-stop --config ./servidor/server.json` lo detiene explícitamente. No se registra todavía arranque automático al reiniciar el equipo.
+
+El directorio de instalación es privado para propietario/SYSTEM en Windows y propietario en Unix. `server.json`, sus backups y `postgres-state.json` contienen secretos y deben protegerse y respaldarse cifrados. Las migraciones y el contenido existente no se cambian en esta modificación.
 
 ## Administración y acceso
 
-El **administrador del servidor** es una cuenta del producto con tipo `admin`. Solo puede administrar usuarios y consultar el registro de administración. No obtiene espacio personal, no aparece como usuario de almacenamiento y todos los endpoints de archivos, organizaciones y cargas rechazan su sesión, incluso con permisos compartidos accidentalmente.
+El **superusuario del servidor** es único y se conserva como identidad de administración y auditoría. No puede iniciar sesión por HTTP, no tiene unidad personal y no aparece en el HTML. La base de datos impide crear un segundo superusuario. La actualización revoca sus antiguas sesiones y conserva los usuarios, sus sesiones normales y todos los archivos. Las rutas /api/v1/admin/* se han retirado de la API y de OpenAPI.
 
-- `POST /api/v1/auth/login` con `{username,password}`. Web: cookie HttpOnly, Secure, SameSite=Strict y `csrf_token`; enviar `X-CSRF-Token` en escrituras. Móvil: añadir `mobile:true` y usar el token bearer en el almacén seguro del sistema. Sesiones normales de 7 días; administrador, 30 minutos.
-- `GET /api/v1/me`: identidad, tipo de cuenta y si debe cambiar la contraseña.
-- `POST /api/v1/admin/users` con `{username,password}`: crea un usuario y su espacio personal. La contraseña inicial es temporal.
-- `GET /api/v1/admin/users?after=UUID`: lista cuentas sin contraseñas ni contenido.
-- `PATCH /api/v1/admin/users/{id}` con `{disabled:true|false}`: desactiva/reactiva. Desactivar revoca sesiones y bloquea nuevas publicaciones; conserva archivos y membresías. Reactivar no resucita sesiones anteriores.
-- `POST /api/v1/admin/users/{id}/password` con `{password}`: establece una contraseña temporal y revoca todas las sesiones. No reactiva una cuenta desactivada.
-- `GET /api/v1/admin/audit?after=ID`: acciones administrativas, sin secretos ni contraseñas.
-- El usuario entra con su contraseña temporal y solo puede consultar identidad, salir y usar `POST /api/v1/auth/password` con `{current_password,new_password}`. Tras cambiarla debe iniciar sesión de nuevo para usar archivos. Este endpoint también permite a un administrador cambiar su propia contraseña.
+La administración se realiza desde la terminal del propio servidor, con acceso del sistema operativo a su configuración privada. No es el usuario PostgreSQL y no se concede un rol superuser de PostgreSQL. Quien pueda leer server.json y ejecutar el programa con esa cuenta del sistema controla esta instalación.
+
+Desde backend, usando la configuración existente:
+
+```powershell
+.\dist\santolvdrive-windows-x64.exe users list --config .\servidor\server.json
+.\dist\santolvdrive-windows-x64.exe users create --config .\servidor\server.json
+.\dist\santolvdrive-windows-x64.exe users disable nombre --config .\servidor\server.json
+.\dist\santolvdrive-windows-x64.exe users enable nombre --config .\servidor\server.json
+.\dist\santolvdrive-windows-x64.exe users reset-password --config .\servidor\server.json
+.\dist\santolvdrive-windows-x64.exe users audit --config .\servidor\server.json
+```
+
+Create y reset-password piden el usuario y una contraseña temporal oculta, con repetición. Para automatización aceptan --stdin antes de --config y un objeto JSON {username,password} por la entrada estándar, con límite de 4096 bytes; nunca pasar contraseñas como argumentos. List y audit aceptan un cursor después del nombre de la acción, devuelto como next_cursor. Desactivar una cuenta revoca sus sesiones y bloquea las publicaciones pendientes, conservando sus archivos. Reactivarla no recupera las sesiones anteriores. Restablecer su contraseña exige cambiarla al entrar y no reactiva cuentas desactivadas.
+
+El Drive solo tiene el acceso habitual de usuario y contraseña mediante POST /api/v1/auth/login. Desde el HTML abierto con doble clic usa local_file: true y bearer en memoria; el resto de clientes conserva los modos documentados. Solo las cuentas de usuario pueden recibir sesiones. GET /api/v1/me muestra su identidad; POST /api/v1/auth/password cambia su propia contraseña y revoca las sesiones. Una contraseña temporal obliga a cambiarla antes de acceder a los archivos.
 
 Nombres nuevos: 3–64 caracteres ASCII alfanuméricos, punto, guion y guion bajo, normalizados a minúsculas. Contraseñas de 12–1024 bytes, protegidas con Argon2id. No hay ninguna cuenta ni contraseña predeterminada. Un usuario normal no puede crear usuarios, ascender a administrador ni ejecutar acciones administrativas.
 
@@ -58,7 +77,7 @@ Bootstrap solo funciona una vez y nunca promueve una cuenta existente. `reset-ad
 
 ## Datos existentes y migración
 
-Se conservan las migraciones SQL y el modelo de datos, cuentas, permisos, versiones y contenido. El cambio de despliegue no convierte ni elimina archivos. Para pasar desde una instalación anterior: detener el backend, hacer una copia coordinada de PostgreSQL y del almacenamiento, conservar sus credenciales/rol y configurar `storage_root` con la ubicación correcta de los datos recuperados. No usar una instalación nueva sobre directorios ajenos ni eliminar volúmenes antiguos antes de verificar la migración.
+Se conservan las migraciones SQL, cuentas, permisos, versiones y contenido. Para adaptar una configuración anterior: detener el servidor y ejecutar `santolvdrive configure-local --config /ruta/server.json`. Conserva credenciales SQL, rutas y cuotas, guarda el original como `server.before-local.json` y sustituye únicamente la configuración de acceso por HTTP de loopback. No elimina ni convierte los datos. Reiniciar con el mismo archivo. Proteger también el backup, que contiene las credenciales SQL.
 
 La migración `0002` de cuentas sigue conservando IDs y contraseñas y sustituyendo el identificador anterior por `username`; los clientes usan `{username,password}`. No hay emails, verificaciones ni recuperación pública. El administrador del servidor administra cuentas y no es un gestor de espacios.
 
@@ -87,13 +106,13 @@ Los temporales y objetos viven en el mismo volumen persistente. Publicar hace re
 
 El trabajador recupera publicaciones interrumpidas, expira cargas, reintenta borrados y detecta contenido ausente o truncado. La integridad SHA-256 se verifica en cada bloque y finalización. El mantenimiento de fondo comprueba existencia/tamaño; no hace lectura/hash periódico de todo el disco. Los temporales sin confirmar se truncan al offset confirmado en el siguiente reintento.
 
-Papelera retiene 30 días por defecto (`TRASH_RETENTION_DAYS`, entre 1 y 36500) antes de permitir `POST /nodes/{id}/purge` (gestor y `If-Match`). Al confirmar purge, el árbol queda bloqueado para restauración/escritura; el trabajador elimina hojas y versiones por lotes. Los objetos sin referencias se recogen después de 24 horas de antigüedad; la cuota usada baja después del borrado físico confirmado. Las reservas no son una preasignación física: si el volumen se llena, la carga falla sin publicar contenido incompleto. Se mantiene un margen de 64 MiB, pero otros procesos también pueden consumirlo.
+Mover a la papelera permite restaurar. Un gestor puede confirmar POST /nodes/{id}/purge con If-Match sin esperar: devuelve 202 vacío, oculta el elemento y encola el borrado físico por lotes. Las versiones sin otras referencias se eliminan del disco y liberan cuota al confirmar su retirada. Las que todavía estén referenciadas se conservan. No se añade borrado automático: la papelera se vacía mediante la acción explícita del usuario. TRASH_RETENTION_DAYS se conserva para compatibilidad de configuración, pero no bloquea esa confirmación manual. Los contenidos huérfanos que no procedan de un borrado solicitado mantienen la recogida de seguridad tras 24 horas. Las reservas no preasignan capacidad física; no se publican archivos incompletos si el volumen se llena.
 
 Las escrituras estructurales se serializan por espacio con advisory locks PostgreSQL para impedir ciclos y movimientos incompatibles. Las cargas se bloquean por sesión; la transferencia no bloquea todo el espacio. Los valores iniciales son 16 conexiones SQL, 128 solicitudes, 8 transferencias y 2 hashes Argon2id simultáneos por proceso. Son límites conservadores iniciales, no una capacidad garantizada. El cierre espera solicitudes HTTP activas; un corte forzado se recupera desde estado persistente.
 
 ## Copias, actualizaciones y operación
 
-La garantía de durabilidad de producción requiere Linux y un sistema de archivos local que respete fsync y rename atómico, con `uploads/` y `objects/` en el mismo volumen. En Windows se pueden desarrollar y probar los flujos, pero no se sincronizan directorios y no se promete resistencia equivalente a pérdida de energía. Mantener el almacenamiento accesible solo por el usuario de servicio y no permitir escrituras de otros usuarios. Los archivos se entregan sin ejecución, extracción, inspección activa ni renderizado de HTML.
+La garantía de durabilidad de producción requiere Linux y un sistema de archivos local que respete fsync y rename atómico, con `.uploads/` y `archivos/` en el mismo volumen. En Windows se pueden desarrollar y probar los flujos, pero no se sincronizan directorios y no se promete resistencia equivalente a pérdida de energía. Mantener el almacenamiento accesible solo por el usuario de servicio y no permitir escrituras de otros usuarios. Los archivos se entregan sin ejecución, extracción, inspección activa ni renderizado de HTML.
 
 Para una copia consistente inicial: detener el backend/trabajador, crear `pg_dump` y copiar todo `STORAGE_ROOT` mientras sigue detenido, cifrar y enviar ambas partes a un destino independiente, y arrancar de nuevo. Guardar identificador de pareja y checksum de ambos backups. Para restaurar, parar el backend, restaurar PostgreSQL y el directorio de la **misma** copia en un entorno aislado, iniciar reconciliación y verificar cuentas, permisos, versiones y descargas antes de reabrir acceso. El reconciliador no sustituye una copia de seguridad.
 
@@ -115,3 +134,32 @@ Los tests SQLx crean bases aisladas y aplican migraciones automáticamente. No u
 Para medir tu VPS: usar un build release, poblar carpetas e historiales crecientes y aumentar carga concurrente de listados y transferencias; registrar p50/p95/p99, MB/s, RAM, CPU, IOPS, esperas SQL, respuestas 429 y errores. El test de carga ignorado en `tests/load.rs` permite obtener una primera línea base de listados contra una BD de pruebas. No equivale a una prueba de red ni a una capacidad máxima certificada.
 
 La primera entrega no incorpora S3, búsquedas de contenido, previews, enlaces públicos, comentarios ni clientes. Tampoco se ha auditado externamente. Para múltiples instancias, todas deben usar el mismo almacenamiento coherente y DB; los límites locales se multiplican por proceso y hay que volver a medirlos. El bloqueo por espacio prioriza consistencia y puede convertirse en el límite de escritura de una organización muy activa.
+
+## Almacenamiento físico por usuario
+
+```text
+usuarios/nombre_usuario/
+  archivos/
+    Trabajo/                         # Carpeta creada en el Drive
+      informe.pdf/                   # Carpeta del archivo
+        informe.pdf                  # Copia de trabajo del archivo actual
+        .drive-node                  # Identidad interna; no modificar
+  .versions/UUID/nombre_original.ext  # Historial inmutable
+  .uploads/                          # Subidas temporales
+  .papelera/                         # Elementos movidos a la papelera
+  .moves/                            # Movimientos interrumpidos, recuperables
+```
+
+Los espacios de organizaciones tienen la misma estructura bajo organizaciones/UUID. El superusuario no recibe espacio de archivos. Los contenidos se mantienen en el espacio propietario aunque los modifique un colaborador.
+
+La jerarquía de carpetas lógica se refleja en archivos/. Cada archivo se presenta como nombre.ext/nombre.ext. Crear, renombrar, mover, restaurar, cambiar de versión y eliminar actualizan el árbol. Las carpetas de los archivos pueden contener metadatos auxiliares; se conservan al moverlas o renombrarlas. El prefijo .drive- está reservado al servidor. No editar ni eliminar esos marcadores ni los directorios internos. Las modificaciones de la copia de trabajo realizadas fuera de la API no se incorporan al historial: usar la API para actualizar el documento y escribir datos auxiliares en archivos distintos.
+
+El historial queda separado en .versions. La copia de trabajo es independiente, sin enlaces duros, para que un procesador externo no pueda alterar versiones anteriores accidentalmente. Solo se vuelve a copiar cuando cambia el contenido o falta/se trunca la copia. La copia usa operaciones de disco con memoria acotada; los movimientos y renombrados conservan el directorio completo. Esta estructura necesita espacio adicional para la versión actual. Las cuotas siguen siendo lógicas (contenidos e historial); el espacio físico se comprueba también antes de generar cada copia.
+
+La migración 0006 conserva todos los metadatos y encola los nodos existentes. Los contenidos del formato anterior se trasladan a .versions sin perder versiones y el trabajador genera las rutas por nombres. No iniciar binarios antiguos después de migrar. Respaldar PostgreSQL y todo el directorio de datos, incluidos los internos.
+
+La base de datos es la autoridad. workspace_jobs registra de forma durable las operaciones pendientes y workspace_entries enlaza cada directorio con su identidad y su padre. Los movimientos pasan por .moves y la identidad permite reanudarlos después de un reinicio. La respuesta storage_pending indica que aún hay una tarea de sincronización; no se descarta ante errores de disco. Se retienen cambios de estructura adicionales del espacio hasta completar la operación pendiente, evitando perder la ubicación anterior. Un destino no gestionado y ocupado nunca se sobrescribe. El trabajador registra el código de error y vuelve a intentarlo; los datos ajenos al Drive deben moverse a otra ubicación por el operador si bloquean un nombre.
+
+Los nombres nuevos deben ser representables de forma portable en disco. Dentro de una carpeta se rechazan con 409 los nombres ocupados, incluidas diferencias únicamente de mayúsculas; una carga pendiente también reserva su nombre. Restaurar un elemento con nombre ocupado no sobrescribe el existente. Los duplicados heredados se conservan en directorios independientes con sufijo estable, sin modificar su nombre lógico. Renombrar solo las mayúsculas funciona mediante un paso temporal seguro. Las rutas largas de Windows se usan en formato nativo también al aplicar permisos.
+
+La API sigue siendo solo datos y contenidos, sin servir HTML. El frontend se abre por file:// y mantiene el diseño existente, mostrando avisos de nombre ocupado y sincronización pendiente. No se añaden programas ni dependencias externas: los nuevos componentes son Rust y PostgreSQL continúa siendo la excepción ya autorizada.

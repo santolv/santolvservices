@@ -4,11 +4,207 @@ use std::path::{Path, PathBuf};
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
-pub fn temp(root: &Path, id: Uuid) -> PathBuf {
-    root.join("uploads").join(id.to_string())
+pub fn temp(root: &Path, directory: &str, id: Uuid) -> PathBuf {
+    root.join(directory).join(".uploads").join(id.to_string())
 }
-pub fn object(root: &Path, id: Uuid) -> PathBuf {
-    root.join("objects").join(id.to_string())
+pub fn object(root: &Path, directory: &str, id: Uuid, name: &str) -> PathBuf {
+    root.join(directory)
+        .join(".versions")
+        .join(id.to_string())
+        .join(disk_filename(name))
+}
+pub fn disk_filename(name: &str) -> String {
+    let mut value: String = name
+        .chars()
+        .map(|c| {
+            if c.is_control() || matches!(c, '/' | '\\' | '<' | '>' | ':' | '"' | '|' | '?' | '*') {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    if value.ends_with(['.', ' ']) {
+        value = format!("{}_", value.trim_end_matches(['.', ' ']));
+    }
+    if value.is_empty() {
+        value = "archivo".into();
+    }
+    if !portable_username(&value) {
+        value.insert(0, '_');
+    }
+    while value.len() > 255 {
+        value.pop();
+    }
+    value
+}
+pub fn attachment(name: &str) -> String {
+    let fallback: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | ' ') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let encoded: String = name
+        .bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-') {
+                char::from(b).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect();
+    format!("attachment; filename=\"{fallback}\"; filename*=UTF-8''{encoded}")
+}
+pub fn portable_username(value: &str) -> bool {
+    let base = value.split('.').next().unwrap_or("").to_ascii_lowercase();
+    !(value.ends_with('.')
+        || matches!(base.as_str(), "con" | "prn" | "aux" | "nul")
+        || (base.len() == 4
+            && (base.starts_with("com") || base.starts_with("lpt"))
+            && base.as_bytes()[3].is_ascii_digit()))
+}
+pub fn user_directory(username: &str, id: Uuid) -> String {
+    if (3..=64).contains(&username.len())
+        && portable_username(username)
+        && username.bytes().all(|b| {
+            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'-' | b'.')
+        })
+    {
+        format!("usuarios/{username}")
+    } else {
+        format!("usuarios_compat/{id}")
+    }
+}
+pub(crate) async fn private_dir(path: &Path) -> Result<()> {
+    match tokio::fs::create_dir(path).await {
+        Ok(()) => {
+            crate::permissions::private_directory(path)?;
+            if let Some(parent) = path.parent() {
+                sync_dir(parent).await?;
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            let info = tokio::fs::symlink_metadata(path).await?;
+            if !info.is_dir() || info.file_type().is_symlink() {
+                return Err(Error::conflict("invalid_storage_directory"));
+            }
+        }
+        Err(e) => return Err(e.into()),
+    }
+    Ok(())
+}
+pub async fn prepare_space(root: &Path, directory: &str) -> Result<()> {
+    let (branch, component) = directory
+        .split_once('/')
+        .ok_or_else(|| Error::bad("invalid_storage_directory"))?;
+    let valid = match branch {
+        "usuarios" => user_directory(component, Uuid::nil()) == directory,
+        "usuarios_compat" | "organizaciones" => component.parse::<Uuid>().is_ok(),
+        _ => false,
+    };
+    if !valid || component.contains(['/', '\\']) {
+        return Err(Error::bad("invalid_storage_directory"));
+    }
+    private_dir(&root.join(branch)).await?;
+    let home = root.join(directory);
+    private_dir(&home).await?;
+    private_dir(&home.join(".uploads")).await?;
+    private_dir(&home.join("archivos")).await?;
+    private_dir(&home.join(".versions")).await?;
+    cleanup_legacy_roots(&home).await?;
+    Ok(())
+}
+pub async fn cleanup_legacy_roots(root: &Path) -> Result<()> {
+    for kind in ["objects", "uploads"] {
+        match tokio::fs::remove_dir(root.join(kind)).await {
+            Ok(()) => sync_dir(root).await?,
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
+                ) => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Ok(())
+}
+// Same-volume migration is resumable; never copy large files into RAM or replace existing content.
+pub async fn prepare_object(root: &Path, directory: &str, id: Uuid, name: &str) -> Result<PathBuf> {
+    prepare_space(root, directory).await?;
+    let path = object(root, directory, id, name);
+    private_dir(path.parent().unwrap()).await?;
+    Ok(path)
+}
+pub async fn remove_object(root: &Path, directory: &str, id: Uuid, name: &str) -> Result<()> {
+    let path = object(root, directory, id, name);
+    remove(&path).await?;
+    match tokio::fs::remove_dir(path.parent().unwrap()).await {
+        Ok(()) => sync_dir(&root.join(directory).join(".versions")).await?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+        Err(e) => return Err(e.into()),
+    }
+    Ok(())
+}
+pub async fn relocate_legacy(root: &Path, directory: &str, id: Uuid, name: &str) -> Result<()> {
+    let previous = root
+        .join(directory)
+        .join("archivos")
+        .join(id.to_string())
+        .join(disk_filename(name));
+    if tokio::fs::try_exists(&previous).await?
+        && !tokio::fs::try_exists(previous.parent().unwrap().join(".drive-node")).await?
+        && tokio::fs::symlink_metadata(&previous).await?.is_file()
+    {
+        let new = prepare_object(root, directory, id, name).await?;
+        if tokio::fs::try_exists(&new).await? {
+            return Err(Error::conflict("storage_layout_conflict"));
+        }
+        tokio::fs::rename(&previous, &new).await?;
+        sync_dir(new.parent().unwrap()).await?;
+        sync_dir(previous.parent().unwrap()).await?;
+        match tokio::fs::remove_dir(previous.parent().unwrap()).await {
+            Ok(()) => sync_dir(&root.join(directory).join("archivos")).await?,
+            Err(e) if e.kind() == std::io::ErrorKind::DirectoryNotEmpty => (),
+            Err(e) => return Err(e.into()),
+        }
+    }
+    for (kind, base) in [
+        ("uploads", root.to_owned()),
+        ("uploads", root.join(directory)),
+        ("objects", root.to_owned()),
+        ("objects", root.join(directory)),
+    ] {
+        let old = base.join(kind).join(id.to_string());
+        if !tokio::fs::try_exists(&old).await? {
+            continue;
+        }
+        prepare_space(root, directory).await?;
+        let new = if kind == "objects" {
+            prepare_object(root, directory, id, name).await?
+        } else {
+            temp(root, directory, id)
+        };
+        if tokio::fs::try_exists(&new).await? {
+            return Err(Error::conflict("storage_layout_conflict"));
+        }
+        match tokio::fs::rename(&old, &new).await {
+            Ok(()) => {
+                sync_dir(new.parent().unwrap()).await?;
+                sync_dir(old.parent().unwrap()).await?;
+            }
+            Err(e)
+                if e.kind() == std::io::ErrorKind::NotFound
+                    && tokio::fs::try_exists(&new).await? => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Ok(())
 }
 pub async fn sync_dir(path: &Path) -> Result<()> {
     #[cfg(unix)]
@@ -99,6 +295,69 @@ pub fn range(h: Option<&str>, size: u64) -> Result<(u64, u64, bool)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn original_names_preserve_extensions_and_download_headers_are_safe() {
+        assert_eq!(disk_filename("Informe ñ.pdf"), "Informe ñ.pdf");
+        for name in ["../escape.txt", "CON.txt", "bad:name?.pdf", ".."] {
+            let safe = disk_filename(name);
+            assert!(!safe.contains(['/', '\\', ':', '?']));
+            assert!(!matches!(safe.as_str(), "." | ".."));
+            assert!(portable_username(&safe));
+        }
+        let header = attachment("Informe ñ.pdf\r\n");
+        assert!(!header.contains(['\r', '\n']));
+        assert!(header.contains("filename*=UTF-8''Informe%20%C3%B1.pdf%0D%0A"));
+        assert!(header.parse::<axum::http::HeaderValue>().is_ok());
+    }
+    #[tokio::test]
+    async fn workspaces_are_private_safe_and_legacy_moves_are_resumable() {
+        let root = tempfile::tempdir().unwrap();
+        let id = Uuid::new_v4();
+        assert_eq!(user_directory("alice", id), "usuarios/alice");
+        for invalid in [
+            "con",
+            "aux.txt",
+            "com1",
+            "name.",
+            "../escape",
+            "legacy@example.com",
+        ] {
+            assert_eq!(user_directory(invalid, id), format!("usuarios_compat/{id}"));
+        }
+        for invalid in [
+            "../escape",
+            "usuarios/../escape",
+            "usuarios/aux",
+            "usuarios/alice/objects",
+            "organizaciones/../escape",
+        ] {
+            assert!(prepare_space(root.path(), invalid).await.is_err());
+        }
+        prepare_space(root.path(), "usuarios/alice").await.unwrap();
+        assert!(root.path().join("usuarios/alice/archivos").is_dir());
+        tokio::fs::create_dir(root.path().join("objects"))
+            .await
+            .unwrap();
+        let old = root.path().join("objects").join(id.to_string());
+        tokio::fs::write(&old, b"custom\0content").await.unwrap();
+        relocate_legacy(root.path(), "usuarios/alice", id, "original.bin")
+            .await
+            .unwrap();
+        relocate_legacy(root.path(), "usuarios/alice", id, "original.bin")
+            .await
+            .unwrap();
+        let new = object(root.path(), "usuarios/alice", id, "original.bin");
+        assert_eq!(tokio::fs::read(&new).await.unwrap(), b"custom\0content");
+        assert!(!old.exists());
+        tokio::fs::write(&old, b"different").await.unwrap();
+        assert!(
+            relocate_legacy(root.path(), "usuarios/alice", id, "original.bin")
+                .await
+                .is_err()
+        );
+        assert_eq!(tokio::fs::read(&new).await.unwrap(), b"custom\0content");
+        assert_eq!(tokio::fs::read(&old).await.unwrap(), b"different");
+    }
     #[test]
     fn byte_ranges() {
         assert_eq!(range(Some("bytes=2-5"), 10).unwrap(), (2, 4, true));

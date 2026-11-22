@@ -31,6 +31,7 @@ pub fn token() -> String {
 pub fn username(value: &str) -> Result<String> {
     let v = value.trim().to_ascii_lowercase();
     if !(3..=64).contains(&v.len())
+        || !crate::storage::portable_username(&v)
         || !v
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
@@ -74,9 +75,6 @@ pub struct Principal {
 pub struct User {
     pub id: Uuid,
 }
-pub struct Admin {
-    pub id: Uuid,
-}
 impl FromRequestParts<App> for Principal {
     type Rejection = Error;
     async fn from_request_parts(p: &mut Parts, s: &App) -> Result<Self> {
@@ -98,7 +96,7 @@ impl FromRequestParts<App> for Principal {
             .filter(|v| v.len() == 64)
             .ok_or_else(Error::auth)?;
         let session = hash(raw);
-        let r=sqlx::query("SELECT s.user_id,s.csrf_hash,u.account_type,u.must_change_password FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND NOT u.disabled").bind(&session).fetch_optional(&s.db).await?.ok_or_else(Error::auth)?;
+        let r=sqlx::query("SELECT s.user_id,s.csrf_hash,u.account_type,u.must_change_password FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND NOT u.disabled AND u.account_type='user'").bind(&session).fetch_optional(&s.db).await?.ok_or_else(Error::auth)?;
         if cookie.is_some()
             && !matches!(
                 p.method,
@@ -138,33 +136,28 @@ impl FromRequestParts<App> for User {
         Ok(Self { id: i.id })
     }
 }
-impl FromRequestParts<App> for Admin {
-    type Rejection = Error;
-    async fn from_request_parts(p: &mut Parts, s: &App) -> Result<Self> {
-        let i = Principal::from_request_parts(p, s).await?;
-        if i.account_type != "admin" || i.must_change_password {
-            return Err(Error(
-                StatusCode::FORBIDDEN,
-                "server_administrator_required",
-            ));
-        }
-        Ok(Self { id: i.id })
-    }
-}
 pub async fn security(State(s): State<App>, req: axum::extract::Request, next: Next) -> Response {
     let _permit = match s.requests.clone().try_acquire_owned() {
         Ok(p) => p,
         Err(_) => return Error(StatusCode::TOO_MANY_REQUESTS, "request_capacity").into_response(),
     };
+    // Opaque origins have no trusted identity: never accept ambient cookie sessions.
+    let local_file = req.headers().get("origin").is_some_and(|v| v == "null");
+    if local_file && req.headers().contains_key("cookie") {
+        return Error(StatusCode::FORBIDDEN, "local_file_requires_bearer").into_response();
+    }
     if let Some(origin) = req.headers().get("origin")
+        && !local_file
         && origin.to_str().ok() != Some(&s.origin)
+        && origin.to_str().ok() != Some(&s.frontend_origin)
     {
         return Error(StatusCode::FORBIDDEN, "origin_not_allowed").into_response();
     }
-    if req
-        .headers()
-        .get("sec-fetch-site")
-        .is_some_and(|v| v == "cross-site")
+    if !local_file
+        && req
+            .headers()
+            .get("sec-fetch-site")
+            .is_some_and(|v| v == "cross-site")
     {
         return Error(StatusCode::FORBIDDEN, "cross_site_denied").into_response();
     }
@@ -190,13 +183,17 @@ pub async fn security(State(s): State<App>, req: axum::extract::Request, next: N
         ("x-content-type-options", "nosniff"),
         ("referrer-policy", "no-referrer"),
         ("cache-control", "no-store"),
-        (
-            "content-security-policy",
-            "default-src 'none'; frame-ancestors 'none'",
-        ),
     ] {
         response.headers_mut().insert(k, v.parse().unwrap());
     }
+    response
+        .headers_mut()
+        .entry("content-security-policy")
+        .or_insert(
+            "default-src 'none'; frame-ancestors 'none'"
+                .parse()
+                .unwrap(),
+        );
     if s.secure {
         response.headers_mut().insert(
             "strict-transport-security",
@@ -219,6 +216,8 @@ pub struct Login {
     password: String,
     #[serde(default)]
     mobile: bool,
+    #[serde(default)]
+    local_file: bool,
 }
 pub async fn login(
     State(s): State<App>,
@@ -235,7 +234,12 @@ pub async fn login(
     if c.mobile && (headers.contains_key("origin") || headers.contains_key("sec-fetch-site")) {
         return Err(Error::bad("browser_requires_cookie"));
     }
-    let row = sqlx::query("SELECT id,password_hash FROM users WHERE username=$1 AND NOT disabled")
+    let opaque = headers.get("origin").is_some_and(|v| v == "null");
+    if opaque != c.local_file || (c.local_file && c.mobile) {
+        return Err(Error::bad("local_file_requires_bearer"));
+    }
+    let token_mode = c.mobile || c.local_file;
+    let row = sqlx::query("SELECT id,password_hash FROM users WHERE username=$1 AND NOT disabled AND account_type='user'")
         .bind(username)
         .fetch_optional(&s.db)
         .await?;
@@ -270,11 +274,16 @@ pub async fn login(
     let current=sqlx::query("SELECT password_hash,account_type,must_change_password,disabled FROM users WHERE id=$1 FOR UPDATE").bind(id).fetch_one(&mut *tx).await?;
     if current.get::<String, _>("password_hash") != row.get::<String, _>("password_hash")
         || current.get::<bool, _>("disabled")
+        || current.get::<String, _>("account_type") != "user"
     {
         return Err(Error::auth());
     }
     let kind: String = current.get("account_type");
-    let expires: i64 = if kind == "admin" { 1800 } else { 604800 };
+    let expires: i64 = if kind == "admin" || c.local_file {
+        1800
+    } else {
+        604800
+    };
     let raw = token();
     let csrf = token();
     sqlx::query("INSERT INTO sessions VALUES($1,$2,$3,now()+$4*interval '1 second')")
@@ -286,13 +295,13 @@ pub async fn login(
         .await?;
     tx.commit().await?;
     let mut body = json!({"account_type":kind,"must_change_password":current.get::<bool,_>("must_change_password"),"expires_in":expires});
-    if c.mobile {
+    if token_mode {
         body["token"] = json!(raw);
     } else {
         body["csrf_token"] = json!(csrf);
     }
     let mut r = Json(body).into_response();
-    if !c.mobile {
+    if !token_mode {
         r.headers_mut().insert(
             "set-cookie",
             format!(
@@ -386,7 +395,9 @@ mod tests {
     #[test]
     fn account_names() {
         assert_eq!(super::username(" Alice ").unwrap(), "alice");
-        for name in ["a", "a@b", "a/b", "a b", ""] {
+        for name in [
+            "a", "a@b", "a/b", "a b", "", "con", "aux.txt", "COM1", "santi.",
+        ] {
             assert!(super::username(name).is_err());
         }
     }

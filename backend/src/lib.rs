@@ -1,14 +1,19 @@
 pub mod admin;
 pub mod auth;
+pub mod dependencies;
 pub mod error;
 pub mod files;
 pub mod installer;
 pub mod openapi;
 pub mod permissions;
+pub mod postgres;
+pub mod provisioning;
 pub mod storage;
 pub mod tls;
 pub mod uploads;
+pub mod web;
 pub mod worker;
+pub mod workspace;
 
 use axum::{
     Router,
@@ -29,6 +34,7 @@ pub struct App {
     pub db: PgPool,
     pub root: PathBuf,
     pub origin: String,
+    pub frontend_origin: String,
     pub secure: bool,
     pub hashes: Arc<Semaphore>,
     pub transfers: Arc<Semaphore>,
@@ -77,8 +83,7 @@ impl App {
             .connect_with(options)
             .await?;
         sqlx::migrate!("./migrations").run(&db).await?;
-        tokio::fs::create_dir_all(root.join("objects")).await?;
-        tokio::fs::create_dir_all(root.join("uploads")).await?;
+        tokio::fs::create_dir_all(&root).await?;
         storage::sync_dir(&root).await?;
         if let Some(parent) = root.parent().filter(|p| !p.as_os_str().is_empty()) {
             storage::sync_dir(parent).await?;
@@ -86,12 +91,15 @@ impl App {
             storage::sync_dir(std::path::Path::new(".")).await?;
         }
         for dir in [&root, &root.join("objects"), &root.join("uploads")] {
-            crate::permissions::private_directory(dir)?;
+            if tokio::fs::try_exists(dir).await? {
+                crate::permissions::private_directory(dir)?;
+            }
         }
         Ok(Self {
             db,
             root,
             origin,
+            frontend_origin: web::default_frontend_origin(),
             secure,
             hashes: Arc::new(Semaphore::new(2)),
             transfers: Arc::new(Semaphore::new(8)),
@@ -102,19 +110,56 @@ impl App {
     }
 }
 pub fn router(s: App) -> Router {
+    use axum::http::{HeaderName, HeaderValue, Method};
+    let cors = tower_http::cors::CorsLayer::new()
+        .allow_origin([
+            HeaderValue::from_static("null"),
+            s.frontend_origin
+                .parse::<HeaderValue>()
+                .expect("validated frontend origin"),
+        ])
+        .allow_credentials(tower_http::cors::AllowCredentials::predicate(
+            |origin, _| origin != "null",
+        ))
+        .allow_methods([
+            Method::GET,
+            Method::HEAD,
+            Method::POST,
+            Method::PATCH,
+            Method::PUT,
+            Method::DELETE,
+        ])
+        .allow_headers(
+            [
+                "content-type",
+                "authorization",
+                "x-csrf-token",
+                "idempotency-key",
+                "if-match",
+                "upload-offset",
+                "x-chunk-sha256",
+                "range",
+                "if-range",
+            ]
+            .map(HeaderName::from_static),
+        )
+        .expose_headers(
+            [
+                "etag",
+                "content-range",
+                "accept-ranges",
+                "content-disposition",
+            ]
+            .map(HeaderName::from_static),
+        )
+        .max_age(Duration::from_secs(600));
     Router::new()
+        .route("/", get(web::index))
         .route("/health/live", get(|| async { "ok" }))
         .route("/health/ready", get(worker::health))
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/logout", post(auth::logout))
         .route("/api/v1/auth/password", post(auth::change_password))
-        .route("/api/v1/admin/users", get(admin::list).post(admin::create))
-        .route("/api/v1/admin/users/{id}", patch(admin::set_disabled))
-        .route(
-            "/api/v1/admin/users/{id}/password",
-            post(admin::reset_password),
-        )
-        .route("/api/v1/admin/audit", get(admin::audit_log))
         .route("/api/v1/me", get(auth::me))
         .route("/api/v1/shared", get(files::shared))
         .route(
@@ -167,6 +212,7 @@ pub fn router(s: App) -> Router {
         .route("/api/v1/uploads/{id}/complete", post(uploads::complete))
         .layer(DefaultBodyLimit::max(128 * 1024))
         .layer(middleware::from_fn_with_state(s.clone(), auth::security))
+        .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(s)
 }

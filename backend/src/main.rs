@@ -14,14 +14,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .is_some_and(|v| matches!(v.as_str(), "--help" | "help"))
     {
         println!(
-            "santolvdrive [serve | install [--directory PATH] [--origin https://domain] | install --check | bootstrap-admin [--stdin] | reset-admin | admin-initialized] [--config server.json]"
+            "santolvdrive [serve | users [list [AFTER_UUID] | create | disable USERNAME | enable USERNAME | reset-password | audit [AFTER_ID]] | install [--directory PATH] [--origin http://localhost:8443] [--dependencies-only] | install --check | configure-local | bootstrap-admin [--stdin] | reset-admin | admin-initialized | database-stop] [--config server.json]"
         );
         return Ok(());
     }
     let command = args.first().map(String::as_str).unwrap_or("serve");
     if !matches!(
         command,
-        "serve" | "bootstrap-admin" | "reset-admin" | "admin-initialized"
+        "serve"
+            | "users"
+            | "configure-local"
+            | "bootstrap-admin"
+            | "reset-admin"
+            | "admin-initialized"
+            | "database-stop"
     ) {
         return Err("unknown command; use --help".into());
     }
@@ -34,12 +40,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .ok_or("--config requires a path")
         })
         .transpose()?;
+    if command == "configure-local" {
+        return santolvdrive::installer::configure_local(
+            config_path
+                .as_deref()
+                .ok_or("configure-local requires --config PATH")?,
+        );
+    }
     let config = if let Some(path) = config_path {
         santolvdrive::installer::Config::load(&path)?
     } else {
         santolvdrive::installer::Config::from_env()?
     };
+    if command == "database-stop" {
+        santolvdrive::postgres::stop(
+            config
+                .managed_postgres
+                .as_ref()
+                .ok_or("this configuration uses an external PostgreSQL instance")?,
+        )
+        .await?;
+        return Ok(());
+    }
     let s = config.connect().await?;
+    if command == "users" {
+        let end = args
+            .iter()
+            .position(|v| v == "--config")
+            .unwrap_or(args.len());
+        let result = santolvdrive::admin::console(&s, &args[1..end]).await?;
+        println!("{}", serde_json::to_string_pretty(&result)?);
+        return Ok(());
+    }
     match command {
         "admin-initialized" => {
             let initialized: bool =
@@ -54,13 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "bootstrap-admin" | "reset-admin" => {
             let credentials = if command == "bootstrap-admin" && args.iter().any(|v| v == "--stdin")
             {
-                use std::io::Read;
-                let mut bytes = Vec::new();
-                std::io::stdin().take(4097).read_to_end(&mut bytes)?;
-                if bytes.len() > 4096 {
-                    return Err("bootstrap input too large".into());
-                }
-                serde_json::from_slice(&bytes)?
+                santolvdrive::installer::stdin_credentials()?
             } else {
                 santolvdrive::installer::credentials()?
             };
@@ -74,36 +100,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => {}
     }
-    let tls = if config.allow_insecure_localhost {
-        None
-    } else {
-        Some(santolvdrive::tls::config(
-            config
-                .tls_cert_file
-                .as_ref()
-                .ok_or("TLS certificate required")?,
-            config.tls_key_file.as_ref().ok_or("TLS key required")?,
-        )?)
+    let tls = match (&config.tls_cert_file, &config.tls_key_file) {
+        (Some(cert), Some(key)) if !config.allow_insecure_localhost => {
+            Some(santolvdrive::tls::config(cert, key)?)
+        }
+        _ => None,
     };
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
+    println!("Servidor local: {}", config.app_origin);
     let task = tokio::spawn(worker::run(s.clone()));
-    if config.allow_insecure_localhost {
-        axum::serve(
-            listener,
-            router(s).into_make_service_with_connect_info::<std::net::SocketAddr>(),
-        )
-        .with_graceful_shutdown(shutdown())
-        .await?;
+    let result = if let Some(tls) = tls {
+        santolvdrive::tls::serve(listener, tls, router(s), shutdown()).await
     } else {
-        santolvdrive::tls::serve(
-            listener,
-            tls.ok_or("TLS configuration required")?,
-            router(s),
-            shutdown(),
-        )
-        .await?;
-    }
+        santolvdrive::tls::serve_http(listener, router(s), shutdown()).await
+    };
     task.abort();
+    result?;
     Ok(())
 }
 async fn shutdown() {

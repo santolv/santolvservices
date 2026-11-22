@@ -8,8 +8,8 @@ pub fn document() -> Value {
         (
             "/api/v1/auth/login",
             "post",
-            "Login using username/password; cookie for web, bearer for mobile",
-            "username,password,mobile?",
+            "Login using username/password; cookie for hosted web, bearer for mobile or local_file (opaque origin, no cookies, 30 minutes)",
+            "username,password,mobile?,local_file?",
         ),
         ("/api/v1/auth/logout", "post", "Revoke current session", ""),
         (
@@ -17,36 +17,6 @@ pub fn document() -> Value {
             "post",
             "Change own password and revoke all sessions",
             "current_password,new_password",
-        ),
-        (
-            "/api/v1/admin/users",
-            "get",
-            "Server administrator: list user accounts, never their files",
-            "",
-        ),
-        (
-            "/api/v1/admin/users",
-            "post",
-            "Server administrator: create user with temporary password",
-            "username,password",
-        ),
-        (
-            "/api/v1/admin/users/{id}",
-            "patch",
-            "Server administrator: disable or enable user; files preserved",
-            "disabled",
-        ),
-        (
-            "/api/v1/admin/users/{id}/password",
-            "post",
-            "Server administrator: reset temporary password and revoke sessions",
-            "password",
-        ),
-        (
-            "/api/v1/admin/audit",
-            "get",
-            "Server administrator: management audit cursor (integer after)",
-            "",
         ),
         ("/api/v1/me", "get", "Current account", ""),
         (
@@ -114,7 +84,7 @@ pub fn document() -> Value {
         (
             "/api/v1/nodes/{id}/purge",
             "post",
-            "Queue irreversible deletion after retention",
+            "Queue irreversible deletion of a trashed item (manager and If-Match); physical deletion is asynchronous",
             "",
         ),
         ("/api/v1/nodes/{id}/grants", "get", "List direct grants", ""),
@@ -187,7 +157,7 @@ pub fn document() -> Value {
             "204":{"description":"Operation completed without response body"},
             "202":{"description":"Durable background operation accepted; poll resource status"},
             "400":{"description":"Invalid input"},"401":{"description":"Authentication required"},
-            "403":{"description":"CSRF or origin rejected"},"404":{"description":"Absent or inaccessible"},
+            "403":{"description":"CSRF, origin or permission rejected"},"404":{"description":"Absent or inaccessible"},
             "409":{"description":"Conflict, quota exceeded, or wrong upload offset"},
             "412":{"description":"If-Match revision no longer current"},
             "428":{"description":"If-Match required"},"429":{"description":"Rate or concurrency limit"},
@@ -227,11 +197,9 @@ pub fn document() -> Value {
                 || path.ends_with("/versions")
                 || path.ends_with("/members")
                 || path == "/api/v1/spaces"
-                || path.ends_with("/grants")
-                || path == "/api/v1/admin/users"
-                || path == "/api/v1/admin/audit")
+                || path.ends_with("/grants"))
         {
-            p.push(json!({"name":"after","in":"query","schema":if path=="/api/v1/admin/audit"{json!({"type":"integer","format":"int64"})}else{json!({"type":"string","format":"uuid"})}}));
+            p.push(json!({"name":"after","in":"query","schema":json!({"type":"string","format":"uuid"})}));
         }
         if method == "get" && path.ends_with("/nodes") {
             for (name, schema) in [
@@ -271,7 +239,11 @@ pub fn document() -> Value {
                     json!({"type":"integer","format":"int64","minimum":0})
                 } else if f == "role" {
                     json!({"type":"integer","enum":[1,2,3]})
-                } else if f == "mobile" || f == "move_to_root" || f == "disabled" {
+                } else if f == "mobile"
+                    || f == "local_file"
+                    || f == "move_to_root"
+                    || f == "disabled"
+                {
                     json!({"type":"boolean","default":false})
                 } else if f.ends_with("_id") {
                     json!({"type":"string","format":"uuid","nullable":optional})
@@ -287,7 +259,7 @@ pub fn document() -> Value {
         }
         paths.entry(path.to_owned()).or_insert_with(|| json!({}))[method] = op;
     }
-    json!({"openapi":"3.0.3","info":{"title":"SantolvDrive","version":"0.1.0","description":"Self-hosted storage. Cookies require CSRF for writes. Role 1 reader, 2 editor, 3 manager. Members see all space contents; external grants are additive and inherited. See README for consistency and deployment guarantees."},"paths":paths,"components":{"securitySchemes":{"cookieAuth":{"type":"apiKey","in":"cookie","name":"drive_session"},"bearerAuth":{"type":"http","scheme":"bearer"}}}})
+    json!({"openapi":"3.0.3","info":{"title":"SantolvDrive","version":"0.1.0","description":"Local storage backend listening only on loopback. Drive sessions are required for protected operations. Cookies require CSRF for writes. Role 1 reader, 2 editor, 3 manager. Members see all space contents; external grants are additive and inherited. See README for deployment guarantees."},"paths":paths,"components":{"securitySchemes":{"cookieAuth":{"type":"apiKey","in":"cookie","name":"drive_session"},"bearerAuth":{"type":"http","scheme":"bearer"}}}})
 }
 #[cfg(test)]
 mod tests {
@@ -295,7 +267,14 @@ mod tests {
     fn valid_contract() {
         let d = super::document();
         assert_eq!(d["openapi"], "3.0.3");
-        assert!(d["paths"].as_object().unwrap().len() > 25);
+        assert!(d["paths"]["/api/v1/auth/login"]["post"].is_object());
+        assert!(
+            d["paths"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .all(|p| !p.contains("/admin/"))
+        );
         assert!(d["paths"]["/api/v1/uploads"]["post"]["requestBody"].is_object());
     }
 }

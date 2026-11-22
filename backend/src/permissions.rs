@@ -28,7 +28,8 @@ fn windows_acl(path: &Path) -> io::Result<()> {
     let sddl = "D:P(A;OICI;FA;;;OW)(A;OICI;FA;;;SY)\0"
         .encode_utf16()
         .collect::<Vec<_>>();
-    let path = path
+    let native_path = std::fs::canonicalize(path)?;
+    let path = native_path
         .as_os_str()
         .encode_wide()
         .chain(Some(0))

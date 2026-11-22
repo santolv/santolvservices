@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="referrer" content="no-referrer"><title>Drive</title><style>
+:root{
+  box-sizing:border-box;
+  --bg:#fff;--side:#f5f5f7;--card:#f5f5f7;--text:#000;--sub:#86868b;--line:rgba(0,0,0,.1);
+  --fill:rgba(118,118,128,.12);--ink:#000;--on-ink:#fff;--glass:rgba(255,255,255,.72);--scrim:rgba(0,0,0,.32);
+  --ease:cubic-bezier(.22,1,.36,1);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Inter,system-ui,sans-serif;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--bg:#000;--side:#111113;--card:#1c1c1e;--text:#fff;--sub:#98989f;--line:rgba(255,255,255,.14);--fill:rgba(118,118,128,.24);--ink:#fff;--on-ink:#000;--glass:rgba(28,28,30,.72);--scrim:rgba(0,0,0,.55)}
+}
+:root[data-theme="dark"]{--bg:#000;--side:#111113;--card:#1c1c1e;--text:#fff;--sub:#98989f;--line:rgba(255,255,255,.14);--fill:rgba(118,118,128,.24);--ink:#fff;--on-ink:#000;--glass:rgba(28,28,30,.72);--scrim:rgba(0,0,0,.55)}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.4}
+svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.glass{background:var(--glass);backdrop-filter:saturate(180%) blur(24px);-webkit-backdrop-filter:saturate(180%) blur(24px)}
+.press{transition:transform .18s var(--ease)}
+.press:active{transform:scale(.96);transition-duration:.08s}
+
+.app{display:grid;grid-template-columns:240px 1fr;grid-template-rows:60px 1fr;height:100%}
+.top{grid-column:1/3;display:flex;align-items:center;gap:16px;padding:0 20px;border-bottom:.5px solid var(--line);z-index:5}
+.logo{width:240px;margin-left:-20px;padding-left:20px;font-weight:700;font-size:19px;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+.logo i{width:26px;height:26px;border-radius:7px;background:var(--ink);display:grid;place-items:center}
+.logo i svg{width:15px;height:15px;stroke:var(--on-ink);stroke-width:2}
+.search{flex:1;max-width:620px;display:flex;align-items:center;gap:8px;background:var(--fill);border-radius:10px;padding:8px 12px}
+.search svg{width:16px;height:16px;color:var(--sub)}
+.search input{flex:1;border:0;background:none;font:inherit;font-size:16px;color:var(--text);outline:0;min-width:0}
+.search input::placeholder{color:var(--sub)}
+.avatar{margin-left:auto;width:34px;height:34px;border-radius:50%;background:var(--ink);color:var(--on-ink);display:grid;place-items:center;font-weight:600;font-size:14px}
+.side{background:var(--side);padding:16px 12px;display:flex;flex-direction:column;gap:4px;overflow:auto}
+.new{display:flex;align-items:center;gap:8px;align-self:flex-start;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:11px 20px 11px 16px;font-size:15px;font-weight:600;margin:4px 0 14px}
+.new svg{stroke:var(--on-ink);stroke-width:2.2;width:18px;height:18px}
+.nav{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:10px;font-size:15px;text-align:left;width:100%}
+.nav[aria-current="page"]{background:var(--fill);font-weight:600}
+.storage{margin-top:auto;padding:14px 12px 4px;font-size:12px;letter-spacing:.01em;color:var(--sub)}
+.bar{height:5px;border-radius:3px;background:var(--fill);margin-bottom:8px;overflow:hidden}
+.bar i{display:block;height:100%;width:62%;background:var(--ink);border-radius:3px}
+main{overflow:auto;padding:20px 28px 120px}
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+h1{font-size:32px;font-weight:700;letter-spacing:-.03em;line-height:1.1}
+.seg{display:inline-flex;background:var(--fill);border-radius:9px;padding:2px}
+.seg button{font-size:13px;font-weight:500;padding:5px 14px;border-radius:7px;transition:background .2s var(--ease),box-shadow .2s var(--ease)}
+.seg button[aria-pressed="true"]{background:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.18),0 0 0 .5px rgba(0,0,0,.05)}
+:root[data-theme="dark"] .seg button[aria-pressed="true"]{background:#636366}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .seg button[aria-pressed="true"]{background:#636366}}
+h2{font-size:15px;font-weight:600;color:var(--sub);margin:22px 0 10px}
+.folders{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.folder{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:12px;padding:13px 14px;text-align:left;font-size:15px;font-weight:500}
+.folder svg{fill:currentColor;stroke:none;width:22px;height:22px}
+.files.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+.card{background:var(--card);border-radius:14px;overflow:hidden;cursor:pointer;position:relative;box-shadow:inset 0 0 0 2px transparent;transition:transform .18s var(--ease),box-shadow .2s var(--ease)}
+.card:active{transform:scale(.97);transition-duration:.08s}
+.card.on{box-shadow:inset 0 0 0 2px var(--ink)}
+.thumb{height:120px;margin:10px 10px 0;border-radius:8px;background:var(--bg);padding:14px;display:flex;flex-direction:column;gap:7px}
+.thumb s{display:block;height:5px;border-radius:3px;background:var(--fill)}
+.thumb s:first-child{width:55%;background:var(--sub);opacity:.5}
+.thumb s:nth-child(4){width:80%}.thumb s:last-child{width:40%}
+.cap{padding:10px 12px 12px;display:flex;gap:8px;align-items:center}
+.cap b{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.cap>div{flex:1;min-width:0}
+.tag{font-size:10px;font-weight:700;letter-spacing:.02em;border:1px solid var(--line);color:var(--sub);border-radius:5px;padding:2px 5px;flex:none}
+.col{display:none;font-size:13px;color:var(--sub)}
+.chk{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--sub);background:var(--glass);display:grid;place-items:center;opacity:0;transition:opacity .15s,background .15s}
+.chk svg{width:13px;height:13px;stroke:var(--on-ink);stroke-width:3;opacity:0}
+.card:hover .chk,.card:focus-visible .chk,body.sel .chk{opacity:1}
+@media (hover:none){.chk{opacity:1}}
+.card.on .chk{background:var(--ink);border-color:var(--ink);opacity:1}
+.card.on .chk svg{opacity:1}
+.files.list{background:var(--card);border-radius:14px;overflow:hidden}
+.files.list .card{display:grid;grid-template-columns:24px 1fr 110px 80px 44px;align-items:center;gap:14px;border-radius:0;padding:11px 16px;background:none}
+.files.list .card+.card{border-top:.5px solid var(--line)}
+.files.list .card.on{background:var(--fill);box-shadow:none}
+.files.list .thumb{display:none}
+.files.list .cap{display:contents}
+.files.list .chk{position:static;opacity:1}
+.files.list .col{display:block}
+.empty{display:none;text-align:center;color:var(--sub);padding:50px 0}
+/* selección, toast, sheet */
+.selbar{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,120px);display:flex;align-items:center;gap:4px;padding:6px 6px 6px 18px;border-radius:999px;border:.5px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.18);z-index:20;transition:transform .45s var(--ease);white-space:nowrap}
+.selbar.show{transform:translate(-50%,0)}
+.selbar span{font-size:14px;font-weight:600;margin-right:8px}
+.selbar button{font-size:14px;font-weight:500;padding:8px 14px;border-radius:999px;background:var(--fill)}
+.selbar .go{background:var(--ink);color:var(--on-ink)}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:var(--ink);color:var(--on-ink);border-radius:14px;padding:12px 16px;font-size:14px;display:flex;gap:16px;z-index:40;transition:transform .4s var(--ease),opacity .25s}
+.toast.show{transform:translate(-50%,0);opacity:1;pointer-events:auto}
+.toast button{font-weight:700;text-decoration:underline}
+.scrim{position:fixed;inset:0;background:var(--scrim);opacity:0;visibility:hidden;z-index:30}
+.sheet{position:fixed;left:0;right:0;bottom:0;margin:0 auto;max-width:520px;border-radius:22px 22px 0 0;border:.5px solid var(--line);border-bottom:0;box-shadow:0 -10px 40px rgba(0,0,0,.18);padding:0 20px calc(20px + env(safe-area-inset-bottom,0px));z-index:31;visibility:hidden;will-change:transform}
+.grab{touch-action:none;cursor:grab;padding:8px 0 4px}
+.grab:active{cursor:grabbing}
+.pill{width:38px;height:5px;border-radius:3px;background:var(--sub);opacity:.5;margin:0 auto 14px}
+.sheet h3{font-size:22px;font-weight:700;letter-spacing:-.025em;line-height:1.15}
+.sheet p{font-size:13px;color:var(--sub);letter-spacing:.01em;margin:2px 0 14px}
+.sheet .thumb{height:150px;margin:0 0 16px;background:var(--card)}
+.sheet .thumb s{background:var(--fill)}
+.group{background:var(--card);border-radius:14px;overflow:hidden;margin-bottom:12px}
+.group>*{display:flex;justify-content:space-between;align-items:center;width:100%;padding:12px 16px;font-size:15px;text-align:left}
+.group>*+*{border-top:.5px solid var(--line)}
+.group span{color:var(--sub)}
+.group button:active{background:var(--fill)}
+@media (max-width:820px){
+  .app{grid-template-columns:1fr;grid-template-rows:60px auto 1fr}
+  .logo{display:none}.top{grid-column:1}
+  .side{flex-direction:row;overflow-x:auto;padding:10px 16px;gap:6px;align-items:center}
+  .new{margin:0 6px 0 0;padding:9px 16px 9px 12px;white-space:nowrap}
+  .nav{width:auto;white-space:nowrap;padding:8px 14px;background:var(--fill);font-size:14px}
+  .nav svg,.storage{display:none}
+  .nav[aria-current="page"]{background:var(--ink);color:var(--on-ink)}
+  main{padding:8px 16px 120px}
+  .files.list .card{grid-template-columns:24px 1fr 44px}
+  .files.list .col{display:none}
+}
+@media (prefers-reduced-transparency:reduce){
+  .glass,.chk{background:var(--bg);backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+@media (prefers-contrast:more){
+  .card,.folder,.group{outline:1px solid var(--ink)}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition-duration:.01ms!important}
+  .selbar,.toast{transition:opacity .2s!important}
+}
+/* ===== color + botones estilo iOS ===== */
+:root{--blue:#007aff;--green:#34c759;--red:#ff3b30;--orange:#ff9500;--ink:#007aff;--on-ink:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--blue:#0a84ff;--green:#30d158;--red:#ff453a;--orange:#ff9f0a;--ink:#0a84ff;--on-ink:#fff}}
+:root[data-theme="dark"]{--blue:#0a84ff;--green:#30d158;--red:#ff453a;--orange:#ff9f0a;--ink:#0a84ff;--on-ink:#fff}
+[data-t="XLS"]{--c:var(--green)}[data-t="PDF"]{--c:var(--red)}[data-t="DOC"]{--c:var(--blue)}[data-t="PPT"]{--c:var(--orange)}
+.nav[data-t="Mi unidad"]{--c:var(--blue)}.nav[data-t="Compartidos conmigo"]{--c:var(--green)}.nav[data-t="Recientes"]{--c:var(--orange)}.nav[data-t="Destacados"]{--c:#ffcc00}.nav[data-t="Papelera"]{--c:var(--red)}
+.avatar{background:linear-gradient(135deg,#5ac8fa,var(--blue))}
+.new{font-size:16px;padding:12px 22px 12px 16px;box-shadow:0 4px 14px color-mix(in srgb,var(--blue) 40%,transparent)}
+.nav svg{width:28px;height:28px;padding:5px;border-radius:8px;background:var(--c);color:#fff;stroke-width:2}
+@media (min-width:821px){.nav[aria-current="page"]{background:color-mix(in srgb,var(--blue) 14%,transparent);color:var(--blue)}}
+.folder svg{color:var(--blue);width:26px;height:26px}
+.tag{background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c);border-color:transparent}
+.thumb s:first-child{background:var(--c);opacity:1}
+.files.list .card.on{background:color-mix(in srgb,var(--blue) 12%,transparent)}
+.selbar button{background:color-mix(in srgb,var(--blue) 14%,transparent);color:var(--blue);font-weight:600}
+.selbar .go{background:var(--red);color:#fff}
+.selbar #aCancel{background:none}
+.toast{background:#2c2c2e;color:#fff}
+.toast button{color:#64d2ff;text-decoration:none}
+.group button{color:var(--blue);font-weight:500}
+.group #sDel{color:var(--red)}
+.group button::after{content:"";width:7px;height:7px;border-top:2px solid var(--sub);border-right:2px solid var(--sub);transform:rotate(45deg);opacity:.5}
+.group #sDel::after{display:none}
+/* ===== sistema de color: azul = lo interactivo, rojo = destructivo, el resto neutro ===== */
+.card[data-t],.sheet[data-t]{--c:var(--sub)}
+.tag{background:var(--fill);color:var(--sub)}
+.thumb s:first-child{background:var(--sub);opacity:.5}
+.avatar{margin-left:0;background:var(--fill);color:var(--text)}
+.nav svg{width:20px;height:20px;padding:0;border-radius:0;background:none;color:var(--blue);stroke-width:1.7}
+/* botón de la barra: círculo de cristal con símbolo, abre un menú contextual */
+.plus{margin-left:auto;width:36px;height:36px;border-radius:50%;background:var(--fill);color:var(--blue);display:grid;place-items:center;flex:none}
+.plus svg{stroke-width:2.2}
+.plus[aria-expanded="true"]{background:var(--blue);color:#fff}
+.menu{position:fixed;top:58px;right:20px;min-width:250px;border-radius:14px;padding:6px;border:.5px solid var(--line);box-shadow:0 12px 40px rgba(0,0,0,.22);z-index:50;transform-origin:top right;transform:scale(.88);opacity:0;visibility:hidden;transition:transform .35s var(--ease),opacity .2s,visibility 0s .35s}
+.menu.show{transform:scale(1);opacity:1;visibility:visible;transition:transform .35s var(--ease),opacity .2s}
+.menu button{display:flex;justify-content:space-between;align-items:center;width:100%;padding:11px 12px;border-radius:9px;font-size:16px;text-align:left}
+.menu button:active{background:var(--fill)}
+.menu hr{border:0;height:.5px;background:var(--line);margin:4px 8px}
+/* tipos de botón: relleno, tintado, simple, de icono */
+.btnrow{display:flex;gap:10px;margin:2px 0 16px}
+.btn{flex:1;height:50px;border-radius:14px;font-size:17px;font-weight:600;letter-spacing:-.01em;transition:transform .18s var(--ease),opacity .15s}
+.btn:active{transform:scale(.97);opacity:.85}
+.btn.fill{background:var(--blue);color:#fff}
+.btn.tint{background:color-mix(in srgb,var(--blue) 15%,transparent);color:var(--blue)}
+.selbar{padding:6px 8px 6px 18px;gap:2px}
+.selbar .ib{width:44px;height:44px;padding:0;border-radius:50%;background:none;color:var(--blue);display:grid;place-items:center}
+.selbar .ib:active{background:var(--fill)}
+.selbar .ib.red{color:var(--red)}
+.selbar .plain{background:none;color:var(--blue);font-weight:600;padding:8px 12px;margin-left:4px}
+.group .center{justify-content:center}
+@media (max-width:820px){.menu{right:16px}}
+/* ===== color con criterio: cada color significa siempre lo mismo ===== */
+.card[data-t="XLS"],.sheet[data-t="XLS"]{--c:var(--green)}
+.card[data-t="PDF"],.sheet[data-t="PDF"]{--c:var(--red)}
+.card[data-t="DOC"],.sheet[data-t="DOC"]{--c:var(--blue)}
+.card[data-t="PPT"],.sheet[data-t="PPT"]{--c:var(--orange)}
+.tag{background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c)}
+.thumb s:first-child{background:var(--c);opacity:1}
+.nav svg{width:28px;height:28px;padding:5px;border-radius:8px;background:var(--c);color:#fff;stroke-width:2}
+.avatar{margin-left:auto;background:linear-gradient(135deg,#5ac8fa,var(--blue));color:#fff}
+.menu{transform-origin:top left}
+.new{height:44px;padding:0 20px 0 16px;font-size:16px}
+
+/* API integration surfaces; the reference stylesheet above is unchanged. */
+[hidden]{display:none!important}button:disabled{cursor:not-allowed;opacity:.45}a{color:inherit;text-decoration:none}button,a,input,select{touch-action:manipulation}input,select{font:inherit;color:var(--text)}svg use{pointer-events:none}.side nav{display:flex;flex-direction:column;gap:4px}.nav.active{font-weight:600}.space-link{display:flex;align-items:center;gap:10px;padding:9px 12px;text-align:left;font-size:13px;width:100%;border-radius:10px}.space-link.active{background:var(--fill)}.space-link span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#spaces-wrap h2{font-size:12px;margin:16px 12px 6px}#search-wrap{min-width:0}.avatar{flex:none}main{min-width:0}.folder{min-width:0}.folder span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card{min-width:0}.files.list .card{grid-template-columns:24px minmax(0,1fr) 110px 80px 44px}.tag{max-width:60px;overflow:hidden;text-overflow:ellipsis}.thumb{pointer-events:none}.card .chk{z-index:1}.button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:10px 16px;border-radius:12px;background:var(--fill);font-size:14px;font-weight:600}.button.primary{background:var(--blue);color:#fff}.button.danger{color:var(--red)}.icon-btn{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:var(--blue)}.icon-btn:active{background:var(--fill)}.row{display:flex;align-items:center;gap:12px}.between{justify-content:space-between}.stack{display:grid;gap:18px}.small{font-size:12px;line-height:1.6}.muted{color:var(--sub)}.danger{color:var(--red)}.meter{height:5px;background:var(--fill);border-radius:4px;overflow:hidden;margin:16px 0 10px}.meter span{display:block;height:100%;background:var(--blue);width:0}.loadmore{display:flex;margin:22px auto}.list-foot{display:flex;justify-content:space-between;gap:16px;margin-top:24px;color:var(--sub);font-size:11px;line-height:1.6}#headline-actions{display:flex;justify-content:flex-end;gap:8px}#headline-actions:empty{display:none}.crumbs{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin:0 0 16px}.crumbs:empty{display:none}.crumbs button{padding:4px 6px;color:var(--blue)}.crumbs svg{height:13px;width:13px}.notice{font-size:13px;padding:12px 14px;margin:16px 0;border-radius:12px;background:var(--fill)}#dashboard.over{outline:2px solid var(--blue);outline-offset:8px;border-radius:12px}
+.signed-out .app{grid-template-columns:1fr;grid-template-rows:60px 1fr}.signed-out .side,.signed-out .avatar{display:none}.signed-out .top{grid-column:1}.welcome{min-height:calc(100dvh - 200px);display:grid;place-items:center;padding:36px 0}.welcome>div{width:100%;max-width:360px}.welcome .eyebrow{display:none}.welcome h1{text-align:center;font-size:32px}.intro{text-align:center;color:var(--sub);font-size:14px;line-height:1.6;margin:12px 0 28px}.login-box{display:grid;gap:18px;padding:24px;border-radius:18px;background:var(--card)}label{font-size:13px}input:not([type=file]),select{font:inherit}input:not([type=file])::placeholder{color:var(--sub)}.login-box label,.dialog-body label{display:block;margin-bottom:7px}.login-box input,.dialog-body input,.dialog-body select{width:100%;min-height:46px;border:.5px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);padding:11px 12px}.login-box .full{width:100%;height:46px}.login-foot{text-align:center;color:var(--sub);font-size:12px;line-height:1.6;margin-top:20px}.error-text{font-size:12px;line-height:1.6;color:var(--red);white-space:pre-line;overflow-wrap:anywhere}.error-text:empty{display:none}.login-foot a{color:var(--blue);text-decoration:underline}
+dialog{color:var(--text);background:var(--bg)}#dialog{position:fixed;inset:0;margin:auto;border:.5px solid var(--line);border-radius:22px;width:min(480px,calc(100vw - 32px));max-height:calc(100dvh - 48px);padding:0;box-shadow:0 20px 80px #0003}dialog::backdrop{background:var(--scrim)}.dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 22px 16px;border-bottom:.5px solid var(--line)}.dialog-head h2{margin:0;font-size:20px;color:var(--text);letter-spacing:-.02em}.dialog-body{padding:22px}.dialog-body>p{font-size:13px;color:var(--sub);line-height:1.6;margin-bottom:18px}.dialog-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;margin-top:24px}.records{display:grid;gap:9px;margin-top:18px;max-height:280px;overflow:auto}.record{display:flex;align-items:center;gap:10px;border:.5px solid var(--line);border-radius:12px;padding:12px}.record-copy{min-width:0;flex:1}.record-copy strong{display:block;font-size:13px;overflow-wrap:anywhere}.record-copy span{display:block;font-size:11px;color:var(--sub);margin-top:5px}.record .button{font-size:12px;padding:8px 10px;min-height:36px}
+#detail.sheet{top:auto;max-height:90dvh;overflow-y:auto;color:var(--text)}#detail.sheet[open]{visibility:visible;transform:none}#detail .btn{display:grid;place-items:center;text-decoration:none}#detail h3{overflow-wrap:anywhere}#detail .sheet-close{display:block;width:100%;padding:0}#detail .pill{display:block}#detail .destructive{color:var(--red)}#detail .destructive::after{display:none}.group>div{gap:16px}.group>div span{max-width:65%;overflow-wrap:anywhere;text-align:right}.selbar .ib[hidden]{display:none}.menu button[disabled]{color:var(--sub)}.toast{max-width:calc(100vw - 32px);line-height:1.5}.upload-panel{position:fixed;right:20px;bottom:24px;padding:18px;width:min(360px,calc(100vw - 32px));background:var(--bg);border:.5px solid var(--line);border-radius:16px;box-shadow:0 12px 40px #0002;z-index:22}.upload-panel .copy{flex:1;min-width:0}.upload-panel strong{display:block;font-size:13px;overflow-wrap:anywhere}.upload-panel small{font-size:11px;line-height:1.6;color:var(--sub)}.file-icon{width:34px;height:38px;display:grid;place-items:center;flex:none;color:var(--blue)}.loading-line{height:2px;background:var(--blue)}.skeleton{height:56px;display:flex;gap:12px;align-items:center;border-bottom:.5px solid var(--line);padding:12px}.skeleton i{height:30px;width:28px;background:var(--fill);border-radius:7px}.skeleton span{height:6px;width:40%;background:var(--fill);border-radius:3px}
+@media(max-width:820px){.side nav{flex-direction:row;gap:6px}.side nav .nav{display:flex}.side #spaces-wrap{flex:none}.side #spaces-wrap h2{display:none}#space-list{display:flex}.space-link{white-space:nowrap}.side .new{flex:none}.signed-out .app{grid-template-rows:60px 1fr}.signed-out .logo{display:flex;width:auto}.files.list .card{grid-template-columns:24px minmax(0,1fr) 44px}.files.list .col{display:none}.list-foot{display:block}.list-foot>span{display:block}.welcome{min-height:calc(100dvh - 180px)}.login-box input,.dialog-body input,.dialog-body select{font-size:16px}.selbar{max-width:calc(100vw - 20px)}.selbar span{font-size:12px;margin-right:3px}.selbar .ib{width:38px;height:42px}.selbar .plain{font-size:13px;padding:8px}.upload-panel{right:16px;bottom:16px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style></head>
+<body class="signed-out">
+<svg aria-hidden="true" style="display:none" xmlns="http://www.w3.org/2000/svg"><defs>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+  <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+  <path d="M10 9H8" />
+  <path d="M16 13H8" />
+  <path d="M16 17H8" /></symbol>
+<symbol id="i-grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1" />
+  <rect width="7" height="7" x="14" y="3" rx="1" />
+  <rect width="7" height="7" x="14" y="14" rx="1" />
+  <rect width="7" height="7" x="3" y="14" rx="1" /></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M3 5h.01" />
+  <path d="M3 12h.01" />
+  <path d="M3 19h.01" />
+  <path d="M8 5h13" />
+  <path d="M8 12h13" />
+  <path d="M8 19h13" /></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34" />
+  <circle cx="11" cy="11" r="8" /></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 3v12" />
+  <path d="m17 8-5-5-5 5" />
+  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3" />
+  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+  <path d="m7 10 5 5 5-5" /></symbol>
+<symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3" />
+  <circle cx="6" cy="12" r="3" />
+  <circle cx="18" cy="19" r="3" />
+  <line x1="8.59" x2="15.42" y1="13.51" y2="17.49" />
+  <line x1="15.41" x2="8.59" y1="6.51" y2="10.49" /></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M10 11v6" />
+  <path d="M14 11v6" />
+  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+  <path d="M3 6h18" />
+  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5" />
+  <path d="M20 21a8 8 0 0 0-16 0" /></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><path d="M18 21a8 8 0 0 0-16 0" />
+  <circle cx="10" cy="8" r="5" />
+  <path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" /></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+  <path d="m9 12 2 2 4-4" /></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" />
+  <path d="M12 5v14" /></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18" />
+  <path d="m6 6 12 12" /></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol>
+<symbol id="i-exit" viewBox="0 0 24 24"><path d="m16 17 5-5-5-5" />
+  <path d="M21 12H9" />
+  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /></symbol>
+<symbol id="i-history" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" />
+  <path d="M12 6v6l4 2" /></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+  <path d="m15 5 4 4" /></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 5h16" />
+  <path d="M4 12h16" />
+  <path d="M4 19h16" /></symbol>
+</defs></svg>
+<div class="app">  <header class="top glass">
+    <div class="logo"><i><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></i>Drive</div>
+    <label class="search" id="search-wrap" hidden>
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="search" aria-label="Buscar entre los elementos cargados" maxlength="255" type="search" placeholder="Buscar en Drive" autocomplete="off">
+    </label>
+
+    <button class="avatar" id="account-button" data-action="profile" aria-label="Mi cuenta">·</button>
+  </header><aside class="side" id="sidebar"><button class="new press" id="newBtn" data-action="new-menu" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Nuevo</button><nav id="navigation"><button class="nav press" aria-current="page" data-t="Mi unidad" data-nav="files"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Mi unidad</button>
+    <button class="nav press" data-t="Compartidos conmigo" data-nav="shared"><svg viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-8 0M3 20a9 7 0 0 1 18 0"/></svg>Compartidos conmigo</button>
+    <button class="nav press" data-t="Recientes" disabled title="Esta función todavía no está disponible en el servidor"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Recientes</button>
+    <button class="nav press" data-t="Destacados" disabled title="Esta función todavía no está disponible en el servidor"><svg viewBox="0 0 24 24"><path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.8 6.2 20.9l1.1-6.5L2.6 9.8l6.5-.9z"/></svg>Destacados</button>
+    <button class="nav press" data-t="Papelera" data-nav="trash"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>Papelera</button></nav><div id="spaces-wrap" hidden><h2>Espacios compartidos</h2><div id="space-list"></div><button class="space-link" id="more-spaces" data-action="more-spaces" hidden>Cargar más</button></div><div class="storage" id="storage"><div class="bar"><i id="quota-bar" style="width:0"></i></div><span id="quota-label"></span></div></aside><main id="main">   <section class="welcome" id="welcome">
+    <div><div class="eyebrow">SantolvDrive</div><h1>Iniciar sesión</h1><p class="intro">Accede a tus archivos y espacios compartidos.</p><form class="login-box" id="login-form"><div><label for="username">Usuario</label><input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required maxlength="254" placeholder="Tu nombre de usuario"></div><div><label for="password">Contraseña</label><input id="password" type="password" autocomplete="current-password" required maxlength="1024" placeholder="Tu contraseña"></div><div class="error-text" id="login-error" role="alert"></div><button class="button primary full" id="login-submit" type="submit">Entrar <svg><use href="#i-arrow"/></svg></button></form><p class="login-foot" id="connection-help">Introduce tu usuario y contraseña.</p></div>
+   </section><section id="dashboard" hidden><div class="head"><h1 id="page-title">Mi unidad</h1><div class="seg" id="view-tools" role="group" aria-label="Vista"><button id="bGrid" data-action="grid-view" aria-pressed="true">Cuadrícula</button><button id="bList" data-action="list-view" aria-pressed="false">Lista</button></div></div><div id="headline-actions"></div><div id="breadcrumbs" class="crumbs"></div><div id="notice" class="notice" hidden></div><div id="items"></div><button class="button loadmore" id="more" data-action="more" hidden>Cargar más</button><div class="list-foot"><span id="list-caption"></span><span id="list-status" role="status" aria-live="polite"></span></div></section></main></div><div hidden><span id="trail-title"></span><span id="api-dot"></span><span id="api-status"></span><span id="account-name"></span><span id="account-kind"></span><span id="profile"></span><button id="logout" data-action="logout" hidden></button><span id="page-eyebrow"></span><span id="page-subtitle"></span><div id="drop"></div><span id="list-title"></span><span id="item-count"></span><select id="type-filter"><option value="all">Todos</option><option value="folder">Carpetas</option><option value="file">Archivos</option></select><select id="sort-order"><option value="asc">Nombre A–Z</option><option value="desc">Nombre Z–A</option></select></div><div class="selbar glass" id="selbar" hidden role="toolbar" aria-label="Acciones">
+  <span id="selN"></span>
+  <button class="ib" id="aShare" data-action="share" aria-label="Compartir"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></button>
+  <button class="ib" id="aMove" data-action="move" aria-label="Mover"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+  <button class="ib red" id="aDel" data-action="trash" aria-label="Eliminar"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+  <button class="plain" id="aCancel" data-action="clear-selection">Listo</button>
+</div><div class="menu glass" id="new-menu" role="menu">
+  <button role="menuitem" data-action="new-folder">Nueva carpeta<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/></svg></button>
+  <hr>
+  <button role="menuitem" data-action="upload">Subir archivo<svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg></button>
+  <hr>
+  <button role="menuitem" disabled title="El escáner no está disponible en esta API">Escanear documento<svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M8 12h8"/></svg></button>
+<hr><button role="menuitem" data-action="new-space">Nuevo espacio compartido<svg><use href="#i-users"/></svg></button></div><dialog class="sheet glass" id="detail" aria-label="Detalles del archivo"></dialog><input type="file" id="file-input" hidden>
+<dialog id="dialog"><div class="dialog-head"><h2 id="dialog-title"></h2><button class="icon-btn" data-action="close-dialog" aria-label="Cerrar ventana"><svg><use href="#i-close"/></svg></button></div><div class="dialog-body" id="dialog-body"></div></dialog>
+<section class="upload-panel" id="upload-panel" aria-label="Progreso de subida" hidden><div class="row"><div class="file-icon"><svg><use href="#i-file"/></svg></div><div class="copy"><strong id="upload-name"></strong><small id="upload-message" role="status" aria-live="polite"></small></div><button class="icon-btn" data-action="pause-upload" id="pause-upload" aria-label="Pausar subida"><svg><use href="#i-close"/></svg></button></div><div class="meter"><span id="upload-bar"></span></div><div class="row between small"><span class="muted" id="upload-bytes"></span><button data-action="cancel-upload" id="cancel-upload" class="danger small">Cancelar y liberar espacio</button></div></section>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script>
+'use strict';
+const API_ORIGIN='http://localhost:8443';
+const apiUrl=path=>API_ORIGIN+path;
+const DRIVE_NAV="<button class=\"nav press\" aria-current=\"page\" data-t=\"Mi unidad\" data-nav=\"files\"><svg viewBox=\"0 0 24 24\"><path d=\"M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/></svg>Mi unidad</button>\n    <button class=\"nav press\" data-t=\"Compartidos conmigo\" data-nav=\"shared\"><svg viewBox=\"0 0 24 24\"><path d=\"M16 11a4 4 0 1 0-8 0M3 20a9 7 0 0 1 18 0\"/></svg>Compartidos conmigo</button>\n    <button class=\"nav press\" data-t=\"Recientes\" disabled title=\"Esta función todavía no está disponible en el servidor\"><svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg>Recientes</button>\n    <button class=\"nav press\" data-t=\"Destacados\" disabled title=\"Esta función todavía no está disponible en el servidor\"><svg viewBox=\"0 0 24 24\"><path d=\"M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.8 6.2 20.9l1.1-6.5L2.6 9.8l6.5-.9z\"/></svg>Destacados</button>\n    <button class=\"nav press\" data-t=\"Papelera\" data-nav=\"trash\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13\"/></svg>Papelera</button>";
+const LOCAL_FILE=location.protocol==='file:';
+const credentials=LOCAL_FILE?'omit':'include';
+const $=id=>document.getElementById(id), esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icon=name=>`<svg aria-hidden="true"><use href="#i-${name}"/></svg>`, button=(action,label,name='',extra='')=>`<button class="button${extra==='primary'?' primary':''}" data-action="${action}" ${extra==='primary'?'':extra}>${name?icon(name):''}${label}</button>`;
+const state={me:null,token:'',csrf:'',spaces:[],space:null,spaceCursor:null,view:'files',parent:null,crumbs:[],rows:[],cursor:null,selected:null,grid:true,selection:null,loading:false,request:0,storagePending:false,uploading:false,paused:false,replacement:null};
+const storage={get(k){try{return sessionStorage.getItem(k)}catch{return null}},set(k,v){try{sessionStorage.setItem(k,v)}catch{}},remove(k){try{sessionStorage.removeItem(k)}catch{}}};
+state.csrf=storage.get('drive.csrf')||'';
+const errors={name_already_exists:'Ya existe un archivo o carpeta con ese nombre en este destino.',workspace_sync_pending:'El servidor está organizando las carpetas. Espera unos segundos y vuelve a intentarlo.',workspace_path_occupied:'Hay una carpeta del servidor ocupada por datos ajenos al Drive. Se conserva y no se sobrescribe.',invalid_password_change:'La contraseña actual no es correcta o la nueva no es válida.',username_3_to_64_ascii_letters_digits_dot_dash_underscore:'Usa entre 3 y 64 letras, números, puntos, guiones o guiones bajos.',authentication_required:'Inicia sesión para continuar.',invalid_credentials:'Usuario o contraseña incorrectos.',csrf_required:'Esta pestaña necesita iniciar sesión de nuevo.',origin_not_allowed:'Abre la aplicación desde la dirección del servidor.',cross_site_denied:'Abre la aplicación directamente desde el servidor.',password_change_required:'Cambia la contraseña temporal antes de continuar.',rate_limited:'Demasiados intentos. Espera unos minutos.',password_capacity:'Hay varias identificaciones en curso. Inténtalo de nuevo.',not_found:'No existe o no tienes permiso para realizar esta acción.',revision_conflict:'El elemento cambió. Actualiza la lista antes de volver a intentarlo.',precondition_failed:'El elemento cambió. Actualiza la lista antes de continuar.',quota_exceeded:'No queda cuota disponible en este espacio.',insufficient_storage:'El servidor no tiene espacio disponible.',invalid_name:'El nombre no es válido para el disco. Evita caracteres reservados, puntos finales y nombres .drive-.',password_length_12_to_1024_bytes:'La contraseña debe tener entre 12 y 1024 bytes.',retention_period_not_elapsed:'El elemento todavía está dentro del período de conservación de la papelera.',temporarily_unavailable:'El servidor no está disponible temporalmente.'};
+function message(error){if(error.name==='AbortError')return 'La operación se ha pausado.';if(error instanceof TypeError)return 'No se pudo conectar. Comprueba que el servidor sigue en marcha.';return errors[error.code]||error.message||'No se ha podido completar la operación.'}
+let toastTimer;
+function toast(text){$('toast').textContent=text;$('toast').hidden=false;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$('toast').classList.remove('show');$('toast').hidden=true},5500)}
+function bytes(n){n=Number(n)||0;if(!n)return '0 B';const u=['B','KiB','MiB','GiB','TiB'],i=Math.min(4,Math.floor(Math.log(n)/Math.log(1024)));return `${(n/1024**i).toLocaleString('es-ES',{maximumFractionDigits:i?1:0})} ${u[i]}`}
+function date(value){if(!value)return '—';let d=new Date(value);return isNaN(d)?String(value):d.toLocaleString('es-ES',{dateStyle:'short',timeStyle:'short'})}
+async function api(path,{method='GET',body,headers={},signal}={}){const h=new Headers(headers);if(LOCAL_FILE&&state.token)h.set('Authorization','Bearer '+state.token);if(!LOCAL_FILE&&!['GET','HEAD'].includes(method)){if(!state.csrf){const e=new Error('Vuelve a iniciar sesión para realizar cambios.');e.code='csrf_required';throw e}h.set('X-CSRF-Token',state.csrf)}if(body!==undefined&&!(body instanceof Blob)&&!(body instanceof ArrayBuffer)){h.set('Content-Type','application/json');body=JSON.stringify(body)}const r=await fetch(apiUrl('/api/v1'+path),{method,body,headers:h,credentials,signal});let data=r.status===204||(r.status===202&&!r.headers?.get('content-type')?.includes('application/json'))?null:await r.json();if(r.ok&&data?.storage_pending!==undefined)state.storagePending=data.storage_pending;if(!r.ok){const e=new Error(data?.error?.code||`Error ${r.status}`);e.code=data?.error?.code;e.status=r.status;if(r.status===412)e.code='revision_conflict';if((r.status===401||e.code==='csrf_required')&&state.me){signedOut();toast('La sesión ha caducado. Vuelve a entrar.')}throw e}return {data,response:r}}
+async function mutate(path,method,body,node){const headers={'Idempotency-Key':crypto.randomUUID()};if(node)headers['If-Match']=`"${node.revision}"`;return api(path,{method,body,headers})}
+function currentSpace(){return state.spaces.find(s=>s.id===state.space)}
+function fileIcon(n){let kind=n.kind==='folder'?'folder':/\.pdf$/i.test(n.name)?'pdf':/\.(png|jpg|jpeg|webp|gif|svg)$/i.test(n.name)?'image':'';return `<div class="file-icon ${kind}">${icon(n.kind==='folder'?'folder':'file')}</div>`}
+function signedOut(){if($('detail').open)$('detail').close();document.body.classList.add('signed-out');state.request++;state.me=null;state.token='';state.csrf='';state.selected=null;state.selection=null;state.rows=[];state.spaces=[];storage.remove('drive.csrf');$('welcome').hidden=false;$('dashboard').hidden=true;$('search-wrap').hidden=true;$('spaces-wrap').hidden=true;$('logout').hidden=true;$('account-name').textContent='Tu cuenta';$('account-kind').textContent='Sesión cerrada';$('profile').textContent='·';$('trail-title').textContent='Bienvenido';$('navigation').innerHTML=DRIVE_NAV;$('quota-label').textContent='Tu contenido se guarda en este equipo.';$('quota-bar').style.width='0%';$('upload-panel').hidden=true;if($('dialog').open)$('dialog').close()}
+async function enter(){
+ const {data}=await api('/me');
+ if(data.account_type!=='user'){signedOut();throw new Error('Esta cuenta se administra únicamente desde el servidor.')}
+ state.me=data;document.body.classList.remove('signed-out');$('welcome').hidden=true;$('dashboard').hidden=false;$('search-wrap').hidden=false;$('logout').hidden=false;
+ $('account-name').textContent=data.username;$('profile').textContent=data.username.slice(0,2).toUpperCase();$('account-button').textContent=data.username.slice(0,2).toUpperCase();$('account-kind').textContent='Cuenta personal';
+ $('storage').hidden=false;$('spaces-wrap').hidden=false;state.view='files';$('navigation').innerHTML=DRIVE_NAV;
+ if(data.must_change_password){passwordDialog(true);return}
+ await loadSpaces();state.space=state.spaces.find(s=>s.kind==='personal')?.id||state.spaces[0]?.id;await load(false);
+}
+$('login-form').addEventListener('submit',async event=>{event.preventDefault();$('login-error').textContent='';$('login-submit').disabled=true;$('login-submit').textContent='Entrando…';try{const r=await fetch(apiUrl('/api/v1/auth/login'),{method:'POST',credentials,headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('username').value.trim(),password:$('password').value,...(LOCAL_FILE?{local_file:true}:{})})});const d=await r.json();if(!r.ok){const error=new Error(r.status===401?'Usuario o contraseña incorrectos.':d?.error?.code);error.code=r.status===401?'invalid_credentials':d?.error?.code;throw error}state.token=d.token||'';state.csrf=d.csrf_token||'';if(!LOCAL_FILE)storage.set('drive.csrf',state.csrf);$('password').value='';await enter()}catch(error){$('login-error').textContent=message(error)}finally{$('login-submit').disabled=false;$('login-submit').innerHTML='Entrar '+icon('arrow')}});
+async function loadSpaces(append=false){const {data}=await api('/spaces'+(append&&state.spaceCursor?'?after='+encodeURIComponent(state.spaceCursor):''));state.spaces=append?[...state.spaces,...data.items]:data.items;state.spaceCursor=data.next_cursor;renderSpaces()}
+function renderSpaces(){state.storagePending=state.spaces.some(s=>s.storage_pending);const space=currentSpace(),organizations=state.spaces.filter(s=>s.kind==='organization');$('space-list').innerHTML=organizations.map(s=>'<button class="space-link '+(s.id===state.space?'active':'')+'" data-space="'+s.id+'">'+icon('users')+'<span>'+esc(s.name)+'</span></button>').join('');$('spaces-wrap').hidden=!organizations.length&&!state.spaceCursor;$('more-spaces').hidden=!state.spaceCursor;$('quota-label').textContent=space?bytes(space.used_bytes)+' de '+bytes(space.quota)+' usados'+(Number(space.reserved_bytes)?' · '+bytes(space.reserved_bytes)+' reservados':''):'Selecciona un espacio';$('quota-bar').style.width=space?Math.min(100,(Number(space.used_bytes)+Number(space.reserved_bytes))/Number(space.quota)*100)+'%':'0%'}
+function chrome(){
+ const s=currentSpace(),names={files:state.parent?state.crumbs.at(-1)?.name:s?.kind==='organization'?s.name:'Mi unidad',shared:'Compartido conmigo',trash:'Papelera'};
+ $('page-title').textContent=names[state.view]||'Mi unidad';$('trail-title').textContent=s?.kind==='organization'?s.name:'Mi unidad';
+ $('page-eyebrow').textContent='Archivos';$('page-subtitle').textContent='';$('drop').hidden=true;$('view-tools').hidden=false;
+ $('list-title').textContent=state.view==='trash'?'Elementos en la papelera':'Archivos';
+ $('headline-actions').innerHTML=(state.view==='files'?button('upload','Subir archivo','upload','primary'):'')+(s?.kind==='organization'?button('members','Miembros','users'):'');
+ $('breadcrumbs').innerHTML=state.view==='files'&&state.crumbs.length?'<button data-crumb="-1">Mi unidad</button>'+state.crumbs.map((c,i)=>icon('arrow')+'<button data-crumb="'+i+'">'+esc(c.name)+'</button>').join(''):'';
+ document.querySelectorAll('[data-nav]').forEach(b=>{if(b.dataset.nav===state.view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+ $('list-caption').textContent=state.view==='trash'?'El borrado definitivo respeta la conservación configurada.':'La búsqueda y los filtros se aplican a los elementos cargados.';
+ renderSpaces();const saved=readJob();$('notice').hidden=!saved&&!state.storagePending;$('notice').textContent=saved?'Subida pendiente: '+saved.name+'. Selecciona el mismo archivo para reanudarla.':state.storagePending?'El contenido está guardado; la carpeta del servidor está pendiente de sincronización.':'';
+}
+function skeleton(){return '<div class="loading-line"></div>'+Array.from({length:5},()=>'<div class="skeleton"><i></i><span></span></div>').join('')}
+async function load(append=false){if(!state.me)return;const request=++state.request;state.loading=true;state.selected=null;state.selection=null;detail();if(!append)state.rows=[];chrome();$('items').innerHTML=skeleton();$('more').hidden=true;$('list-status').textContent='Cargando…';try{let path;if(state.view==='shared')path='/shared';else if(state.space)path=`/spaces/${state.space}/nodes?limit=100${state.view==='trash'?'&trash=true':state.parent?'&parent='+state.parent:''}`;else{state.rows=[];state.cursor=null;return}if(append&&state.cursor)path+=(path.includes('?')?'&':'?')+'after='+encodeURIComponent(state.cursor);const {data}=await api(path);if(request!==state.request)return;state.rows=append?[...state.rows,...data.items]:data.items;state.cursor=data.next_cursor}catch(error){if(request===state.request){toast(message(error));$('list-status').textContent=message(error)}}finally{if(request===state.request){state.loading=false;render();$('list-status').textContent='Actualizado'}}}
+function fileType(n){const ext=n.name.split('.').at(-1).toUpperCase();return /\.(xlsx?|csv)$/i.test(n.name)?'XLS':/\.pdf$/i.test(n.name)?'PDF':/\.(docx?|txt|md)$/i.test(n.name)?'DOC':/\.pptx?$/i.test(n.name)?'PPT':n.name.includes('.')?ext.slice(0,7):'FILE'}
+function preview(n){return '<div class="thumb" aria-hidden="true"><s></s><s></s><s></s><s></s><s></s></div>'}
+function selectionBar(){const selected=state.rows.find(n=>n.id===state.selection);$('selbar').hidden=!selected;$('selbar').classList.toggle('show',!!selected);document.body.classList.toggle('sel',!!selected);$('selN').textContent=selected?'1 seleccionado':'';$('aDel').hidden=state.view==='trash';$('aShare').hidden=state.view==='trash';$('aMove').hidden=state.view==='trash'}
+function render(){
+ const q=$('search').value.trim().toLocaleLowerCase(),type=$('type-filter').value||'all',order=$('sort-order').value||'asc';
+ const rows=state.rows.filter(n=>n.name.toLocaleLowerCase().includes(q)&&(type==='all'||n.kind===type)).sort((a,b)=>a.name.localeCompare(b.name,'es',{numeric:true})*(order==='desc'?-1:1)||a.id.localeCompare(b.id));
+ $('item-count').textContent=String(rows.length);$('more').hidden=!state.cursor;selectionBar();
+ if(!rows.length){$('items').innerHTML='<p class="empty" style="display:block">'+(q||type!=='all'?'Sin resultados. Prueba con otra búsqueda.':state.view==='trash'?'La papelera está vacía.':state.view==='shared'?'Aquí verás los archivos compartidos contigo.':'No hay archivos. Pulsa Nuevo para subir un archivo o crear una carpeta.')+'</p>';return}
+ const folders=rows.filter(n=>n.kind==='folder'),files=rows.filter(n=>n.kind!=='folder');
+ const folderMarkup=folders.length?'<h2>Carpetas</h2><div class="folders">'+folders.map(n=>'<button class="folder press" data-node="'+n.id+'">'+icon('folder')+'<span>'+esc(n.name)+'</span></button>').join('')+'</div>':'';
+ const fileMarkup=files.length?'<h2>Archivos</h2><div class="files '+(state.grid?'grid':'list')+'">'+files.map(n=>'<div class="card'+(state.selection===n.id?' on':'')+'" data-node="'+n.id+'" data-t="'+esc(fileType(n))+'" tabindex="0" role="button" aria-label="Abrir detalles de '+esc(n.name)+'"><button class="chk" aria-label="Seleccionar '+esc(n.name)+'" aria-pressed="'+(state.selection===n.id)+'"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>'+preview(n)+'<div class="cap"><div><b>'+esc(n.name)+'</b></div><span class="col">Versión '+n.revision+'</span><span class="col">'+esc(fileType(n))+'</span><span class="tag">'+esc(fileType(n))+'</span></div></div>').join('')+'</div>':'';
+ $('items').innerHTML=folderMarkup+fileMarkup;
+}
+
+function detail(){const n=state.selected;selectionBar();if(!n){if($('detail').open)$('detail').close();return}$('detail').setAttribute('data-t',fileType(n));$('detail').innerHTML='<div class="grab"><button class="sheet-close" data-action="close-detail" aria-label="Cerrar detalles"><span class="pill"></span></button></div>'+preview(n)+'<h3>'+esc(n.name)+'</h3><p>'+(n.kind==='folder'?'Carpeta':esc(fileType(n)))+' · versión '+n.revision+'</p>'+(!n.trashed_at?'<div class="btnrow"><button class="btn fill" data-action="share">Compartir</button>'+(n.kind==='file'?'<a class="btn tint" href="'+apiUrl('/api/v1/nodes/'+n.id+'/content')+'" download>Descargar</a>':'<button class="btn tint" data-action="open-folder">Abrir</button>')+'</div>':'')+'<div class="group"><div>Revisión<span>'+n.revision+'</span></div><div>Ubicación<span>'+esc(currentSpace()?.name||'Compartido conmigo')+'</span></div></div><div class="group">'+(n.trashed_at?'<button data-action="restore">Restaurar</button><button class="center destructive" data-action="purge">Eliminar definitivamente</button>':(n.kind==='file'?'<button data-action="versions">Historial de versiones</button><button data-action="replace-file">Subir nueva versión</button>':'')+'<button data-action="rename">Cambiar nombre</button><button data-action="move">Mover</button><button class="center destructive" data-action="trash">Mover a la papelera</button>')+'</div>';if(!$('detail').open)$('detail').showModal()}
+function openFolder(node){if(!node||node.kind!=='folder'||node.trashed_at)return;if(state.view==='shared'){state.space=node.space_id;state.crumbs=[]}state.view='files';state.parent=node.id;state.crumbs.push({id:node.id,name:node.name});$('search').value='';load()}
+function field(label,name,{type='text',value='',required=true,placeholder='',minlength='',autocomplete='off'}={}){return `<div><label for="f-${name}">${label}</label><input id="f-${name}" name="${name}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}" ${required?'required':''} ${minlength?'minlength="'+minlength+'"':''} maxlength="1024" autocomplete="${autocomplete}"></div>`}
+function select(label,name,options){return `<div><label for="f-${name}">${label}</label><select id="f-${name}" name="${name}">${options}</select></div>`}
+function show(title,html){$('dialog-title').textContent=title;$('dialog-body').innerHTML=html;if(!$('dialog').open)$('dialog').showModal()}
+let modalBusy=false;
+function form(title,fields,submit,run,note=''){show(title,`${note?'<p>'+note+'</p>':''}<form id="modal-form"><div class="stack">${fields}</div><p id="modal-error" class="error-text" role="alert" style="margin-top:14px"></p><div class="dialog-actions"><button type="button" class="button" data-action="close-dialog">Cancelar</button><button type="submit" class="button primary">${submit}</button></div></form>`);$('modal-form').addEventListener('submit',async event=>{event.preventDefault();if(modalBusy)return;modalBusy=true;const formEl=event.currentTarget,b=formEl.querySelector('[type=submit]'),values=Object.fromEntries(new FormData(formEl));b.disabled=true;$('modal-error').textContent='';try{await run(values)}catch(error){if($('modal-error'))$('modal-error').textContent=message(error);else toast(message(error))}finally{modalBusy=false;b.disabled=false}})}
+function confirm(title,note,label,run){form(title,'',label,async()=>{await run();$('dialog').close();toast(label==='Eliminar definitivamente'?'Borrado solicitado. El archivo dejará de aparecer en la papelera.':'Cambio guardado.');await refresh()},note)}
+async function refresh(){await loadSpaces();await load()}
+function passwordDialog(required=false){form(required?'Elige tu nueva contraseña':'Cambiar contraseña',field('Contraseña actual','current',{type:'password',autocomplete:'current-password'})+field('Nueva contraseña','next',{type:'password',minlength:12,autocomplete:'new-password'})+field('Repite la nueva contraseña','repeat',{type:'password',minlength:12,autocomplete:'new-password'}),'Guardar contraseña',async v=>{if(v.next!==v.repeat)throw new Error('Las contraseñas no coinciden.');await api('/auth/password',{method:'POST',body:{current_password:v.current,new_password:v.next}});signedOut();toast('Contraseña actualizada. Entra de nuevo con ella.')},required?'Tu contraseña es temporal. Debes cambiarla para acceder a tus archivos.':'Al cambiarla se cerrarán tus sesiones actuales.');if(required){const cancel=$('dialog').querySelector('.dialog-actions [data-action="close-dialog"]');cancel.dataset.action='logout';cancel.textContent='Cerrar sesión';}if(required)$('dialog').querySelector('[data-action="close-dialog"]').disabled=true;else $('dialog').querySelector('[data-action="close-dialog"]').disabled=false}
+function roleOptions(){return '<option value="1">Lector · ver y descargar</option><option value="2">Editor · modificar contenido</option><option value="3">Gestor · administrar permisos</option>'}
+async function versions(){const n=state.selected;show('Historial de versiones','<p>Cargando versiones…</p>');let all=[],cursor;do{const {data}=await api(`/nodes/${n.id}/versions${cursor?'?after='+cursor:''}`);all.push(...data.items);cursor=data.next_cursor}while(cursor&&all.length<300);show('Historial de versiones',`<p>${esc(n.name)}. Restaurar crea una nueva versión y conserva las anteriores.</p><div class="records">${all.map(v=>`<div class="record">${icon('file')}<div class="record-copy"><strong>${esc(date(v.created_at))}</strong><span>${v.id===n.current_version?'Versión actual':esc(v.id.slice(0,8))}</span></div><a class="icon-btn" href="${apiUrl('/api/v1/nodes/'+n.id+'/content?version='+v.id)}" download aria-label="Descargar esta versión">${icon('download')}</a><button class="button" data-version="${v.id}" ${v.id===n.current_version?'disabled':''}>Restaurar</button></div>`).join('')}</div>${cursor?'<p class="small muted">Se muestran las primeras 300 versiones de esta prueba.</p>':''}`);$('dialog-body').querySelectorAll('[data-version]').forEach(b=>b.addEventListener('click',()=>confirm('Restaurar versión','Se creará una nueva versión del archivo.','Restaurar',()=>mutate(`/nodes/${n.id}/versions/${b.dataset.version}/restore`,'POST',undefined,n))))}
+async function permissions(){const n=state.selected,{data}=await api(`/nodes/${n.id}/grants`);form('Compartir este elemento',select('Compartir con','targetType','<option value="user_id">Una cuenta</option><option value="subject_space_id">Un espacio</option>')+field('Identificador de la cuenta o espacio','target',{placeholder:'Identificador que te comparte su propietario'})+select('Permiso','role',roleOptions()),'Guardar permiso',async v=>{if(!/^[0-9a-f-]{36}$/i.test(v.target))throw new Error('Introduce un identificador válido.');await api(`/nodes/${n.id}/grants`,{method:'PUT',body:{[v.targetType]:v.target,role:Number(v.role)}});toast('Permiso guardado.');await permissions()},'El destinatario puede copiar su identificador desde Mi cuenta. Los permisos se suman y se heredan.');$('dialog-body').insertAdjacentHTML('beforeend',`<div class="records">${data.items.map(g=>`<div class="record"><div class="record-copy"><strong>${g.user_id?'Cuenta':'Espacio'} ${esc((g.user_id||g.subject_space_id).slice(0,8))}</strong><span>${['','Lector','Editor','Gestor'][g.role]}</span></div><button class="button danger" data-grant="${g.id}">Revocar</button></div>`).join('')}</div>${data.next_cursor?'<p class="small muted">Se muestran los primeros 100 permisos.</p>':''}`);$('dialog-body').querySelectorAll('[data-grant]').forEach(b=>b.addEventListener('click',async()=>{const g=data.items.find(g=>g.id===b.dataset.grant);try{await api(`/nodes/${n.id}/grants/revoke`,{method:'POST',body:{user_id:g.user_id,subject_space_id:g.subject_space_id}});await permissions()}catch(e){toast(message(e))}}))}
+async function members(){const s=currentSpace(),{data}=await api(`/spaces/${s.id}/members`);form('Miembros del espacio',field('Nombre de usuario','username')+select('Permiso','role',roleOptions()),'Añadir o actualizar',async v=>{await api(`/spaces/${s.id}/members`,{method:'PUT',body:{username:v.username,role:Number(v.role)}});await members();toast('Miembro actualizado.')},'Los miembros tienen acceso a todo el espacio. Solo un gestor puede cambiar esta lista.');$('dialog-body').insertAdjacentHTML('beforeend','<div class="records">'+data.items.map(m=>`<div class="record"><div class="record-copy"><strong>${esc(m.username)}</strong><span>${['','Lector','Editor','Gestor'][m.role]}</span></div><button class="button danger" data-member="${m.user_id}" ${m.user_id===s.owner_id?'disabled':''}>Quitar</button></div>`).join('')+'</div>');$('dialog-body').querySelectorAll('[data-member]').forEach(b=>b.addEventListener('click',()=>confirm('Quitar miembro','Se conservarán los archivos del espacio. Otros permisos independientes pueden seguir dando acceso.','Quitar',()=>api(`/spaces/${s.id}/members/${b.dataset.member}`,{method:'DELETE'}))))}
+
+function readJob(){if(!state.me)return null;try{return JSON.parse(storage.get('drive.upload.'+state.me.id)||'null')}catch{return null}}
+function saveJob(job){storage.set('drive.upload.'+state.me.id,JSON.stringify(job))}
+function clearJob(){if(state.me)storage.remove('drive.upload.'+state.me.id)}
+let uploadController;
+async function hash(buffer){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',buffer)),b=>b.toString(16).padStart(2,'0')).join('')}
+function progress(name,text,done,total,completed=false){$('cancel-upload').hidden=completed;$('upload-panel').hidden=false;$('upload-name').textContent=name;$('upload-message').textContent=text;$('upload-bar').style.width=(total?Math.min(100,done/total*100):0)+'%';$('upload-bytes').textContent=`${bytes(done)} de ${bytes(total)}`}
+async function ensureUpload(job,signal){if(!job.id){const headers={'Idempotency-Key':job.start_key};if(job.revision)headers['If-Match']=`"${job.revision}"`;const {data}=await api('/uploads',{method:'POST',signal,headers,body:{space_id:job.space,parent_id:job.parent,node_id:job.node,name:job.name,size:job.size,sha256:job.sha256}});job.id=data.id;saveJob(job)}return job}
+// shortcut: WebCrypto hashes a whole file in memory; keep the 64 MiB demo cap until a streaming worker is added.
+async function upload(file){if(!file||!state.me)return;if(state.uploading){toast('Espera a que termine la subida actual.');return}if(!state.space){toast('Selecciona un espacio.');return}if(file.size>64*1024*1024){toast('Esta prueba admite hasta 64 MiB por archivo.');return}state.uploading=true;state.paused=false;uploadController=new AbortController();const signal=uploadController.signal;let job=readJob(),confirmed=0;try{progress(file.name,'Comprobando la integridad…',0,file.size);const fullHash=await hash(await file.arrayBuffer());if(state.paused)throw new DOMException('Pausado','AbortError');if(job&&(job.sha256!==fullHash||job.space!==state.space||job.parent!==state.parent||(job.node||null)!==(state.replacement?.id||null))){throw new Error('Hay otra subida pendiente. Reanúdala con el mismo archivo o cancélala primero.')}if(!job){job={id:null,start_key:crypto.randomUUID(),name:file.name,size:file.size,sha256:fullHash,space:state.space,parent:state.parent,node:state.replacement?.id||null,revision:state.replacement?.revision};saveJob(job)}await ensureUpload(job,signal);let {data:status}=await api('/uploads/'+job.id,{signal});if(status.state==='ready'){clearJob();toast('El archivo ya estaba guardado.');await refresh();return}if(status.state!=='pending')throw new Error('Esta subida ya no está disponible. Cancélala para iniciar otra.');let offset=status.received;confirmed=offset;while(offset<file.size){if(state.paused)throw new DOMException('Pausado','AbortError');const chunk=file.slice(offset,Math.min(file.size,offset+4*1024*1024));const digest=await hash(await chunk.arrayBuffer());progress(file.name,'Subiendo al servidor…',offset,file.size);try{const {data}=await api(`/uploads/${job.id}/content`,{method:'PATCH',body:chunk,signal,headers:{'Content-Type':'application/octet-stream','Upload-Offset':String(offset),'X-Chunk-SHA256':digest}});offset=data.offset;confirmed=offset}catch(e){if(e.name==='AbortError')throw e;if(e.code==='offset_mismatch_query_upload_status'){const {data}=await api('/uploads/'+job.id,{signal});offset=data.received;confirmed=offset}else throw e}}progress(file.name,'Verificando y guardando la versión…',file.size,file.size);await api(`/uploads/${job.id}/complete`,{method:'POST',signal});for(let i=0;i<120;i++){if(state.paused)throw new DOMException('Pausado','AbortError');const {data}=await api('/uploads/'+job.id,{signal});if(data.state==='ready'&&data.storage_pending){progress(file.name,'Contenido guardado. Organizando las carpetas del servidor…',file.size,file.size);await new Promise(resolve=>setTimeout(resolve,500));continue}if(data.state==='ready'){clearJob();state.replacement=null;progress(file.name,'Guardado correctamente.',file.size,file.size,true);toast('Archivo guardado.');await refresh();setTimeout(()=>$('upload-panel').hidden=true,2500);return}if(data.completion_error)throw new Error(data.completion_error);if(data.state!=='pending')throw new Error('No se pudo publicar el archivo.');await new Promise(resolve=>setTimeout(resolve,500))}throw new Error('El servidor sigue verificando el archivo. Puedes consultar la subida de nuevo.')}catch(error){progress(file.name,message(error),confirmed,file.size);toast(message(error));if(state.me)chrome()}finally{state.uploading=false;state.paused=false;$('file-input').value=''}}
+const actions={
+ 'new-menu':b=>{const menu=$('new-menu'),open=!menu.classList.contains('show'),rect=b.getBoundingClientRect();menu.classList.toggle('show',open);menu.style.left=Math.max(12,Math.min(rect.left,innerWidth-262))+'px';menu.style.top=(rect.bottom+8)+'px';b.setAttribute('aria-expanded',String(open));if(open)menu.querySelector('button:not(:disabled)')?.focus()},
+ 'clear-selection':()=>{state.selection=null;state.selected=null;detail();render()},
+ 'connect':()=>connectAPI(),
+ 'menu':()=>{$('sidebar').classList.toggle('open')},'close-dialog':()=>{if(modalBusy)return;$('dialog').close();$('dialog').querySelector('[data-action="close-dialog"]').disabled=false},'close-detail':()=>{const id=state.selected?.id;state.selected=null;detail();render();document.querySelector(`[data-node="${id}"]`)?.focus()},
+ 'logout':async()=>{if(state.uploading)throw new Error('Pausa o termina la subida antes de cerrar sesión.');await api('/auth/logout',{method:'POST'});signedOut()},
+ 'profile':()=>{if(!state.me){$('username').focus();return}show('Mi cuenta',`<p>${esc(state.me.username)} · ${'Usuario'}</p><div class="stack">${button('copy-user','Copiar mi identificador','copy')}${button('password','Cambiar contraseña','shield')}${button('logout','Cerrar sesión','exit')}</div>`)},'password':()=>passwordDialog(),
+ 'copy-user':async()=>{await navigator.clipboard.writeText(state.me.id);toast('Identificador copiado.')},'copy-node':async()=>{await navigator.clipboard.writeText(state.selected.id);toast('Identificador copiado.')},
+ 'new-folder':()=>{if(!state.space||state.me?.must_change_password)throw new Error('Selecciona un espacio antes de crear una carpeta.');if(state.view!=='files')throw new Error('Abre Mi unidad para crear una carpeta.');return form('Nueva carpeta',field('Nombre de la carpeta','name'),'Crear carpeta',async v=>{await mutate(`/spaces/${state.space}/nodes`,'POST',{name:v.name,parent_id:state.parent});$('dialog').close();await refresh();toast('Carpeta creada.')})},
+ 'new-space':()=>form('Nuevo espacio compartido',field('Nombre del espacio','name'),'Crear espacio',async v=>{const {data}=await mutate('/spaces','POST',{name:v.name});await loadSpaces();state.space=data.id;state.parent=null;state.crumbs=[];state.view='files';$('dialog').close();await load()}),
+
+
+
+ 'upload':()=>{if(!state.space||state.view!=='files'||state.me?.must_change_password)throw new Error('Abre Mi unidad para subir archivos.');state.replacement=null;$('file-input').click()},'replace-file':()=>{state.replacement={...state.selected};$('file-input').click()},'pause-upload':()=>{if(!state.uploading){$('upload-panel').hidden=true;return}state.paused=true;uploadController?.abort();toast('Subida pausada. Selecciona el mismo archivo para reanudarla.')},
+ 'cancel-upload':async()=>{state.paused=true;uploadController?.abort();const job=readJob();if(job){await ensureUpload(job);await api('/uploads/'+job.id,{method:'DELETE'})}clearJob();state.replacement=null;$('upload-panel').hidden=true;await refresh();toast('Subida cancelada.')},
+ 'open-folder':()=>openFolder(state.selected),'more':()=>load(true),'more-spaces':()=>loadSpaces(true),
+ 'list-view':()=>{state.grid=false;render();document.querySelector('[data-action="list-view"]').classList.add('active');document.querySelector('[data-action="grid-view"]').classList.remove('active');document.querySelector('[data-action="list-view"]').setAttribute('aria-pressed','true');document.querySelector('[data-action="grid-view"]').setAttribute('aria-pressed','false')},
+ 'grid-view':()=>{state.grid=true;render();document.querySelector('[data-action="grid-view"]').classList.add('active');document.querySelector('[data-action="list-view"]').classList.remove('active');document.querySelector('[data-action="grid-view"]').setAttribute('aria-pressed','true');document.querySelector('[data-action="list-view"]').setAttribute('aria-pressed','false')},
+ 'rename':()=>{const n={...state.selected};form('Cambiar nombre',field('Nombre','name',{value:n.name}),'Guardar',async v=>{await mutate('/nodes/'+n.id,'PATCH',{name:v.name},n);$('dialog').close();await load();toast('Nombre actualizado.')})},
+ 'move':()=>{const n={...state.selected};form('Mover elemento',field('Identificador de la carpeta de destino','parent',{required:false,placeholder:'Vacío para mover a la raíz'}),'Mover',async v=>{await mutate('/nodes/'+n.id,'PATCH',v.parent?{parent_id:v.parent}:{move_to_root:true},n);$('dialog').close();await load();toast('Elemento movido.')},'Puedes copiar el identificador de una carpeta desde su panel de detalles. El destino debe estar en el mismo espacio.')},
+ 'trash':()=>{const n={...state.selected};confirm('Enviar a la papelera',`Se conservarán el contenido y las versiones de «${esc(n.name)}».`,'Enviar a la papelera',()=>mutate('/nodes/'+n.id+'/trash','POST',undefined,n))},
+ 'restore':()=>{const n={...state.selected};confirm('Restaurar elemento','Volverá a su carpeta original. Si esa carpeta está en la papelera, restáurala primero.','Restaurar',()=>mutate('/nodes/'+n.id+'/restore','POST',undefined,n))},
+ 'purge':()=>{const n={...state.selected};confirm('Eliminar definitivamente','Se eliminarán este elemento y sus versiones. Esta acción no se puede deshacer. El servidor eliminará el contenido en segundo plano.','Eliminar definitivamente',()=>mutate('/nodes/'+n.id+'/purge','POST',undefined,n))},
+ 'versions':versions,'share':permissions,'members':members
+};
+document.addEventListener('click',async event=>{const download=event.target.closest('a[download]');if(LOCAL_FILE&&download){event.preventDefault();try{await downloadFile(download.href)}catch(error){toast(message(error))}return}const action=event.target.closest('[data-action]');if(action){if(action.disabled)return;if(action.dataset.action!=='new-menu'){$('new-menu').classList.remove('show');$('newBtn').setAttribute('aria-expanded','false')}if($('detail').open)$('detail').close();try{await actions[action.dataset.action]?.(action)}catch(error){toast(message(error))}return}const nav=event.target.closest('[data-nav]');if(nav&&state.me){if(nav.disabled)return;state.view=nav.dataset.nav;if(state.view==='files')state.space=state.spaces.find(s=>s.kind==='personal')?.id||state.space;state.parent=null;state.crumbs=[];$('search').value='';$('sidebar').classList.remove('open');await load();return}const space=event.target.closest('[data-space]');if(space){state.space=space.dataset.space;state.parent=null;state.crumbs=[];state.view='files';$('search').value='';$('sidebar').classList.remove('open');await load();return}const crumb=event.target.closest('[data-crumb]');if(crumb){const i=Number(crumb.dataset.crumb);state.parent=i<0?null:state.crumbs[i].id;state.crumbs=state.crumbs.slice(0,i+1);await load();return}const node=event.target.closest('[data-node]');if(node){const selected=state.rows.find(n=>n.id===node.dataset.node);if(!selected)return;state.selected=selected;if(event.target.closest('.folder')&&!selected.trashed_at){openFolder(selected);return}if(event.target.closest('.chk')){state.selection=state.selection===selected.id?null:selected.id;render();return}state.selection=null;render();detail();return}});
+document.addEventListener('dblclick',event=>{const node=event.target.closest('[data-node]');if(node)openFolder(state.rows.find(n=>n.id===node.dataset.node))});
+document.addEventListener('keydown',event=>{const node=event.target.closest('[data-node]');if(node&&event.target.closest('.chk'))return;if(node&&(event.key==='Enter'||event.key===' ')){event.preventDefault();state.selected=state.rows.find(n=>n.id===node.dataset.node);if(event.key==='Enter'&&state.selected.kind==='folder')openFolder(state.selected);else{detail();$('detail').querySelector('button')?.focus()}}});
+$('type-filter').addEventListener('change',render);$('sort-order').addEventListener('change',render);$('search').addEventListener('input',render);$('file-input').addEventListener('change',()=>upload($('file-input').files[0]));
+for(const name of ['dragenter','dragover'])$('dashboard').addEventListener(name,event=>{event.preventDefault();$('dashboard').classList.add('over')});
+for(const name of ['dragleave','drop'])$('dashboard').addEventListener(name,event=>{event.preventDefault();$('dashboard').classList.remove('over');if(name==='drop'){if(state.view!=='files'||!state.space){toast('Abre Mi unidad para subir archivos.');return}state.replacement=null;if(event.dataTransfer.files.length>1){toast('En esta prueba se sube un archivo a la vez.');return}upload(event.dataTransfer.files[0])}});
+$('dialog').addEventListener('close',()=>{$('dialog').querySelector('[data-action="close-dialog"]').disabled=false});
+$('dialog').addEventListener('cancel',event=>{if(state.me?.must_change_password||modalBusy)event.preventDefault()});
+document.addEventListener('click',event=>{if(!event.target.closest('#new-menu')&&!event.target.closest('#newBtn')){$('new-menu').classList.remove('show');$('newBtn').setAttribute('aria-expanded','false')}});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'){$('new-menu').classList.remove('show');$('newBtn').setAttribute('aria-expanded','false')}});
+$('detail').addEventListener('close',()=>{$('detail').hidden=false});
+window.addEventListener('beforeunload',event=>{if(state.uploading){event.preventDefault();event.returnValue=''}});
+async function downloadFile(url){
+ if(!state.token)throw new Error('Inicia sesión para descargar.');
+ if(!url.startsWith(API_ORIGIN+'/api/v1/nodes/'))throw new Error('Dirección de descarga no válida.');
+ const response=await fetch(url,{credentials:'omit',headers:{Authorization:'Bearer '+state.token}});
+ if(!response.ok)throw new Error('No se pudo descargar el archivo.');
+ // shortcut: the standalone demo buffers downloads up to 64 MiB; add streamed saving for larger files.
+ const limit=64*1024*1024,reader=response.body.getReader(),chunks=[];let size=0;
+ try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>limit)throw new Error('Esta prueba admite descargas de hasta 64 MiB.');chunks.push(value)}}catch(error){await reader.cancel();throw error}
+ const objectURL=URL.createObjectURL(new Blob(chunks)),link=document.createElement('a');
+ link.href=objectURL;link.download=state.selected?.name||'archivo';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(objectURL),60000);
+}
+async function connectAPI(){
+ $('login-submit').disabled=true;$('login-error').textContent='';$('api-status').textContent='Conectando…';$('api-dot').style.background='#9aa48e';
+ let connected=false;
+ try{
+  const health=await fetch(apiUrl('/health/live'),{credentials,cache:'no-store',signal:AbortSignal.timeout(4000)});
+  if(!health.ok)throw new Error('La API no está disponible.');
+  connected=true;$('api-status').textContent='API conectada';$('api-dot').style.background='#388d6b';$('connection-help').textContent='Conectado al servidor local. Utiliza la cuenta que creó el administrador.';
+  try{await enter();if(state.me&&!state.csrf&&!state.token){signedOut();toast('Entra de nuevo para habilitar las operaciones de esta pestaña.')}}catch(error){if(error.status!==401)throw error}
+ }catch(error){$('api-status').textContent='Sin conexión';$('api-dot').style.background='#ad3d3d';$('login-error').textContent=connected?message(error):'No se puede conectar con la API en localhost:8443. Arranca el backend y vuelve a pulsar Entrar.';$('connection-help').innerHTML='<button type="button" class="button" data-action="connect">Reintentar conexión</button>';}
+ finally{$('login-submit').disabled=false}
+}
+connectAPI();
+</script></body></html>

@@ -7,15 +7,12 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 use tokio::io::AsyncReadExt;
 
 #[derive(Clone)]
 pub struct Frontend {
-    file: Arc<PathBuf>,
+    html: Arc<str>,
     authority: String,
     api_origin: String,
 }
@@ -45,7 +42,7 @@ impl Frontend {
             return Err("frontend must be an HTML file".into());
         }
         let s = Self {
-            file: Arc::new(file),
+            html: Self::read(&file).await?.into(),
             authority: origin
                 .as_str()
                 .trim_start_matches("http://")
@@ -53,11 +50,10 @@ impl Frontend {
                 .into(),
             api_origin: api.origin().ascii_serialization(),
         };
-        s.read().await?;
         Ok(s)
     }
-    async fn read(&self) -> Result<String, std::io::Error> {
-        let file = tokio::fs::File::open(&*self.file).await?;
+    async fn read(path: &Path) -> Result<String, std::io::Error> {
+        let file = tokio::fs::File::open(path).await?;
         let mut bytes = Vec::new();
         file.take(1024 * 1024 + 1).read_to_end(&mut bytes).await?;
         if bytes.len() > 1024 * 1024 {
@@ -86,10 +82,7 @@ async fn index(State(s): State<Frontend>, headers: HeaderMap) -> Response {
     {
         return StatusCode::FORBIDDEN.into_response();
     }
-    let html = match s.read().await {
-        Ok(v) => v,
-        Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
-    };
+    let html = &*s.html;
     let nonce = crate::auth::token();
     let html = html.replace(
         "const API_ORIGIN=location.protocol==='https:'?location.origin:'http://localhost:8443';",
@@ -99,6 +92,7 @@ async fn index(State(s): State<Frontend>, headers: HeaderMap) -> Response {
         ),
     );
     let html = html.replace("<script>", &format!("<script nonce=\"{nonce}\">"));
+    let html = html.replace("<style>", &format!("<style nonce=\"{nonce}\">"));
     let mut response = Response::new(Body::from(html));
     for (key, value) in [
         ("content-type", "text/html; charset=utf-8".to_owned()),
@@ -114,7 +108,7 @@ async fn index(State(s): State<Frontend>, headers: HeaderMap) -> Response {
         (
             "content-security-policy",
             format!(
-                "default-src 'none'; script-src 'nonce-{nonce}'; style-src 'unsafe-inline'; connect-src {}; img-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
+                "default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; style-src-attr 'unsafe-inline'; connect-src {}; img-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
                 s.api_origin
             ),
         ),
@@ -134,14 +128,20 @@ mod tests {
     async fn only_the_selected_html_is_public_and_active_scripts_need_a_nonce() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("index.html");
-        tokio::fs::write(&file, "<!doctype html><script>window.example=1</script>")
-            .await
-            .unwrap();
+        tokio::fs::write(
+            &file,
+            "<!doctype html><style>body{color:black}</style><script>window.example=1</script>",
+        )
+        .await
+        .unwrap();
         let app = router(
             Frontend::new(&file, "http://localhost:5500", "http://127.0.0.1:8443")
                 .await
                 .unwrap(),
         );
+        tokio::fs::write(&file, "<script>modified_after_startup()</script>")
+            .await
+            .unwrap();
         let req = |path: &str, host: &str| {
             axum::http::Request::builder()
                 .uri(path)
@@ -162,6 +162,7 @@ mod tests {
         assert!(csp.contains("frame-ancestors 'none'"));
         assert!(csp.contains("connect-src http://localhost:8443"));
         assert!(!csp.contains("script-src 'unsafe-inline'"));
+        assert!(!csp.contains("style-src 'unsafe-inline'"));
         assert!(!response.headers().contains_key("set-cookie"));
         let body = String::from_utf8(
             axum::body::to_bytes(response.into_body(), 1024)
@@ -170,6 +171,8 @@ mod tests {
                 .to_vec(),
         )
         .unwrap();
+        assert!(body.contains("window.example=1"));
+        assert!(!body.contains("modified_after_startup"));
         let nonce = body
             .split("nonce=\"")
             .nth(1)
@@ -178,6 +181,7 @@ mod tests {
             .next()
             .unwrap();
         assert!(csp.contains(nonce));
+        assert!(body.contains(&format!("<style nonce=\"{nonce}\">")));
         for path in ["/api/v1/me", "/server.json", "/../server.json"] {
             assert_eq!(
                 app.clone()

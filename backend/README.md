@@ -1,8 +1,8 @@
 # SantolvDrive: backend local en Rust
 
-Revisión de seguridad vigente: [INFORME_SEGURIDAD_02.md](INFORME_SEGURIDAD_02.md). Se ha actualizado `url` por un aviso de RustSec; se exige Host autorizado, se rechazan cabeceras de proxy no configurado y se ha deshabilitado el acceso desde origen opaco. La instalación sigue siendo local y no constituye un despliegue público de Pangolin.
+Revisión de seguridad vigente: [INFORME_SEGURIDAD_03.md](INFORME_SEGURIDAD_03.md). Se exige Host autorizado, se rechazan cabeceras de proxy no configurado y se ha deshabilitado el acceso desde origen opaco. La instalación sigue siendo local; el MFA de Pangolin se configurará cuando se prepare su despliegue público.
 
-Protección de login: espera progresiva de hasta 8 segundos por IP/cuenta tras errores, límite de 50 peticiones por IP en 15 minutos, máximo de 10 sesiones por usuario y 32 cargas pendientes por usuario/espacio. Las sesiones siguen durando dos horas; las iniciales pendientes de cambio de contraseña duran quince minutos. La primera publicación dispone de un journal durable para reanudar después de mover los bytes y antes de confirmar la ubicación.
+Protección de login: espera progresiva de hasta 8 segundos por IP/cuenta tras errores, límite de 50 intentos por par IP/cuenta en 15 minutos que se limpia al autenticar correctamente, máximo de 10 sesiones por usuario y 32 cargas pendientes por usuario entre todos sus espacios. Cada usuario tiene un máximo de dos transferencias simultáneas por proceso, dentro de las ocho globales. Las sesiones duran dos horas; las iniciales pendientes de cambio de contraseña duran quince minutos. La primera publicación dispone de un journal durable con conexiones SQL reservadas para reanudar después de mover los bytes y antes de confirmar la ubicación.
 
 Axum + Tokio + Tower + Rustls. El backend y el instalador están escritos en Rust. La única dependencia externa es PostgreSQL, que se prepara automáticamente si falta. La API usa **http://localhost:8443** y la interfaz con cookies se abre en **http://localhost:5500**, desde el mismo equipo. No requiere dominio, túneles ni cuentas de servicios externos. No utiliza Docker.
 
@@ -30,7 +30,7 @@ La API se inicia con `serve --config ...` y escucha en http://localhost:8443. Pa
 .\dist\santolvdrive-windows-x64.exe serve --config .\servidor\server.json --frontend ..\frontend\pruebahtml\index.html
 ```
 
-Abrir **http://localhost:5500/**. La API nunca entrega HTML: `/` sigue devolviendo JSON y `/index.html` no existe en el puerto de la API. El listener de 5500 solo entrega el HTML elegido. Abrir el archivo con doble clic muestra el enlace a esta interfaz; no guarda tokens para simular cookies en un origen opaco.
+Abrir **http://localhost:5500/**. La API nunca entrega HTML: `/` sigue devolviendo JSON y `/index.html` no existe en el puerto de la API. El listener de 5500 solo entrega el HTML elegido, leído una vez al arrancar; tras editarlo hay que reiniciar el servidor. Abrir el archivo con doble clic muestra el enlace a esta interfaz; no guarda tokens para simular cookies en un origen opaco.
 
 Las sesiones normales duran dos horas y las iniciales pendientes de cambio de contraseña quince minutos. Cookie `HttpOnly`, `SameSite=Strict`, ámbito `/api/v1`, `Secure` al usar HTTPS. `/api/v1/me` recupera el CSRF al recargar sin exponer el identificador de sesión. No se guardan credenciales en almacenamiento del navegador. El cierre de sesión y el cambio/restablecimiento de contraseña revocan el acceso en el servidor. Consultar **INFORME_SEGURIDAD.md** para los riesgos pendientes y los requisitos antes de publicar mediante Pangolin.
 
@@ -49,11 +49,11 @@ Se conserva una copia `server.before-local.json` y no se alteran cuentas ni arch
 
 `server.example.json` y `.env.example` son plantillas avanzadas. Las rutas relativas se resuelven desde el archivo de configuración. Las variables deben exportarse: el binario no interpreta `.env`. HTTP exige `allow_insecure_localhost=true`, origen de loopback y escucha de loopback; se rechazan `0.0.0.0`, `::` y direcciones de red. HTTPS local mediante Rustls sigue disponible con `allow_insecure_localhost=false` y certificado/clave válidos. No hay fallback a HTTP si falla TLS.
 
-El archivo local usa credentials: omit y recibe, tras validar usuario y contraseña con local_file: true, un token bearer de 30 minutos. Solo se guarda en memoria y cada petición lo presenta en Authorization. CORS permite el origen opaco null sin Access-Control-Allow-Credentials; cualquier petición null con cookies se rechaza. Null no acredita que sea nuestro HTML: también puede representar documentos aislados, por lo que siempre se requiere autenticación y nunca se acepta una sesión ambiental. Los clientes web alojados conservan cookies HttpOnly, SameSite=Strict y CSRF con su frontend_origin explícito. Se conservan límites de intentos, roles y revocación de sesiones. HTTP solo se permite en loopback.
+El origen opaco `null` y `local_file: true` se rechazan. Abrir el HTML con doble clic muestra la dirección HTTP de la interfaz; no inicia una sesión. La interfaz usa cookies HttpOnly y CSRF desde su origen explícito. Solo los clientes nativos sin Origin ni Fetch Metadata pueden solicitar bearer con `mobile: true`; su duración sigue las mismas reglas de sesión. HTTP solo se permite en loopback.
 
 Los listeners conservan límites de 256 conexiones, cabeceras de 32 KiB con 30 segundos de plazo e inactividad de 60 segundos. PostgreSQL escucha en 127.0.0.1 con SCRAM-SHA-256 y rol limitado. `serve` lo arranca cuando hace falta; `database-stop --config ./servidor/server.json` lo detiene explícitamente. No se registra todavía arranque automático al reiniciar el equipo.
 
-El directorio de instalación es privado para propietario/SYSTEM en Windows y propietario en Unix. `server.json`, sus backups y `postgres-state.json` contienen secretos y deben protegerse y respaldarse cifrados. Las migraciones y el contenido existente no se cambian en esta modificación.
+El directorio de instalación es privado para propietario/SYSTEM en Windows y propietario en Unix. `server.json`, sus backups y `postgres-state.json` contienen secretos y deben protegerse y respaldarse cifrados. Las migraciones son incrementales; la actualización conserva cuentas y contenido existente.
 
 ## Administración y acceso
 
@@ -74,7 +74,7 @@ Desde backend, usando la configuración existente:
 
 Create y reset-password piden el usuario y una contraseña temporal oculta, con repetición. Para automatización aceptan --stdin antes de --config y un objeto JSON {username,password} por la entrada estándar, con límite de 4096 bytes; nunca pasar contraseñas como argumentos. List y audit aceptan un cursor después del nombre de la acción, devuelto como next_cursor. Desactivar una cuenta revoca sus sesiones y bloquea las publicaciones pendientes, conservando sus archivos. Reactivarla no recupera las sesiones anteriores. Restablecer su contraseña exige cambiarla al entrar y no reactiva cuentas desactivadas.
 
-El Drive solo tiene el acceso habitual de usuario y contraseña mediante POST /api/v1/auth/login. Desde el HTML abierto con doble clic usa local_file: true y bearer en memoria; el resto de clientes conserva los modos documentados. Solo las cuentas de usuario pueden recibir sesiones. GET /api/v1/me muestra su identidad; POST /api/v1/auth/password cambia su propia contraseña y revoca las sesiones. Una contraseña temporal obliga a cambiarla antes de acceder a los archivos.
+El Drive solo tiene el acceso habitual de usuario y contraseña mediante POST /api/v1/auth/login. El HTML se abre desde el listener estático independiente y utiliza cookies HttpOnly con CSRF; los clientes nativos conservan bearer según las condiciones documentadas. Solo las cuentas de usuario pueden recibir sesiones. GET /api/v1/me muestra su identidad; POST /api/v1/auth/password cambia su propia contraseña y revoca las sesiones. Una contraseña temporal obliga a cambiarla antes de acceder a los archivos.
 
 Nombres nuevos: 3–64 caracteres ASCII alfanuméricos, punto, guion y guion bajo, normalizados a minúsculas. Contraseñas de 12–1024 bytes, protegidas con Argon2id. No hay ninguna cuenta ni contraseña predeterminada. Un usuario normal no puede crear usuarios, ascender a administrador ni ejecutar acciones administrativas.
 
@@ -126,7 +126,7 @@ El trabajador recupera publicaciones interrumpidas, expira cargas, reintenta bor
 
 Mover a la papelera permite restaurar. Un gestor puede confirmar POST /nodes/{id}/purge con If-Match sin esperar: devuelve 202 vacío, oculta el elemento y encola el borrado físico por lotes. El contenido se elimina del disco y libera cuota al confirmar su retirada. Las referencias compartidas heredadas se conservan mientras sigan en uso. No se añade borrado automático: la papelera se vacía mediante la acción explícita del usuario. TRASH_RETENTION_DAYS se conserva para compatibilidad de configuración, pero no bloquea esa confirmación manual. Los contenidos huérfanos que no procedan de un borrado solicitado mantienen la recogida de seguridad tras 24 horas. Las reservas no preasignan capacidad física; no se publican archivos incompletos si el volumen se llena.
 
-Las escrituras estructurales se serializan por espacio con advisory locks PostgreSQL para impedir ciclos y movimientos incompatibles. Las cargas se bloquean por sesión; la transferencia no bloquea todo el espacio. Los valores iniciales son 16 conexiones SQL, 128 solicitudes, 8 transferencias y 2 hashes Argon2id simultáneos por proceso. Son límites conservadores iniciales, no una capacidad garantizada. El cierre espera solicitudes HTTP activas; un corte forzado se recupera desde estado persistente.
+Las escrituras estructurales se serializan por espacio con advisory locks PostgreSQL para impedir ciclos y movimientos incompatibles. Las cargas se bloquean por sesión; la transferencia no bloquea todo el espacio. Los valores iniciales son 14 conexiones SQL generales y dos reservadas al journal, 128 solicitudes, ocho transferencias globales (dos por usuario) y dos hashes Argon2id simultáneos por proceso. Son límites conservadores iniciales, no una capacidad garantizada. El cierre espera solicitudes HTTP activas; un corte forzado se recupera desde estado persistente.
 
 ## Copias, actualizaciones y operación
 

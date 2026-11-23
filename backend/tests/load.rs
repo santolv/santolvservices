@@ -18,6 +18,7 @@ async fn metadata_baseline(pool: PgPool) {
     let space = Uuid::new_v4();
     let raw = auth::token();
     let app = App {
+        journal: App::journal_pool(&pool),
         db: pool.clone(),
         root: root.path().into(),
         origin: "http://localhost".into(),
@@ -25,6 +26,7 @@ async fn metadata_baseline(pool: PgPool) {
         secure: false,
         hashes: Arc::new(Semaphore::new(2)),
         transfers: Arc::new(Semaphore::new(8)),
+        user_transfers: Default::default(),
         requests: Arc::new(Semaphore::new(128)),
         retention_days: 30,
         quota: 1024,

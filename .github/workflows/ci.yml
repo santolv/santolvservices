@@ -1,5 +1,10 @@
 name: Rust security and PostgreSQL
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 5 * * 1'
 permissions:
   contents: read
 concurrency:

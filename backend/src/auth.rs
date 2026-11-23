@@ -296,11 +296,12 @@ pub async fn login(
     if username.is_empty() || username.len() > 254 || c.password.len() > 1024 {
         return Err(Error::auth());
     }
-    rate(&s, format!("login-ip:{}", addr.ip()), 50).await?;
     if c.local_file {
         return Err(Error::bad("opaque_origin_disabled"));
     }
     let failure_key = format!("{}:{}", addr.ip(), hash(&username));
+    let attempt_key = format!("login-pair:{failure_key}");
+    rate(&s, attempt_key.clone(), 50).await?;
     let delayed: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM login_failures WHERE key=$1 AND next_attempt>now())",
     )
@@ -366,6 +367,10 @@ pub async fn login(
     let csrf = csrf_for(&raw);
     sqlx::query("DELETE FROM login_failures WHERE key=$1")
         .bind(&failure_key)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM rate_limits WHERE key=$1")
+        .bind(attempt_key)
         .execute(&mut *tx)
         .await?;
     // Bound active credentials per user; preserve at most nine prior sessions.

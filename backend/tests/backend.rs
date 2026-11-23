@@ -12,6 +12,60 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 #[sqlx::test]
+async fn reserved_journal_survives_exhausted_application_pool(pool: PgPool) {
+    let journal = App::journal_pool(&pool);
+    let mut held = Vec::new();
+    for _ in 0..pool.options().get_max_connections() {
+        held.push(pool.acquire().await.unwrap());
+    }
+    assert!(pool.try_acquire().is_none());
+    let result: i32 = sqlx::query_scalar("SELECT 1")
+        .fetch_one(&journal)
+        .await
+        .unwrap();
+    assert_eq!(result, 1);
+    drop(held);
+    journal.close().await;
+}
+
+#[sqlx::test]
+async fn login_limit_of_one_account_does_not_lock_other_users_on_same_ip(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let a = h.account("blocked-user").await;
+    let b = h.account("other-user").await;
+    let key = format!("login-pair:127.0.0.1:{}", auth::hash(&a.username));
+    sqlx::query("INSERT INTO rate_limits(key,count) VALUES($1,50)")
+        .bind(&key)
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        h.json(
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            &[],
+            json!({"username":a.username,"password":"very strong test password","mobile":true})
+        )
+        .await
+        .0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(
+        h.json(
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            &[],
+            json!({"username":b.username,"password":"very strong test password","mobile":true})
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+}
+
+#[sqlx::test]
 async fn host_proxy_failures_and_session_limits_are_enforced(pool: PgPool) {
     let h = Harness::new(pool).await;
     let a = h.account("hardened-user").await;
@@ -111,8 +165,17 @@ async fn host_proxy_failures_and_session_limits_are_enforced(pool: PgPool) {
         )
         .await;
     let raw = latest["token"].as_str().unwrap();
-    sqlx::query("INSERT INTO uploads(id,user_id,space_id,name,size,sha256) SELECT gen_random_uuid(),$1,$2,'pending-'||n,0,$3 FROM generate_series(1,32)n")
-        .bind(a.id).bind(a.space).bind("0".repeat(64)).execute(&h.app.db).await.unwrap();
+    let (_, team) = h
+        .json(
+            "POST",
+            "/api/v1/spaces",
+            Some(raw),
+            &[("idempotency-key", "limits-team")],
+            json!({"name":"Otro espacio"}),
+        )
+        .await;
+    sqlx::query("INSERT INTO uploads(id,user_id,space_id,name,size,sha256) SELECT gen_random_uuid(),$1,CASE WHEN n<=16 THEN $2 ELSE $3 END,'pending-'||n,0,$4 FROM generate_series(1,32)n")
+        .bind(a.id).bind(a.space).bind(id(&team,"id")).bind("0".repeat(64)).execute(&h.app.db).await.unwrap();
     assert_eq!(
         h.json(
             "POST",
@@ -873,6 +936,7 @@ impl Harness {
             .await
             .unwrap();
         let app = App {
+            journal: App::journal_pool(&db),
             db,
             root: root.path().into(),
             origin: "http://localhost:8080".into(),
@@ -880,6 +944,7 @@ impl Harness {
             secure: false,
             hashes: Arc::new(tokio::sync::Semaphore::new(2)),
             transfers: Arc::new(tokio::sync::Semaphore::new(8)),
+            user_transfers: Default::default(),
             quota: 10 * 1024 * 1024,
             requests: Arc::new(tokio::sync::Semaphore::new(128)),
             retention_days: 30,

@@ -40,10 +40,8 @@ pub async fn publish(s: &App, node: Uuid, mut value: serde_json::Value) -> serde
 }
 
 async fn move_directory(s: &App, old: &Path, target: &Path, node: Uuid) -> Result<()> {
-    // A bounded wait lets a cold pool open a connection without exhausting it in a lock cycle.
-    let mut journal = tokio::time::timeout(std::time::Duration::from_millis(250), s.db.acquire())
-        .await
-        .map_err(|_| Error::unavailable())??;
+    // Reserved connections cannot be exhausted by the transactions whose commits need this journal.
+    let mut journal = s.journal.acquire().await?;
     let intent: Option<(String, String)> =
         sqlx::query_as("SELECT source,target FROM workspace_moves WHERE node_id=$1")
             .bind(node)
@@ -75,17 +73,17 @@ async fn move_directory(s: &App, old: &Path, target: &Path, node: Uuid) -> Resul
         {
             return Ok(());
         }
-        tokio::fs::rename(old, &stage).await?;
+        storage::rename(old, &stage).await?;
         storage::sync_dir(old.parent().unwrap()).await?;
         storage::sync_dir(stage.parent().unwrap()).await?;
     }
     if tokio::fs::try_exists(target).await? {
         if !tokio::fs::try_exists(old).await? {
-            tokio::fs::rename(&stage, old).await?;
+            storage::rename(&stage, old).await?;
         }
         return Err(Error::conflict("workspace_path_occupied"));
     }
-    tokio::fs::rename(&stage, target).await?;
+    storage::rename(&stage, target).await?;
     storage::sync_dir(stage.parent().unwrap()).await?;
     storage::sync_dir(target.parent().unwrap()).await
 }
@@ -110,10 +108,7 @@ async fn owned_directory(path: &Path, known: bool) -> Result<()> {
     Ok(())
 }
 async fn publication_intent(s: &App, path: &Path, node: Uuid) -> Result<()> {
-    let mut connection =
-        tokio::time::timeout(std::time::Duration::from_millis(250), s.db.acquire())
-            .await
-            .map_err(|_| Error::unavailable())??;
+    let mut connection = s.journal.acquire().await?;
     let existing: Option<String> =
         sqlx::query_scalar("SELECT target FROM workspace_publications WHERE node_id=$1")
             .bind(node)
@@ -244,7 +239,7 @@ pub async fn sync_node(s: &App, id: Uuid) -> Result<()> {
                         let target =
                             storage::prepare_object(&s.root, &directory, object, &original).await?;
                         if !tokio::fs::try_exists(&target).await? {
-                            tokio::fs::rename(source, &target).await?;
+                            storage::rename(&source, &target).await?;
                             storage::sync_dir(target.parent().unwrap()).await?;
                         }
                     }
@@ -364,7 +359,7 @@ async fn sync_entry(
                 if tokio::fs::try_exists(&stage).await? {
                     return Err(Error::conflict("workspace_path_occupied"));
                 }
-                tokio::fs::rename(&legacy, &stage).await?;
+                storage::rename(&legacy, &stage).await?;
                 storage::sync_dir(stage.parent().unwrap()).await?;
                 storage::sync_dir(legacy.parent().unwrap()).await?;
             }
@@ -410,7 +405,7 @@ async fn sync_entry(
                 {
                     return Err(Error::conflict("workspace_path_occupied"));
                 }
-                tokio::fs::rename(&legacy, &stage).await?;
+                storage::rename(&legacy, &stage).await?;
                 storage::sync_dir(&path).await?;
                 storage::sync_dir(stage.parent().unwrap()).await?;
             }
@@ -428,16 +423,16 @@ async fn sync_entry(
                     return Err(Error::conflict("workspace_path_occupied"));
                 }
             } else if previous.as_ref().is_some_and(|p| p.exists()) {
-                tokio::fs::rename(previous.as_ref().unwrap(), &stage).await?;
+                storage::rename(previous.as_ref().unwrap(), &stage).await?;
                 storage::sync_dir(&path).await?;
                 storage::sync_dir(stage.parent().unwrap()).await?;
                 if target.exists() {
-                    tokio::fs::rename(&stage, previous.as_ref().unwrap()).await?;
+                    storage::rename(&stage, previous.as_ref().unwrap()).await?;
                     return Err(Error::conflict("workspace_path_occupied"));
                 }
             }
             if stage.exists() {
-                tokio::fs::rename(&stage, &target).await?;
+                storage::rename(&stage, &target).await?;
                 storage::sync_dir(stage.parent().unwrap()).await?;
             }
         }
@@ -457,7 +452,7 @@ async fn sync_entry(
                 {
                     return Err(Error::conflict("workspace_path_occupied"));
                 }
-                tokio::fs::rename(&source, &target).await?;
+                storage::rename(&source, &target).await?;
                 storage::sync_dir(source.parent().unwrap()).await?;
                 tokio::fs::remove_dir(source.parent().unwrap()).await?;
                 if let Some(previous) = previous.filter(|p| p != &target) {

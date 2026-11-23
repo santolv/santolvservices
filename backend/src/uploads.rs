@@ -115,13 +115,15 @@ pub async fn create(
         None
     };
     files::workspace_ready(&mut tx, c.space_id).await?;
-    let pending: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM uploads WHERE space_id=$1 AND user_id=$2 AND state='pending'",
-    )
-    .bind(c.space_id)
-    .bind(u.id)
-    .fetch_one(&mut *tx)
-    .await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+        .bind(format!("uploads-user:{}", u.id))
+        .execute(&mut *tx)
+        .await?;
+    let pending: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM uploads WHERE user_id=$1 AND state='pending'")
+            .bind(u.id)
+            .fetch_one(&mut *tx)
+            .await?;
     if pending >= 32 {
         return Err(Error(StatusCode::TOO_MANY_REQUESTS, "pending_upload_limit"));
     }
@@ -161,6 +163,7 @@ pub async fn append(
     h: HeaderMap,
     body: Body,
 ) -> Result<Json<Value>> {
+    let _user_permit = s.user_transfers.acquire(u.id)?;
     let _permit = s
         .transfers
         .clone()
@@ -199,12 +202,7 @@ pub async fn append(
     if !tokio::fs::try_exists(p.parent().unwrap()).await? {
         storage::prepare_space(&s.root, &v.storage_directory).await?;
     }
-    let mut file = tokio::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(false)
-        .open(&p)
-        .await?;
+    let mut file = storage::open_upload(&p).await?;
     if file.metadata().await?.len() < v.received as u64 {
         return Err(Error::unavailable());
     }
@@ -279,6 +277,7 @@ pub async fn complete(
     ))
 }
 pub async fn finish(s: &App, id: Uuid, user: Uuid) -> Result<Value> {
+    let _user_permit = s.user_transfers.acquire(user)?;
     let _permit = s
         .transfers
         .clone()
@@ -328,7 +327,7 @@ pub async fn finish(s: &App, id: Uuid, user: Uuid) -> Result<Value> {
     };
     // Both directories are under one persistent volume; sync the rename before committing ready.
     if !published {
-        tokio::fs::rename(&src, &dst).await?;
+        storage::rename(&src, &dst).await?;
         storage::sync_dir(dst.parent().unwrap()).await?;
         storage::sync_dir(src.parent().unwrap()).await?;
     }
@@ -426,6 +425,7 @@ pub async fn download(
     Query(q): Query<Download>,
     h: HeaderMap,
 ) -> Result<Response> {
+    let user_permit = s.user_transfers.acquire(u.id)?;
     let permit = s
         .transfers
         .clone()
@@ -454,11 +454,10 @@ pub async fn download(
     let directory: String = r.get("storage_directory");
     let original_name: &str = r.get("original_name");
     storage::relocate_legacy(&s.root, &directory, object, original_name).await?;
-    let mut file = tokio::fs::File::open(
+    let content =
         crate::workspace::content_path_tx(&mut tx, &s.root, &directory, object, original_name)
-            .await?,
-    )
-    .await?;
+            .await?;
+    let mut file = storage::open_verified(&content).await?;
     if file.metadata().await?.len() != size {
         return Err(Error::unavailable());
     }
@@ -466,10 +465,15 @@ pub async fn download(
     files::touch_recent(&mut tx, u.id, id).await?;
     tx.commit().await?;
     let stream = tokio_util::io::ReaderStream::with_capacity(file.take(len), 64 * 1024);
-    let stream =
-        futures_util::stream::unfold((stream, permit), |(mut stream, permit)| async move {
-            stream.next().await.map(|chunk| (chunk, (stream, permit)))
-        });
+    let stream = futures_util::stream::unfold(
+        (stream, permit, user_permit),
+        |(mut stream, permit, user_permit)| async move {
+            stream
+                .next()
+                .await
+                .map(|chunk| (chunk, (stream, permit, user_permit)))
+        },
+    );
     let mut response = Body::from_stream(stream).into_response();
     *response.status_mut() = if partial {
         StatusCode::PARTIAL_CONTENT

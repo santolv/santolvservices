@@ -5,6 +5,7 @@ pub mod error;
 pub mod files;
 pub mod frontend;
 pub mod installer;
+pub mod limits;
 pub mod openapi;
 pub mod permissions;
 pub mod postgres;
@@ -33,17 +34,34 @@ use tower_http::trace::TraceLayer;
 #[derive(Clone)]
 pub struct App {
     pub db: PgPool,
+    pub journal: PgPool,
     pub root: PathBuf,
     pub origin: String,
     pub frontend_origin: String,
     pub secure: bool,
     pub hashes: Arc<Semaphore>,
     pub transfers: Arc<Semaphore>,
+    pub user_transfers: limits::UserTransfers,
     pub quota: i64,
     pub requests: Arc<Semaphore>,
     pub retention_days: i64,
 }
 impl App {
+    pub fn journal_pool(db: &PgPool) -> PgPool {
+        PgPoolOptions::new()
+            .max_connections(2)
+            .acquire_timeout(Duration::from_secs(3))
+            .after_connect(|c, _| {
+                Box::pin(async move {
+                    sqlx::query("SET statement_timeout='3s'")
+                        .execute(&mut *c)
+                        .await?;
+                    sqlx::query("SET lock_timeout='2s'").execute(c).await?;
+                    Ok(())
+                })
+            })
+            .connect_lazy_with((*db.connect_options()).clone())
+    }
     pub async fn connect(
         url: &str,
         root: PathBuf,
@@ -68,7 +86,7 @@ impl App {
         }
         let options = options.disable_statement_logging();
         let db = PgPoolOptions::new()
-            .max_connections(16)
+            .max_connections(14)
             .acquire_timeout(Duration::from_secs(5))
             .after_connect(|c, _| {
                 Box::pin(async move {
@@ -85,6 +103,7 @@ impl App {
             .await?;
         sqlx::migrate!("./migrations").run(&db).await?;
         tokio::fs::create_dir_all(&root).await?;
+        let root = tokio::fs::canonicalize(root).await?;
         storage::sync_dir(&root).await?;
         if let Some(parent) = root.parent().filter(|p| !p.as_os_str().is_empty()) {
             storage::sync_dir(parent).await?;
@@ -97,6 +116,7 @@ impl App {
             }
         }
         Ok(Self {
+            journal: Self::journal_pool(&db),
             db,
             root,
             origin,
@@ -104,6 +124,7 @@ impl App {
             secure,
             hashes: Arc::new(Semaphore::new(2)),
             transfers: Arc::new(Semaphore::new(8)),
+            user_transfers: limits::UserTransfers::default(),
             quota,
             requests: Arc::new(Semaphore::new(128)),
             retention_days,

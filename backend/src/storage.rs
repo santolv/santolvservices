@@ -218,7 +218,7 @@ pub async fn relocate_legacy(root: &Path, directory: &str, id: Uuid, name: &str)
             if tokio::fs::try_exists(&new).await? {
                 return Err(Error::conflict("storage_layout_conflict"));
             }
-            tokio::fs::rename(&old, &new).await?;
+            rename(&old, &new).await?;
             sync_dir(new.parent().unwrap()).await?;
             sync_dir(old.parent().unwrap()).await?;
             // An archive directory is removed only when empty.
@@ -245,7 +245,7 @@ pub async fn relocate_legacy(root: &Path, directory: &str, id: Uuid, name: &str)
         if tokio::fs::try_exists(&new).await? {
             return Err(Error::conflict("storage_layout_conflict"));
         }
-        tokio::fs::rename(&previous, &new).await?;
+        rename(&previous, &new).await?;
         sync_dir(new.parent().unwrap()).await?;
         sync_dir(previous.parent().unwrap()).await?;
         match tokio::fs::remove_dir(previous.parent().unwrap()).await {
@@ -273,7 +273,7 @@ pub async fn relocate_legacy(root: &Path, directory: &str, id: Uuid, name: &str)
         if tokio::fs::try_exists(&new).await? {
             return Err(Error::conflict("storage_layout_conflict"));
         }
-        match tokio::fs::rename(&old, &new).await {
+        match rename(&old, &new).await {
             Ok(()) => {
                 sync_dir(new.parent().unwrap()).await?;
                 sync_dir(old.parent().unwrap()).await?;
@@ -300,12 +300,62 @@ pub async fn sync_dir(path: &Path) -> Result<()> {
     }
     Ok(())
 }
-pub async fn checksum(path: &Path) -> Result<(i64, String)> {
-    let metadata = tokio::fs::symlink_metadata(path).await?;
-    if !metadata.is_file() || unsafe_link(&metadata) {
-        return Err(Error::conflict("invalid_storage_file"));
+#[cfg(windows)]
+fn extended_windows_path(path: &Path) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+    let name: Vec<u16> = path.as_os_str().encode_wide().collect();
+    let prefix: Vec<u16> = r"\\?\".encode_utf16().collect();
+    if name.starts_with(&prefix) {
+        name
+    } else if name.starts_with(&[92, 92]) {
+        r"\\?\UNC\"
+            .encode_utf16()
+            .chain(name[2..].iter().copied())
+            .collect()
+    } else {
+        prefix.into_iter().chain(name).collect()
     }
-    let mut f = tokio::fs::File::open(path).await?;
+}
+pub async fn rename(source: &Path, target: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        let source = source.to_owned();
+        let target = target.to_owned();
+        tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+            use windows_sys::Win32::Storage::FileSystem::{
+                MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+            };
+            // Keep extended-length paths for deep user folders and ask Windows to persist the move.
+            let source = std::path::absolute(source)?;
+            let target = std::path::absolute(target)?;
+            let wide = |p: &Path| {
+                let mut value = extended_windows_path(p);
+                value.push(0);
+                value
+            };
+            let source = wide(&source);
+            let target = wide(&target);
+            let ok = unsafe {
+                MoveFileExW(
+                    source.as_ptr(),
+                    target.as_ptr(),
+                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+                )
+            };
+            if ok == 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        })
+        .await
+        .map_err(std::io::Error::other)??;
+    }
+    #[cfg(not(windows))]
+    tokio::fs::rename(source, target).await?;
+    Ok(())
+}
+pub async fn checksum(path: &Path) -> Result<(i64, String)> {
+    let mut f = open_verified(path).await?;
     let mut b = vec![0; 256 * 1024];
     let mut h = Sha256::new();
     let mut size = 0i64;
@@ -318,6 +368,104 @@ pub async fn checksum(path: &Path) -> Result<(i64, String)> {
         size += n as i64;
     }
     Ok((size, hex::encode(h.finalize())))
+}
+pub async fn open_verified(path: &Path) -> Result<tokio::fs::File> {
+    open_verified_with(path, false).await
+}
+pub async fn open_upload(path: &Path) -> Result<tokio::fs::File> {
+    open_verified_with(path, true).await
+}
+async fn open_verified_with(path: &Path, write: bool) -> Result<tokio::fs::File> {
+    let path = path.to_owned();
+    let file = tokio::task::spawn_blocking(move || -> std::io::Result<std::fs::File> {
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true).write(write).create(write);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            options
+                .custom_flags(windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT)
+                .security_qos_flags(
+                    windows_sys::Win32::Storage::FileSystem::SECURITY_IDENTIFICATION,
+                );
+        }
+        let file = options.open(&path)?;
+        let metadata = file.metadata()?;
+        let deny = || {
+            std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "storage handle rejected",
+            )
+        };
+        if !metadata.is_file() || unsafe_link(&metadata) {
+            return Err(deny());
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if metadata.nlink() != 1 {
+                return Err(deny());
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::fd::AsRawFd;
+            let actual = std::fs::read_link(format!("/proc/self/fd/{}", file.as_raw_fd()))?;
+            if actual != std::path::absolute(&path)? {
+                return Err(deny());
+            }
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::Storage::FileSystem::{
+                BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle, GetFinalPathNameByHandleW,
+            };
+            let mut info = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::uninit();
+            // The OS fills a correctly sized structure for this live file handle.
+            let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) };
+            if ok == 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            let info = unsafe { info.assume_init() };
+            if info.nNumberOfLinks != 1 {
+                return Err(deny());
+            }
+            let mut name = vec![0u16; 32768];
+            let len = unsafe {
+                GetFinalPathNameByHandleW(
+                    file.as_raw_handle(),
+                    name.as_mut_ptr(),
+                    name.len() as u32,
+                    0,
+                )
+            };
+            if len == 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if len as usize >= name.len() {
+                return Err(deny());
+            }
+            let expected = extended_windows_path(&std::path::absolute(&path)?);
+            let fold = |c: &u16| if (65..=90).contains(c) { c + 32 } else { *c };
+            if !name[..len as usize]
+                .iter()
+                .map(fold)
+                .eq(expected.iter().map(fold))
+            {
+                return Err(deny());
+            }
+        }
+        Ok(file)
+    })
+    .await
+    .map_err(|_| Error::unavailable())??;
+    Ok(tokio::fs::File::from_std(file))
 }
 pub async fn remove(path: &Path) -> Result<()> {
     match tokio::fs::remove_file(path).await {
@@ -379,6 +527,58 @@ pub fn range(h: Option<&str>, size: u64) -> Result<(u64, u64, bool)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn extended_windows_paths_preserve_local_unc_and_native_names() {
+        use std::os::windows::ffi::OsStringExt;
+        for (input, expected) in [
+            (r"C:\datos\ñ.txt", r"\\?\C:\datos\ñ.txt"),
+            (r"\\server\share\file", r"\\?\UNC\server\share\file"),
+            (r"\\?\C:\datos\file", r"\\?\C:\datos\file"),
+        ] {
+            assert_eq!(
+                extended_windows_path(Path::new(input)),
+                expected.encode_utf16().collect::<Vec<_>>()
+            );
+        }
+        let native = std::ffi::OsString::from_wide(&[67, 58, 92, 0xD800]);
+        assert_eq!(
+            *extended_windows_path(Path::new(&native)).last().unwrap(),
+            0xD800
+        );
+    }
+    #[tokio::test]
+    async fn verified_handles_reject_hard_links_for_read_and_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let original = dir.path().join("original");
+        let alias = dir.path().join("alias");
+        tokio::fs::write(&original, b"unchanged").await.unwrap();
+        tokio::fs::hard_link(&original, &alias).await.unwrap();
+        assert!(open_verified(&original).await.is_err());
+        assert!(open_upload(&alias).await.is_err());
+        assert_eq!(tokio::fs::read(&original).await.unwrap(), b"unchanged");
+        tokio::fs::remove_file(alias).await.unwrap();
+        assert!(open_verified(&original).await.is_ok());
+    }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn verified_handles_reject_leaf_and_parent_symlinks() {
+        let dir = tempfile::tempdir().unwrap();
+        let actual = dir.path().join("actual");
+        tokio::fs::create_dir(&actual).await.unwrap();
+        tokio::fs::write(actual.join("file"), b"original")
+            .await
+            .unwrap();
+        std::os::unix::fs::symlink(actual.join("file"), dir.path().join("leaf")).unwrap();
+        std::os::unix::fs::symlink(&actual, dir.path().join("parent")).unwrap();
+        assert!(open_verified(&dir.path().join("leaf")).await.is_err());
+        #[cfg(target_os = "linux")]
+        assert!(
+            open_verified(&dir.path().join("parent/file"))
+                .await
+                .is_err()
+        );
+    }
     #[test]
     fn original_names_preserve_extensions_and_download_headers_are_safe() {
         assert_eq!(disk_filename("Informe ñ.pdf"), "Informe ñ.pdf");

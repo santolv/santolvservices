@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="referrer" content="no-referrer"><title>Drive</title><style>
 /* Opaque Apple-inspired surfaces. No glass, filters, or external assets. */
-:root{color-scheme:light dark;--bg:#fff;--side:#f5f5f7;--card:#f5f5f7;--surface:#fff;--text:#1d1d1f;--sub:#6e6e73;--line:#e5e5ea;--fill:#ededf0;--hover:#e8e8ed;--blue:#0071e3;--green:#248a3d;--red:#d70015;--orange:#b25000;--ink:var(--blue);--on-ink:#fff;--on-accent:#fff;--scrim:rgba(0,0,0,.32);--ease:cubic-bezier(.2,.8,.2,1);--font:-apple-system,BlinkMacSystemFont,"Segoe UI Variable","Segoe UI",system-ui,sans-serif}
+:root{color-scheme:light dark;--bg:#fff;--side:#f3f6fb;--card:#f5f5f7;--surface:#fff;--text:#1d1d1f;--sub:#6e6e73;--line:#e5e5ea;--fill:#ededf0;--hover:#e8e8ed;--blue:#0071e3;--green:#248a3d;--red:#d70015;--orange:#b25000;--ink:var(--blue);--on-ink:#fff;--on-accent:#fff;--scrim:rgba(0,0,0,.32);--ease:cubic-bezier(.2,.8,.2,1);--font:-apple-system,BlinkMacSystemFont,"Segoe UI Variable","Segoe UI",system-ui,sans-serif}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111113;--side:#000;--card:#1c1c1e;--surface:#1c1c1e;--text:#f5f5f7;--sub:#a1a1a6;--line:#38383a;--fill:#2c2c2e;--hover:#343436;--blue:#409cff;--on-accent:#001c38;--green:#30d158;--red:#ff6961;--orange:#ffb340;--scrim:rgba(0,0,0,.6)}}
 :root[data-theme="dark"]{--bg:#111113;--side:#000;--card:#1c1c1e;--surface:#1c1c1e;--text:#f5f5f7;--sub:#a1a1a6;--line:#38383a;--fill:#2c2c2e;--hover:#343436;--blue:#409cff;--on-accent:#001c38;--green:#30d158;--red:#ff6961;--orange:#ffb340;--scrim:rgba(0,0,0,.6)}
 *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
@@ -62,6 +62,40 @@ dialog{color:var(--text);background:var(--surface)}#dialog{position:fixed;inset:
 #detail.sheet{top:auto;max-height:90dvh;overflow-y:auto;color:var(--text)}#detail.sheet[open]{visibility:visible;transform:none}#detail .btn{display:grid;place-items:center;text-decoration:none}#detail h3{overflow-wrap:anywhere}#detail .sheet-close{display:block;width:100%;padding:0}#detail .pill{display:block}#detail .destructive{color:var(--red)}#detail .destructive::after{display:none}.group>div{gap:16px}.group>div span{max-width:65%;overflow-wrap:anywhere;text-align:right}.selbar .ib[hidden]{display:none}.menu button[disabled]{color:var(--sub)}.toast{max-width:calc(100vw - 32px);line-height:1.5}.upload-panel{position:fixed;right:20px;bottom:24px;padding:18px;width:min(360px,calc(100vw - 32px));background:var(--bg);border:.5px solid var(--line);border-radius:16px;box-shadow:0 12px 40px #0002;z-index:22}.upload-panel .copy{flex:1;min-width:0}.upload-panel strong{display:block;font-size:13px;overflow-wrap:anywhere}.upload-panel small{font-size:11px;line-height:1.6;color:var(--sub)}.file-icon{width:34px;height:38px;display:grid;place-items:center;flex:none;color:var(--blue)}.loading-line{height:2px;background:var(--blue)}.skeleton{height:56px;display:flex;gap:12px;align-items:center;border-bottom:1px solid var(--line);padding:12px}.skeleton i{height:30px;width:28px;background:var(--fill);border-radius:7px}.skeleton span{height:6px;width:40%;background:var(--fill);border-radius:3px}
 @media(max-width:820px){.side nav{flex-direction:row;gap:6px}.side nav .nav{display:flex}.side #spaces-wrap{flex:none}.side #spaces-wrap h2{display:none}#space-list{display:flex}.space-link{white-space:nowrap}.side .new{flex:none}.signed-out main{background:var(--side);border-radius:0}.signed-out .app{grid-template-rows:76px 1fr}.signed-out .logo{display:flex;width:auto}.files.list .card{grid-template-columns:24px minmax(0,1fr) 44px}.files.list .col{display:none}.list-foot{display:block}.list-foot>span{display:block}.welcome{min-height:calc(100dvh - 180px)}.login-box input,.dialog-body input,.dialog-body select{font-size:16px}.selbar{max-width:calc(100vw - 20px)}.selbar span{font-size:12px;margin-right:3px}.selbar .ib{width:44px;height:44px}.selbar .plain{font-size:13px;padding:8px}.upload-panel{right:16px;bottom:16px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+/* Color identifies locations and file types; all surfaces remain opaque. */
+.logo i{color:var(--blue)}
+.new{background:var(--blue);color:var(--on-accent);box-shadow:0 3px 10px color-mix(in srgb,var(--blue) 18%,transparent)}
+.avatar{background:color-mix(in srgb,var(--blue) 14%,var(--surface));color:var(--blue)}
+.login-mark{background:var(--blue);color:var(--on-accent);box-shadow:0 8px 24px color-mix(in srgb,var(--blue) 18%,transparent)}
+.search{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.nav{--nav-color:var(--blue)}
+.nav[data-t="Compartidos conmigo"]{--nav-color:#8b5bd7}
+.nav[data-t="Recientes"]{--nav-color:#b36a00}
+.nav[data-t="Destacados"]{--nav-color:#a47800}
+.nav[data-t="Papelera"]{--nav-color:var(--red)}
+.nav svg{width:28px;height:28px;padding:5px;border-radius:8px;background:var(--nav-color);color:#fff;stroke-width:1.9}
+.nav[aria-current="page"]{background:color-mix(in srgb,var(--nav-color) 12%,var(--side));color:var(--text)}
+.nav[aria-current="page"] svg{color:#fff}
+.folder{background:color-mix(in srgb,var(--blue) 7%,var(--surface));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--blue) 12%,var(--surface))}
+.folder svg{color:var(--blue);fill:color-mix(in srgb,var(--blue) 15%,var(--surface))}
+.card,.sheet{--file-color:var(--blue)}
+[data-t="PDF"]{--file-color:var(--red)}
+[data-t="XLS"]{--file-color:var(--green)}
+[data-t="PPT"]{--file-color:var(--orange)}
+[data-t="PNG"],[data-t="JPG"],[data-t="JPEG"],[data-t="WEBP"],[data-t="GIF"],[data-t="SVG"],[data-t="HEIC"],[data-t="AVIF"],[data-t="ZIP"],[data-t="RAR"],[data-t="7Z"]{--file-color:#9264d7}
+[data-t="MP3"],[data-t="M4A"],[data-t="WAV"],[data-t="MP4"],[data-t="MOV"],[data-t="WEBM"]{--file-color:#c54482}
+.card .thumb,.sheet .thumb{background:color-mix(in srgb,var(--file-color) 9%,var(--surface));color:var(--file-color)}
+.thumb svg{stroke-width:1.35;filter:none}
+.thumb span{font-size:11px;letter-spacing:.06em}
+.card .tag{color:var(--file-color);background:color-mix(in srgb,var(--file-color) 10%,var(--surface))}
+.card.on{background:color-mix(in srgb,var(--blue) 7%,var(--card))}
+.files.list .card.on{background:color-mix(in srgb,var(--blue) 10%,var(--surface))}
+.bar i{background:var(--blue)}
+.notice{background:color-mix(in srgb,var(--blue) 8%,var(--surface));box-shadow:inset 3px 0 var(--blue)}
+.seg button[aria-pressed="true"]{color:var(--blue)}
+.space-link.active{background:color-mix(in srgb,var(--blue) 12%,var(--side));color:var(--blue)}
+@media(hover:hover){.nav:not(:disabled):hover{background:color-mix(in srgb,var(--nav-color) 9%,var(--side))}.nav[aria-current="page"]:hover{background:color-mix(in srgb,var(--nav-color) 16%,var(--side))}.folder:hover{background:color-mix(in srgb,var(--blue) 12%,var(--surface))}.card:hover{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--file-color) 28%,var(--surface))}.card.on:hover{box-shadow:inset 0 0 0 2px var(--blue)}}
+
 </style></head>
 <body class="signed-out">
 <svg aria-hidden="true" style="display:none" xmlns="http://www.w3.org/2000/svg"><defs>

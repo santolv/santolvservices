@@ -416,7 +416,17 @@ async fn open_verified_with(path: &Path, write: bool) -> Result<tokio::fs::File>
         {
             use std::os::fd::AsRawFd;
             let actual = std::fs::read_link(format!("/proc/self/fd/{}", file.as_raw_fd()))?;
-            if actual != std::path::absolute(&path)? {
+            let mut expected = PathBuf::new();
+            for part in std::path::absolute(&path)?.components() {
+                match part {
+                    std::path::Component::ParentDir => {
+                        expected.pop();
+                    }
+                    std::path::Component::CurDir => {}
+                    _ => expected.push(part),
+                }
+            }
+            if actual != expected {
                 return Err(deny());
             }
         }
@@ -571,6 +581,7 @@ mod tests {
             .unwrap();
         std::os::unix::fs::symlink(actual.join("file"), dir.path().join("leaf")).unwrap();
         std::os::unix::fs::symlink(&actual, dir.path().join("parent")).unwrap();
+        assert!(open_verified(&actual.join("../actual/file")).await.is_ok());
         assert!(open_verified(&dir.path().join("leaf")).await.is_err());
         #[cfg(target_os = "linux")]
         assert!(

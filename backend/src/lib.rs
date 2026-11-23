@@ -103,7 +103,6 @@ impl App {
             .await?;
         sqlx::migrate!("./migrations").run(&db).await?;
         tokio::fs::create_dir_all(&root).await?;
-        let root = tokio::fs::canonicalize(root).await?;
         storage::sync_dir(&root).await?;
         if let Some(parent) = root.parent().filter(|p| !p.as_os_str().is_empty()) {
             storage::sync_dir(parent).await?;

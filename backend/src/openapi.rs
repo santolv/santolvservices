@@ -20,6 +20,24 @@ pub fn document() -> Value {
         ),
         ("/api/v1/me", "get", "Current account", ""),
         (
+            "/api/v1/recent",
+            "get",
+            "Up to 200 recently used nodes for the authenticated user; cursor is timestamp:UUID",
+            "",
+        ),
+        (
+            "/api/v1/nodes/{id}/touch",
+            "post",
+            "Record an authorized node in the user's recent history",
+            "",
+        ),
+        (
+            "/api/v1/spaces/{space}",
+            "delete",
+            "Owner-only permanent organization deletion; returns 202 and resumes physical cleanup in background",
+            "",
+        ),
+        (
             "/api/v1/shared",
             "get",
             "Direct shares, cursor by node UUID",
@@ -166,6 +184,7 @@ pub fn document() -> Value {
             || (path.starts_with("/api/v1/nodes/")
                 && matches!(method, "patch" | "post")
                 && !path.ends_with("purge")
+                && !path.ends_with("touch")
                 && !path.contains("grants"));
         if idem {
             p.push(json!({"name":"Idempotency-Key","in":"header","required":true,"description":"1–128 bytes; retained 7 days; same payload replays original result","schema":{"type":"string","maxLength":128}}));
@@ -173,6 +192,7 @@ pub fn document() -> Value {
         if path.starts_with("/api/v1/nodes/")
             && matches!(method, "patch" | "post")
             && !path.contains("grants")
+            && !path.ends_with("touch")
         {
             p.push(json!({"name":"If-Match","in":"header","required":true,"description":"Quoted node revision, e.g. \"1\"","schema":{"type":"string"}}));
         }
@@ -187,6 +207,9 @@ pub fn document() -> Value {
                 || path.ends_with("/grants"))
         {
             p.push(json!({"name":"after","in":"query","schema":json!({"type":"string","format":"uuid"})}));
+        }
+        if path == "/api/v1/recent" {
+            p.push(json!({"name":"after","in":"query","schema":{"type":"string"},"description":"Opaque cursor returned as next_cursor"}));
         }
         if method == "get" && path.ends_with("/nodes") {
             for (name, schema) in [

@@ -372,6 +372,7 @@ pub async fn finish(s: &App, id: Uuid, user: Uuid) -> Result<Value> {
     .execute(&mut *tx)
     .await?;
     files::audit(&mut tx, user, v.space_id, "upload_completed", node).await?;
+    files::touch_recent(&mut tx, user, node).await?;
     crate::workspace::schedule(&mut tx, node, v.space_id).await?;
     tx.commit().await?;
     Ok(crate::workspace::publish(s, node, json!({"id":node,"upload_id":id})).await)
@@ -452,6 +453,7 @@ pub async fn download(
         return Err(Error::unavailable());
     }
     file.seek(SeekFrom::Start(start)).await?;
+    files::touch_recent(&mut tx, u.id, id).await?;
     tx.commit().await?;
     let stream = tokio_util::io::ReaderStream::with_capacity(file.take(len), 64 * 1024);
     let stream =

@@ -12,6 +12,318 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 #[sqlx::test]
+async fn recent_history_is_private_ordered_bounded_and_rechecks_permissions(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let a = h.account("recent-owner").await;
+    let b = h.account("recent-reader").await;
+    let alpha = h.folder(&a, None, "Alpha", "recent-alpha").await;
+    let zeta = h.folder(&a, None, "Zeta", "recent-zeta").await;
+    let (_, list) = h
+        .json("GET", "/api/v1/recent", Some(&a.token), &[], json!(null))
+        .await;
+    assert_eq!(list["items"][0]["id"], zeta.to_string());
+    for _ in 0..2 {
+        assert_eq!(
+            h.json(
+                "POST",
+                &format!("/api/v1/nodes/{alpha}/touch"),
+                Some(&a.token),
+                &[],
+                json!(null)
+            )
+            .await
+            .0,
+            StatusCode::NO_CONTENT
+        );
+    }
+    let (_, list) = h
+        .json("GET", "/api/v1/recent", Some(&a.token), &[], json!(null))
+        .await;
+    assert_eq!(list["items"][0]["id"], alpha.to_string());
+    assert_eq!(list["items"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        h.json(
+            "POST",
+            &format!("/api/v1/nodes/{alpha}/touch"),
+            Some(&b.token),
+            &[],
+            json!(null)
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    h.json(
+        "PUT",
+        &format!("/api/v1/nodes/{alpha}/grants"),
+        Some(&a.token),
+        &[],
+        json!({"username":b.username,"role":1}),
+    )
+    .await;
+    assert_eq!(
+        h.json(
+            "POST",
+            &format!("/api/v1/nodes/{alpha}/touch"),
+            Some(&b.token),
+            &[],
+            json!(null)
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    let (_, list) = h
+        .json("GET", "/api/v1/recent", Some(&b.token), &[], json!(null))
+        .await;
+    assert_eq!(list["items"].as_array().unwrap().len(), 1);
+    h.json(
+        "POST",
+        &format!("/api/v1/nodes/{alpha}/grants/revoke"),
+        Some(&a.token),
+        &[],
+        json!({"user_id":b.id}),
+    )
+    .await;
+    let (_, list) = h
+        .json("GET", "/api/v1/recent", Some(&b.token), &[], json!(null))
+        .await;
+    assert!(list["items"].as_array().unwrap().is_empty());
+    sqlx::query("INSERT INTO nodes(id,space_id,name,kind) SELECT gen_random_uuid(),$1,'recent-'||n,'folder' FROM generate_series(1,205) n").bind(a.space).execute(&h.app.db).await.unwrap();
+    sqlx::query("INSERT INTO recent_nodes(user_id,node_id,used_at) SELECT $1,id,123 FROM nodes WHERE space_id=$2 AND name LIKE 'recent-%'").bind(a.id).bind(a.space).execute(&h.app.db).await.unwrap();
+    h.json(
+        "POST",
+        &format!("/api/v1/nodes/{alpha}/touch"),
+        Some(&a.token),
+        &[],
+        json!(null),
+    )
+    .await;
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM recent_nodes WHERE user_id=$1")
+        .bind(a.id)
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(count, 200);
+    let (_, first) = h
+        .json("GET", "/api/v1/recent", Some(&a.token), &[], json!(null))
+        .await;
+    let (_, second) = h
+        .json(
+            "GET",
+            &format!(
+                "/api/v1/recent?after={}",
+                first["next_cursor"].as_str().unwrap()
+            ),
+            Some(&a.token),
+            &[],
+            json!(null),
+        )
+        .await;
+    assert_eq!(first["items"].as_array().unwrap().len(), 100);
+    assert_eq!(second["items"].as_array().unwrap().len(), 100);
+    let ids: std::collections::HashSet<_> = first["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(second["items"].as_array().unwrap())
+        .map(|v| v["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids.len(), 200);
+    assert!(second["next_cursor"].is_null());
+    assert_eq!(
+        h.json(
+            "GET",
+            "/api/v1/recent?after=invalid",
+            Some(&a.token),
+            &[],
+            json!(null)
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+}
+
+#[sqlx::test]
+async fn workspace_owner_can_delete_contents_and_pending_uploads_durably(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let owner = h.account("space-owner").await;
+    let other = h.account("space-manager").await;
+    let outsider = h.account("space-outsider").await;
+    let personal = h
+        .folder(&owner, None, "Conservar", "personal-preserved")
+        .await;
+    let (_, created) = h
+        .json(
+            "POST",
+            "/api/v1/spaces",
+            Some(&owner.token),
+            &[("idempotency-key", "delete-space-create")],
+            json!({"name":"Eliminar equipo"}),
+        )
+        .await;
+    let space = id(&created, "id");
+    h.json(
+        "PUT",
+        &format!("/api/v1/spaces/{space}/members"),
+        Some(&owner.token),
+        &[],
+        json!({"username":other.username,"role":3}),
+    )
+    .await;
+    let org = Account {
+        id: owner.id,
+        space,
+        token: owner.token.clone(),
+        username: owner.username.clone(),
+    };
+    let folder = h.folder(&org, None, "Datos", "org-folder").await;
+    let upload = h
+        .start(
+            &org,
+            "data.bin",
+            b"content",
+            "org-content",
+            Some(folder),
+            None,
+            "\"1\"",
+        )
+        .await;
+    assert_eq!(
+        h.chunk(&org, upload, 0, b"content", true).await,
+        StatusCode::OK
+    );
+    let (_, file) = h.complete(&org, upload).await;
+    let file = id(&file, "id");
+    h.json(
+        "PUT",
+        &format!("/api/v1/nodes/{file}/grants"),
+        Some(&owner.token),
+        &[],
+        json!({"user_id":outsider.id,"role":1}),
+    )
+    .await;
+    let pending = h
+        .start(
+            &org,
+            "partial.bin",
+            b"partial",
+            "org-pending",
+            Some(folder),
+            None,
+            "\"1\"",
+        )
+        .await;
+    assert_eq!(
+        h.chunk(&org, pending, 0, b"part", true).await,
+        StatusCode::OK
+    );
+    let url = format!("/api/v1/spaces/{space}");
+    assert_eq!(
+        h.req("DELETE", &url, Some(&other.token), &[], Body::empty())
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        h.req("DELETE", &url, Some(&outsider.token), &[], Body::empty())
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        h.req(
+            "DELETE",
+            &format!("/api/v1/spaces/{}", owner.space),
+            Some(&owner.token),
+            &[],
+            Body::empty()
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    for _ in 0..2 {
+        assert_eq!(
+            h.req("DELETE", &url, Some(&owner.token), &[], Body::empty())
+                .await
+                .0,
+            StatusCode::ACCEPTED
+        );
+    }
+    for account in [&owner, &other, &outsider] {
+        let (_, spaces) = h
+            .json(
+                "GET",
+                "/api/v1/spaces",
+                Some(&account.token),
+                &[],
+                json!(null),
+            )
+            .await;
+        assert!(
+            !spaces["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|s| s["id"] == space.to_string())
+        );
+        assert_eq!(
+            h.req(
+                "GET",
+                &format!("/api/v1/nodes/{file}/content"),
+                Some(&account.token),
+                &[],
+                Body::empty()
+            )
+            .await
+            .0,
+            StatusCode::NOT_FOUND
+        );
+    }
+    let mut cursor = Uuid::nil();
+    let mut cancelled = Uuid::nil();
+    for _ in 0..4 {
+        worker::tick(&h.app, &mut cursor, &mut cancelled)
+            .await
+            .unwrap();
+    }
+    let removed: bool = sqlx::query_scalar("SELECT storage_removed FROM spaces WHERE id=$1")
+        .bind(space)
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap();
+    assert!(removed);
+    assert!(!h.app.root.join(format!("organizaciones/{space}")).exists());
+    assert!(!storage::temp(&h.app.root, &format!("organizaciones/{space}"), pending).exists());
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM nodes WHERE space_id=$1")
+        .bind(space)
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    assert!(
+        h.app
+            .root
+            .join("usuarios/space-owner/archivos/Conservar")
+            .is_dir()
+    );
+    assert_eq!(
+        h.req(
+            "GET",
+            &format!("/api/v1/nodes/{personal}"),
+            Some(&owner.token),
+            &[],
+            Body::empty()
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+}
+
+#[sqlx::test]
 async fn sharing_and_memberships_accept_separate_usernames_and_ids(pool: PgPool) {
     let h = Harness::new(pool).await;
     let owner = h.account("sharing-owner").await;

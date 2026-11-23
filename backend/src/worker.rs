@@ -60,7 +60,7 @@ async fn maintenance(s: App) {
 }
 async fn prepare_workspaces(s: &App, cursor: &mut Uuid) -> Result<()> {
     let rows =
-        sqlx::query("SELECT id,storage_directory FROM spaces WHERE id>$1 ORDER BY id LIMIT 100")
+        sqlx::query("SELECT id,storage_directory FROM spaces WHERE id>$1 AND deleted_at IS NULL ORDER BY id LIMIT 100")
             .bind(*cursor)
             .fetch_all(&s.db)
             .await?;
@@ -74,6 +74,32 @@ async fn prepare_workspaces(s: &App, cursor: &mut Uuid) -> Result<()> {
     Ok(())
 }
 pub async fn tick(s: &App, cursor: &mut Uuid, cancelled_cursor: &mut Uuid) -> Result<()> {
+    // Enqueue a bounded batch instead of walking a large organization in the HTTP request.
+    let roots=sqlx::query("SELECT n.id,n.space_id FROM nodes n JOIN spaces s ON s.id=n.space_id WHERE s.deleted_at IS NOT NULL AND n.parent_id IS NULL AND NOT EXISTS(SELECT 1 FROM purge_jobs p WHERE p.node_id=n.id) ORDER BY n.id LIMIT 100").fetch_all(&s.db).await?;
+    for row in roots {
+        let mut tx = s.db.begin().await?;
+        let space = row.get("space_id");
+        let id = row.get("id");
+        files::lock(&mut tx, space).await?;
+        let exists=sqlx::query("UPDATE nodes SET trashed_at=COALESCE(trashed_at,now()),revision=revision+1 WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM purge_jobs WHERE node_id=$1)").bind(id).execute(&mut *tx).await?;
+        if exists.rows_affected() > 0 {
+            crate::workspace::schedule(&mut tx, id, space).await?;
+            sqlx::query("INSERT INTO purge_jobs(node_id) VALUES($1) ON CONFLICT DO NOTHING")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+    }
+    let cancelled=sqlx::query("SELECT u.id,u.user_id FROM uploads u JOIN spaces s ON s.id=u.space_id WHERE s.deleted_at IS NOT NULL AND u.state IN ('pending','cancelled') ORDER BY u.id LIMIT 100").fetch_all(&s.db).await?;
+    for row in cancelled {
+        let id = row.get("id");
+        uploads::cancel_upload(s, id, row.get("user_id")).await?;
+        sqlx::query("DELETE FROM uploads WHERE id=$1 AND state='cancelled'")
+            .bind(id)
+            .execute(&s.db)
+            .await?;
+    }
     let expired=sqlx::query("SELECT id,user_id FROM uploads WHERE state='pending' AND expires_at<now() ORDER BY expires_at LIMIT 20").fetch_all(&s.db).await?;
     for r in expired {
         uploads::cancel_upload(s, r.get("id"), r.get("user_id")).await?;
@@ -175,6 +201,33 @@ pub async fn tick(s: &App, cursor: &mut Uuid, cancelled_cursor: &mut Uuid) -> Re
         .await?;
     sqlx::query("DELETE FROM uploads WHERE id IN(SELECT id FROM uploads WHERE state='ready' AND expires_at<now()-interval '7 days' LIMIT 100)").execute(&s.db).await?;
     crate::workspace::process(s, 100).await?;
+    finish_deleted_spaces(s).await?;
+    Ok(())
+}
+async fn finish_deleted_spaces(s: &App) -> Result<()> {
+    let spaces=sqlx::query("SELECT id,storage_directory FROM spaces WHERE deleted_at IS NOT NULL AND NOT storage_removed ORDER BY id LIMIT 10").fetch_all(&s.db).await?;
+    for row in spaces {
+        let id = row.get("id");
+        let mut tx = s.db.begin().await?;
+        files::lock(&mut tx, id).await?;
+        let pending:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM nodes WHERE space_id=$1) OR EXISTS(SELECT 1 FROM objects WHERE space_id=$1) OR EXISTS(SELECT 1 FROM uploads WHERE space_id=$1) OR EXISTS(SELECT 1 FROM workspace_entries WHERE space_id=$1) OR EXISTS(SELECT 1 FROM workspace_jobs WHERE space_id=$1)").bind(id).fetch_one(&mut *tx).await?;
+        if pending {
+            continue;
+        }
+        let directory: &str = row.get("storage_directory");
+        // Validate the registered organization path and its ancestors before recursive removal.
+        if directory != format!("organizaciones/{id}") {
+            return Err(crate::error::Error::conflict("invalid_storage_directory"));
+        }
+        storage::prepare_space(&s.root, directory).await?;
+        tokio::fs::remove_dir_all(s.root.join(directory)).await?;
+        storage::sync_dir(&s.root.join("organizaciones")).await?;
+        sqlx::query("UPDATE spaces SET storage_removed=true WHERE id=$1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+    }
     Ok(())
 }
 async fn purge_leaf(s: &App) -> Result<bool> {

@@ -36,6 +36,8 @@ async function main(){
  const saved=path.join(root,'data','usuarios','file-user','archivos','informe ñ.custom','informe ñ.custom');assert.deepEqual(fs.readFileSync(saved),payload);
  const downloaded=await fetch(api+'/api/v1/nodes/'+status.result_node+'/content',{headers});assert.equal(downloaded.status,200);assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),payload);
  assert(downloaded.headers.get('content-disposition').includes("filename*=UTF-8''informe%20%C3%B1.custom"));
+ assert.equal((await fetch(api+'/api/v1/nodes/'+status.result_node+'/touch',{method:'POST',headers})).status,204);
+ const recent=await (await fetch(api+'/api/v1/recent',{headers})).json();assert.equal(recent.items[0].id,status.result_node);assert.equal(recent.items.length,1);
  const archive=path.join(root,'data','usuarios','file-user','.versions',upload.id,'informe ñ.custom');assert(!fs.existsSync(archive));assert(!fs.existsSync(path.join(path.dirname(saved),'.drive-node')));
  const trashed=path.join(root,'data','usuarios','file-user','papelera','informe ñ.custom','informe ñ.custom');
  const nodePath=api+'/api/v1/nodes/'+status.result_node;
@@ -49,6 +51,11 @@ async function main(){
  trashList=await (await fetch(api+'/api/v1/spaces/'+spaces.items[0].id+'/nodes?trash=true',{headers})).json();assert(!trashList.items.some(n=>n.id===status.result_node));
  for(let i=0;i<180&&(fs.existsSync(archive)||fs.existsSync(trashed));i++)await pause(100);assert(!fs.existsSync(archive));assert(!fs.existsSync(trashed));assert(!fs.existsSync(path.dirname(saved)));
  const afterDeletion=await (await fetch(api+'/api/v1/spaces',{headers})).json();assert.equal(Number(afterDeletion.items[0].used_bytes),0);
+ const orgResponse=await fetch(api+'/api/v1/spaces',{method:'POST',headers:{...headers,'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({name:'Eliminar espacio HTTP'})});assert.equal(orgResponse.status,200);const organization=await orgResponse.json();
+ const orgDirectory=path.join(root,'data','organizaciones',organization.id);assert(fs.existsSync(orgDirectory));
+ const deletingSpace=await fetch(api+'/api/v1/spaces/'+organization.id,{method:'DELETE',headers});assert.equal(deletingSpace.status,202);assert.equal(await deletingSpace.text(),'');
+ const visibleSpaces=await (await fetch(api+'/api/v1/spaces',{headers})).json();assert(!visibleSpaces.items.some(s=>s.id===organization.id));
+ for(let i=0;i<150&&fs.existsSync(orgDirectory);i++)await pause(100);assert(!fs.existsSync(orgDirectory));
  assert.equal((await fetch(api+'/api/v1/me',{headers:{Origin:'null'}})).status,401);
  assert.equal((await fetch(api+'/api/v1/me',{headers:{...headers,Cookie:'drive_session='+body.token}})).status,403);
  assert.equal((await fetch(api+'/api/v1/me',{headers:{...headers,Origin:'https://evil.example'}})).status,403);

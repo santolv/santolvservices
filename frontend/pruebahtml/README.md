@@ -34,3 +34,9 @@ Subir archivos: botón Subir archivo o Nuevo → Subir archivo. Se admiten tipos
 Nuevo abre un menú rectangular de ancho fijo. El clic derecho en archivos o carpetas muestra abrir, renombrar, mover, compartir y enviar a la papelera. También se abre con la tecla de menú contextual o Mayús+F10; se navega con flechas y se cierra con Escape. Mover permite elegir una carpeta por su nombre. En la papelera se puede restaurar o confirmar la eliminación definitiva; esta última retira los bytes en segundo plano y no tiene recuperación. Reemplazar un archivo no conserva la copia anterior.
 
 Los nombres ocupados se rechazan sin sobrescritura. La interfaz avisa si hay una operación de disco pendiente. La aplicación continúa siendo un HTML independiente que llama a la API Rust.
+
+La pantalla inicial es Recientes. El servidor guarda los últimos 200 archivos o carpetas utilizados por cada usuario; el historial persiste al cerrar sesión y vuelve a comprobar los permisos al mostrarlo. Mi unidad sigue disponible para explorar todos los archivos. Destacados se ha retirado.
+
+El propietario puede eliminar un espacio compartido desde su cabecera o su menú contextual. Se solicita confirmación porque borra también archivos, carpetas y papelera para todos los miembros. El contenido se retira en segundo plano y no admite restauración. El espacio personal está protegido.
+
+El clic derecho en un elemento, un espacio o el fondo abre el menú del Drive. También funciona con la tecla de menú contextual o Mayús+F10. Los campos de texto mantienen las opciones habituales de copiar y pegar.

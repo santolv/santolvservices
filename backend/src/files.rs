@@ -96,7 +96,7 @@ pub async fn node(tx: &mut Transaction<'_, Postgres>, id: Uuid) -> Result<Node> 
 }
 pub async fn member_role(tx: &mut Transaction<'_, Postgres>, s: Uuid, u: Uuid) -> Result<i16> {
     Ok(
-        sqlx::query_scalar("SELECT m.role FROM members m JOIN users u ON u.id=m.user_id WHERE m.space_id=$1 AND m.user_id=$2 AND NOT u.disabled AND NOT u.must_change_password AND u.account_type='user'")
+        sqlx::query_scalar("SELECT m.role FROM members m JOIN users u ON u.id=m.user_id JOIN spaces s ON s.id=m.space_id WHERE m.space_id=$1 AND m.user_id=$2 AND s.deleted_at IS NULL AND NOT u.disabled AND NOT u.must_change_password AND u.account_type='user'")
             .bind(s)
             .bind(u)
             .fetch_optional(&mut **tx)
@@ -112,7 +112,7 @@ pub async fn access(
     allow_trash: bool,
 ) -> Result<Node> {
     let n = node(tx, id).await?;
-    let r=sqlx::query("WITH RECURSIVE ancestors AS (SELECT id,parent_id,trashed_at FROM nodes WHERE id=$1 UNION ALL SELECT n.id,n.parent_id,n.trashed_at FROM nodes n JOIN ancestors a ON n.id=a.parent_id) SELECT EXISTS(SELECT 1 FROM users WHERE id=$3 AND NOT disabled AND NOT must_change_password AND account_type='user') AS active, EXISTS(SELECT 1 FROM ancestors WHERE trashed_at IS NOT NULL) AS trash, EXISTS(SELECT 1 FROM ancestors a JOIN purge_jobs p ON p.node_id=a.id) AS deleting, GREATEST(COALESCE((SELECT role FROM members WHERE space_id=$2 AND user_id=$3),0),COALESCE((SELECT max(g.role) FROM grants g JOIN ancestors a ON a.id=g.node_id WHERE g.user_id=$3 OR EXISTS(SELECT 1 FROM members m WHERE m.space_id=g.subject_space_id AND m.user_id=$3)),0))::smallint AS role")
+    let r=sqlx::query("WITH RECURSIVE ancestors AS (SELECT id,parent_id,trashed_at FROM nodes WHERE id=$1 UNION ALL SELECT n.id,n.parent_id,n.trashed_at FROM nodes n JOIN ancestors a ON n.id=a.parent_id) SELECT EXISTS(SELECT 1 FROM users WHERE id=$3 AND NOT disabled AND NOT must_change_password AND account_type='user') AND EXISTS(SELECT 1 FROM spaces WHERE id=$2 AND deleted_at IS NULL) AS active, EXISTS(SELECT 1 FROM ancestors WHERE trashed_at IS NOT NULL) AS trash, EXISTS(SELECT 1 FROM ancestors a JOIN purge_jobs p ON p.node_id=a.id) AS deleting, GREATEST(COALESCE((SELECT role FROM members WHERE space_id=$2 AND user_id=$3),0),COALESCE((SELECT max(g.role) FROM grants g JOIN ancestors a ON a.id=g.node_id WHERE g.user_id=$3 OR EXISTS(SELECT 1 FROM members m WHERE m.space_id=g.subject_space_id AND m.user_id=$3)),0))::smallint AS role")
         .bind(id).bind(n.space_id).bind(u).fetch_one(&mut **tx).await?;
     if !r.get::<bool, _>("active")
         || r.get::<i16, _>("role") < required
@@ -217,7 +217,7 @@ pub async fn spaces(
     u: User,
     Query(q): Query<VersionQuery>,
 ) -> Result<Json<Value>> {
-    let v:Vec<Value>=sqlx::query_scalar("SELECT (to_jsonb(s)-'storage_directory')||jsonb_build_object('storage_pending',EXISTS(SELECT 1 FROM workspace_jobs j WHERE j.space_id=s.id AND NOT j.audit)) FROM spaces s JOIN members m ON m.space_id=s.id WHERE m.user_id=$1 AND ($2::uuid IS NULL OR s.id>$2) ORDER BY s.id LIMIT 101").bind(u.id).bind(q.after).fetch_all(&s.db).await?;
+    let v:Vec<Value>=sqlx::query_scalar("SELECT (to_jsonb(s)-'storage_directory'-'storage_removed'-'deleted_at')||jsonb_build_object('storage_pending',EXISTS(SELECT 1 FROM workspace_jobs j WHERE j.space_id=s.id AND NOT j.audit)) FROM spaces s JOIN members m ON m.space_id=s.id WHERE m.user_id=$1 AND s.deleted_at IS NULL AND ($2::uuid IS NULL OR s.id>$2) ORDER BY s.id LIMIT 101").bind(u.id).bind(q.after).fetch_all(&s.db).await?;
     Ok(page(v, "id"))
 }
 pub async fn shared(
@@ -241,6 +241,113 @@ pub async fn shared(
 #[derive(Deserialize, Serialize)]
 pub struct SpaceInput {
     name: String,
+}
+pub async fn delete_space(
+    State(s): State<App>,
+    u: User,
+    Path(space): Path<Uuid>,
+) -> Result<StatusCode> {
+    let mut tx = s.db.begin().await?;
+    lock(&mut tx, space).await?;
+    let row = sqlx::query(
+        "SELECT kind,owner_id,deleted_at IS NOT NULL AS deleting FROM spaces WHERE id=$1",
+    )
+    .bind(space)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(Error::denied)?;
+    if row.get::<Uuid, _>("owner_id") != u.id {
+        return Err(Error::denied());
+    }
+    if row.get::<String, _>("kind") != "organization" {
+        return Err(Error::conflict("personal_space_protected"));
+    }
+    if !row.get::<bool, _>("deleting") {
+        workspace_ready(&mut tx, space).await?;
+        sqlx::query("UPDATE spaces SET deleted_at=now() WHERE id=$1")
+            .bind(space)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM members WHERE space_id=$1")
+            .bind(space)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM grants WHERE subject_space_id=$1")
+            .bind(space)
+            .execute(&mut *tx)
+            .await?;
+        audit(&mut tx, u.id, space, "space_deleted", space).await?;
+    }
+    tx.commit().await?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+pub async fn touch_recent(
+    tx: &mut Transaction<'_, Postgres>,
+    user: Uuid,
+    node: Uuid,
+) -> Result<()> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+        .bind(format!("recent:{user}"))
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query("INSERT INTO recent_nodes(user_id,node_id,used_at) VALUES($1,$2,(extract(epoch FROM clock_timestamp())*1000000)::bigint) ON CONFLICT(user_id,node_id) DO UPDATE SET used_at=excluded.used_at").bind(user).bind(node).execute(&mut **tx).await?;
+    sqlx::query("DELETE FROM recent_nodes WHERE user_id=$1 AND node_id IN(SELECT node_id FROM recent_nodes WHERE user_id=$1 ORDER BY used_at DESC,node_id DESC OFFSET 200)").bind(user).execute(&mut **tx).await?;
+    Ok(())
+}
+pub async fn touch(State(s): State<App>, u: User, Path(id): Path<Uuid>) -> Result<StatusCode> {
+    let mut tx = s.db.begin().await?;
+    access(&mut tx, id, u.id, 1, false).await?;
+    touch_recent(&mut tx, u.id, id).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+#[derive(Deserialize)]
+pub struct RecentQuery {
+    after: Option<String>,
+}
+pub async fn recent(
+    State(s): State<App>,
+    u: User,
+    Query(q): Query<RecentQuery>,
+) -> Result<Json<Value>> {
+    let (stamp, id) = match q.after {
+        Some(v) => {
+            let (a, b) = v
+                .split_once(':')
+                .ok_or_else(|| Error::bad("invalid_cursor"))?;
+            (
+                a.parse::<i64>().map_err(|_| Error::bad("invalid_cursor"))?,
+                b.parse::<Uuid>()
+                    .map_err(|_| Error::bad("invalid_cursor"))?,
+            )
+        }
+        None => (i64::MAX, Uuid::max()),
+    };
+    let mut tx = s.db.begin().await?;
+    let rows=sqlx::query("SELECT node_id,used_at FROM recent_nodes WHERE user_id=$1 AND (used_at,node_id)<($2,$3) ORDER BY used_at DESC,node_id DESC LIMIT 101").bind(u.id).bind(stamp).bind(id).fetch_all(&mut *tx).await?;
+    let next = if rows.len() > 100 {
+        Some(format!(
+            "{}:{}",
+            rows[99].get::<i64, _>("used_at"),
+            rows[99].get::<Uuid, _>("node_id")
+        ))
+    } else {
+        None
+    };
+    let mut items = Vec::new();
+    for row in rows.iter().take(100) {
+        match access(&mut tx, row.get("node_id"), u.id, 1, false).await {
+            Ok(node) => {
+                let mut value = serde_json::to_value(node).map_err(|_| Error::unavailable())?;
+                value["last_used_at"] = row.get::<i64, _>("used_at").into();
+                items.push(value);
+            }
+            Err(e) if matches!(e.0, StatusCode::NOT_FOUND | StatusCode::CONFLICT) => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(Json(json!({"items":items,"next_cursor":next})))
 }
 pub async fn create_space(
     State(s): State<App>,
@@ -458,6 +565,7 @@ pub async fn create_folder(
         .await?;
     let v = json!({"id":id,"revision":1});
     audit(&mut tx, u.id, space, "folder_created", id).await?;
+    touch_recent(&mut tx, u.id, id).await?;
     crate::workspace::schedule(&mut tx, id, space).await?;
     remember(&mut tx, u.id, &key, &fp, &v).await?;
     tx.commit().await?;
@@ -528,6 +636,7 @@ pub async fn edit_node(
         .await?;
     let v = json!({"id":id,"revision":n.revision+1});
     audit(&mut tx, u.id, n.space_id, "node_updated", id).await?;
+    touch_recent(&mut tx, u.id, id).await?;
     crate::workspace::schedule(&mut tx, id, n.space_id).await?;
     remember(&mut tx, u.id, &key, &fp, &v).await?;
     tx.commit().await?;

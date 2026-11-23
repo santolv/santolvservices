@@ -8,10 +8,10 @@ const script = html.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/\nconnectA
 const elements = new Map();
 function element(id) {
   const classes=new Set();
-  if (!elements.has(id)) elements.set(id, { hidden:false, disabled:false, value:'', textContent:'', innerHTML:'', style:{}, dataset:{}, open:false,
+  if (!elements.has(id)) elements.set(id, { hidden:false, disabled:false, value:'', textContent:'', innerHTML:'', style:{}, dataset:{}, open:false,parentElement:{hidden:false},
     offsetWidth:250,offsetHeight:240,focus(){},getBoundingClientRect(){return {left:20,bottom:100}},
     listeners:{}, attributes:{}, classList:{toggle(c,value){if(value??!classes.has(c))classes.add(c);else classes.delete(c)},add(c){classes.add(c)},remove(c){classes.delete(c)},contains(c){return classes.has(c)}},
-    addEventListener(type,handler){this.listeners[type]=handler}, querySelectorAll(){return []},querySelector(selector){return selector==='[type=submit]'?element('modal-submit'):null},
+    addEventListener(type,handler){this.listeners[type]=handler},insertAdjacentHTML(position,html){this.innerHTML+=html}, querySelectorAll(){return []},querySelector(selector){return selector==='[type=submit]'?element('modal-submit'):null},
     setAttribute(name,value){this.attributes[name]=String(value)},removeAttribute(name){delete this.attributes[name]},
     showModal(){this.open=true},close(){this.open=false} });
   return elements.get(id);
@@ -134,5 +134,28 @@ vm.runInContext(script, context);
   assert(!html.includes("credentials:'same-origin'"));
   assert(!html.includes('href="/api/'));
   assert(html.includes("fetch(apiUrl('/api/v1/auth/login')"));
+  const sharingRequests=[];
+  context.fetch=async(url,options={})=>{sharingRequests.push({url,options});return {ok:true,status:200,json:async()=>({items:[],next_cursor:null})}};
+  vm.runInContext("state.selected={id:'file-share'};state.me={id:'owner',username:'owner'};state.csrf='share-csrf'",context);
+  element('f-recipient_kind').value='username';
+  await vm.runInContext('permissions()',context);
+  assert.equal(element('f-username').disabled,false);
+  assert.equal(element('f-user_id').disabled,true);
+  assert.equal(element('f-subject_space_id').parentElement.hidden,true);
+  context.FormData=class extends Map{constructor(){super([['recipient_kind','username'],['username','friend'],['user_id','must-not-be-sent'],['role','2']])}};
+  await element('modal-form').listeners.submit({preventDefault(){},currentTarget:element('modal-form')});
+  assert.deepEqual(JSON.parse(sharingRequests.find(r=>r.options.method==='PUT').options.body),{username:'friend',role:2});
+  element('f-recipient_kind').value='user_id';element('f-recipient_kind').listeners.change();
+  assert.equal(element('f-username').disabled,true);assert.equal(element('f-user_id').required,true);
+  assert.equal(element('f-user_id').parentElement.hidden,false);
+  sharingRequests.length=0;
+  const friendId='bbd5445a-2ca9-4c3b-beb3-6ab6c4dc4335';
+  context.FormData=class extends Map{constructor(){super([['recipient_kind','user_id'],['username','must-not-be-sent'],['user_id',friendId],['role','1']])}};
+  await element('modal-form').listeners.submit({preventDefault(){},currentTarget:element('modal-form')});
+  assert.deepEqual(JSON.parse(sharingRequests.find(r=>r.options.method==='PUT').options.body),{user_id:friendId,role:1});
+  assert.throws(()=>vm.runInContext("recipient({recipient_kind:'user_id',user_id:'friend'})",context),/identificador válido/);
+  vm.runInContext('actions.profile()',context);
+  assert(element('dialog-body').innerHTML.includes('Copiar mi nombre de usuario'));
+  assert(element('dialog-body').innerHTML.includes('Copiar mi ID de usuario'));
   console.log('PASS independent API URL, credentials, CSRF, downloads, offline state and reconnection (no browser).');
 })().catch(error=>{console.error(error);process.exitCode=1});

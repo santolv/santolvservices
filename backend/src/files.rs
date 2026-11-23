@@ -293,8 +293,28 @@ pub async fn members(
 }
 #[derive(Deserialize)]
 pub struct Membership {
-    username: String,
+    username: Option<String>,
+    user_id: Option<Uuid>,
     role: i16,
+}
+async fn resolve_user(
+    tx: &mut Transaction<'_, Postgres>,
+    username: Option<&str>,
+    id: Option<Uuid>,
+    allow_disabled: bool,
+) -> Result<Uuid> {
+    if username.is_some() == id.is_some() {
+        return Err(Error::bad("choose_username_or_user_id"));
+    }
+    let username = username.map(|v| v.trim().to_ascii_lowercase());
+    if username
+        .as_ref()
+        .is_some_and(|v| v.is_empty() || v.len() > 254 || v.chars().any(char::is_control))
+    {
+        return Err(Error::bad("invalid_username"));
+    }
+    sqlx::query_scalar("SELECT id FROM users WHERE account_type='user' AND (NOT disabled OR $3) AND (username=$1 OR id=$2)")
+        .bind(username).bind(id).bind(allow_disabled).fetch_optional(&mut **tx).await?.ok_or_else(Error::denied)
 }
 pub async fn set_member(
     State(s): State<App>,
@@ -315,13 +335,7 @@ pub async fn set_member(
     if member_role(&mut tx, space, u.id).await? < 3 || owner.is_none() {
         return Err(Error::denied());
     }
-    let id: Uuid = sqlx::query_scalar(
-        "SELECT id FROM users WHERE username=$1 AND NOT disabled AND account_type='user'",
-    )
-    .bind(c.username.trim().to_lowercase())
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or_else(Error::denied)?;
+    let id = resolve_user(&mut tx, c.username.as_deref(), c.user_id, false).await?;
     if Some(id) == owner {
         return Err(Error::conflict("owner_membership_protected"));
     }
@@ -598,12 +612,16 @@ pub async fn purge(
 }
 #[derive(Deserialize)]
 pub struct Grant {
+    username: Option<String>,
     user_id: Option<Uuid>,
     subject_space_id: Option<Uuid>,
     role: Option<i16>,
 }
 async fn change_grant(s: App, u: User, id: Uuid, c: Grant, revoke: bool) -> Result<StatusCode> {
-    if c.user_id.is_some() == c.subject_space_id.is_some()
+    if usize::from(c.user_id.is_some())
+        + usize::from(c.username.is_some())
+        + usize::from(c.subject_space_id.is_some())
+        != 1
         || (!revoke && !c.role.is_some_and(|r| (1..=3).contains(&r)))
     {
         return Err(Error::bad("invalid_grant"));
@@ -612,19 +630,24 @@ async fn change_grant(s: App, u: User, id: Uuid, c: Grant, revoke: bool) -> Resu
     let n = node(&mut tx, id).await?;
     lock(&mut tx, n.space_id).await?;
     access(&mut tx, id, u.id, 3, false).await?;
+    let user_id = if c.subject_space_id.is_none() {
+        Some(resolve_user(&mut tx, c.username.as_deref(), c.user_id, revoke).await?)
+    } else {
+        None
+    };
     // Sharing to a space requires membership, so callers cannot enumerate arbitrary organizations.
     if let Some(subject) = c.subject_space_id
         && member_role(&mut tx, subject, u.id).await? < 1
     {
         return Err(Error::denied());
     }
-    sqlx::query("DELETE FROM grants WHERE node_id=$1 AND user_id IS NOT DISTINCT FROM $2 AND subject_space_id IS NOT DISTINCT FROM $3").bind(id).bind(c.user_id).bind(c.subject_space_id).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM grants WHERE node_id=$1 AND user_id IS NOT DISTINCT FROM $2 AND subject_space_id IS NOT DISTINCT FROM $3").bind(id).bind(user_id).bind(c.subject_space_id).execute(&mut *tx).await?;
     if !revoke {
         sqlx::query(
             "INSERT INTO grants(node_id,user_id,subject_space_id,role) VALUES($1,$2,$3,$4)",
         )
         .bind(id)
-        .bind(c.user_id)
+        .bind(user_id)
         .bind(c.subject_space_id)
         .bind(c.role)
         .execute(&mut *tx)
@@ -659,7 +682,7 @@ pub async fn grants(
     let mut tx = s.db.begin().await?;
     access(&mut tx, id, u.id, 3, false).await?;
     let v: Vec<Value> =
-        sqlx::query_scalar("SELECT to_jsonb(g) FROM grants g WHERE node_id=$1 AND ($2::uuid IS NULL OR g.id>$2) ORDER BY g.id LIMIT 101")
+        sqlx::query_scalar("SELECT to_jsonb(g)||jsonb_build_object('username',u.username,'space_name',s.name) FROM grants g LEFT JOIN users u ON u.id=g.user_id LEFT JOIN spaces s ON s.id=g.subject_space_id WHERE g.node_id=$1 AND ($2::uuid IS NULL OR g.id>$2) ORDER BY g.id LIMIT 101")
             .bind(id)
             .bind(q.after)
             .fetch_all(&mut *tx)

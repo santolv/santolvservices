@@ -36,8 +36,8 @@ pub fn document() -> Value {
         (
             "/api/v1/spaces/{space}/members",
             "put",
-            "Set membership for an existing active user",
-            "username,role",
+            "Set membership by username OR user_id (exactly one), for an existing active user",
+            "username?,user_id?,role",
         ),
         (
             "/api/v1/spaces/{space}/members/{user}",
@@ -91,14 +91,14 @@ pub fn document() -> Value {
         (
             "/api/v1/nodes/{id}/grants",
             "put",
-            "Set user or space grant, role 1/2/3",
-            "user_id?,subject_space_id?,role",
+            "Set grant by exactly one of username, user_id, subject_space_id; role 1/2/3",
+            "username?,user_id?,subject_space_id?,role",
         ),
         (
             "/api/v1/nodes/{id}/grants/revoke",
             "post",
-            "Revoke one direct grant",
-            "user_id?,subject_space_id?",
+            "Revoke one direct grant by exactly one of username, user_id, subject_space_id",
+            "username?,user_id?,subject_space_id?",
         ),
         (
             "/api/v1/nodes/{id}/content",

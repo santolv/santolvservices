@@ -83,6 +83,8 @@ La migración `0002` de cuentas sigue conservando IDs y contraseñas y sustituye
 
 Los roles de espacio son `1` lector, `2` editor y `3` gestor. Los miembros tienen acceso al espacio completo y los permisos por carpeta se suman y heredan; no hay denegaciones que resten acceso. Quitar un miembro conserva el contenido organizativo y elimina sus permisos directos, aunque otros permisos independientes pueden seguir otorgando acceso. No se expulsa ni degrada al propietario del espacio.
 
+Compartir y gestionar miembros admite `username` o `user_id` como campos separados. Enviar exactamente uno: `{"username":"santi","role":1}` o `{"user_id":"UUID","role":1}`. El nombre se resuelve en el servidor y los permisos se guardan por el UUID estable; nunca se interpreta automáticamente un nombre como ID. Para permisos a espacios se usa `subject_space_id`, excluyente con ambos campos de usuario. El listado de permisos devuelve `username` y `user_id` por separado (y `space_name` para espacios). Solo un gestor puede consultar esa lista o resolver un destinatario al dar permisos. No se añade un directorio público de usuarios y no se puede compartir con el superusuario del servidor ni conceder acceso nuevo a cuentas deshabilitadas. Sí se pueden revocar sus permisos existentes.
+
 ## Archivos, cargas y conflictos
 
 Crear carpetas con `POST /spaces/{space}/nodes`. Listar con `GET .../nodes?parent=UUID&limit=100&after=UUID`; sin parent lista la raíz. `trash=true` lista los elementos marcados directamente como papelera. Las carpetas en papelera ocultan descendientes sin reescribirlos. Restaurar una carpeta conserva su estructura; para restaurar un hijo individual, su padre debe estar activo.

@@ -11,6 +11,206 @@ use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+#[sqlx::test]
+async fn sharing_and_memberships_accept_separate_usernames_and_ids(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let owner = h.account("sharing-owner").await;
+    let recipient = h.account("sharing-recipient").await;
+    let outsider = h.account("sharing-outsider").await;
+    let folder = h.folder(&owner, None, "Compartir", "username-folder").await;
+    let path = format!("/api/v1/nodes/{folder}/grants");
+    assert_eq!(
+        h.json(
+            "PUT",
+            &path,
+            Some(&owner.token),
+            &[],
+            json!({"username":" SHARING-RECIPIENT ","role":1})
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    let (_, grants) = h
+        .json("GET", &path, Some(&owner.token), &[], json!(null))
+        .await;
+    assert_eq!(grants["items"][0]["username"], recipient.username);
+    assert_eq!(grants["items"][0]["user_id"], recipient.id.to_string());
+    assert_eq!(
+        h.req(
+            "GET",
+            &format!("/api/v1/nodes/{folder}"),
+            Some(&recipient.token),
+            &[],
+            Body::empty()
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    for payload in [
+        json!({"username":recipient.username,"user_id":recipient.id,"role":1}),
+        json!({"username":recipient.username,"subject_space_id":owner.space,"role":1}),
+        json!({"role":1}),
+        json!({"username":" ","role":1}),
+    ] {
+        assert_eq!(
+            h.json("PUT", &path, Some(&owner.token), &[], payload)
+                .await
+                .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    for payload in [
+        json!({"username":"missing-user","role":1}),
+        json!({"username":"director","role":1}),
+        json!({"user_id":h.admin_id,"role":1}),
+    ] {
+        assert_eq!(
+            h.json("PUT", &path, Some(&owner.token), &[], payload)
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+    }
+    assert_eq!(
+        h.json(
+            "PUT",
+            &path,
+            Some(&outsider.token),
+            &[],
+            json!({"username":recipient.username,"role":3})
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        h.json("GET", &path, Some(&recipient.token), &[], json!(null))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        h.json(
+            "PUT",
+            &path,
+            Some(&owner.token),
+            &[],
+            json!({"user_id":recipient.id,"role":2})
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    let (_, grants) = h
+        .json("GET", &path, Some(&owner.token), &[], json!(null))
+        .await;
+    assert_eq!(grants["items"].as_array().unwrap().len(), 1);
+    assert_eq!(grants["items"][0]["role"], 2);
+    let (_, space) = h
+        .json(
+            "POST",
+            "/api/v1/spaces",
+            Some(&owner.token),
+            &[("idempotency-key", "username-space")],
+            json!({"name":"Equipo"}),
+        )
+        .await;
+    let members = format!("/api/v1/spaces/{}/members", id(&space, "id"));
+    assert_eq!(
+        h.json(
+            "PUT",
+            &members,
+            Some(&owner.token),
+            &[],
+            json!({"user_id":recipient.id,"role":1})
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        h.json(
+            "PUT",
+            &members,
+            Some(&owner.token),
+            &[],
+            json!({"username":recipient.username,"role":2})
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        h.json(
+            "PUT",
+            &members,
+            Some(&owner.token),
+            &[],
+            json!({"username":recipient.username,"user_id":recipient.id,"role":2})
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        h.json(
+            "PUT",
+            &members,
+            Some(&owner.token),
+            &[],
+            json!({"user_id":owner.id,"role":1})
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        h.json(
+            "PUT",
+            &members,
+            Some(&owner.token),
+            &[],
+            json!({"user_id":h.admin_id,"role":1})
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    santolvdrive::admin::set_disabled(&h.app, h.admin_id, recipient.id, true)
+        .await
+        .unwrap();
+    assert_eq!(
+        h.json(
+            "PUT",
+            &path,
+            Some(&owner.token),
+            &[],
+            json!({"username":recipient.username,"role":1})
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        h.json(
+            "POST",
+            &(path.clone() + "/revoke"),
+            Some(&owner.token),
+            &[],
+            json!({"username":recipient.username})
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    let (_, grants) = h
+        .json("GET", &path, Some(&owner.token), &[], json!(null))
+        .await;
+    assert!(grants["items"].as_array().unwrap().is_empty());
+}
+
 struct Harness {
     app: App,
     api: Router,

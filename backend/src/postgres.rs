@@ -28,12 +28,14 @@ fn executable(bin: &Path, name: &str) -> PathBuf {
     })
 }
 fn command(bin: &Path, name: &str) -> Command {
-    let mut c = Command::new(executable(bin, name));
+    let c = Command::new(executable(bin, name));
     #[cfg(windows)]
-    {
+    let c = {
         use std::os::windows::process::CommandExt;
+        let mut c = c;
         c.creation_flags(0x08000000);
-    }
+        c
+    };
     c
 }
 pub(crate) fn tools(bin: &Path) -> bool {

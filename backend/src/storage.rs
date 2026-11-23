@@ -101,17 +101,15 @@ pub(crate) async fn private_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 pub(crate) fn unsafe_link(info: &std::fs::Metadata) -> bool {
-    if info.file_type().is_symlink() {
-        return true;
-    }
     #[cfg(windows)]
     {
         use std::os::windows::fs::MetadataExt;
-        if info.file_attributes() & 0x400 != 0 {
-            return true;
-        }
+        info.file_type().is_symlink() || info.file_attributes() & 0x400 != 0
     }
-    false
+    #[cfg(not(windows))]
+    {
+        info.file_type().is_symlink()
+    }
 }
 pub async fn prepare_space(root: &Path, directory: &str) -> Result<()> {
     let (branch, component) = directory

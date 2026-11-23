@@ -113,12 +113,10 @@ impl App {
 pub fn router(s: App) -> Router {
     use axum::http::{HeaderName, HeaderValue, Method};
     let cors = tower_http::cors::CorsLayer::new()
-        .allow_origin([
-            HeaderValue::from_static("null"),
-            s.frontend_origin
-                .parse::<HeaderValue>()
-                .expect("validated frontend origin"),
-        ])
+        .allow_origin([s
+            .frontend_origin
+            .parse::<HeaderValue>()
+            .expect("validated frontend origin")])
         .allow_credentials(tower_http::cors::AllowCredentials::predicate(
             |origin, _| origin != "null",
         ))

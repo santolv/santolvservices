@@ -70,6 +70,7 @@ async fn metadata_baseline(pool: PgPool) {
                     .oneshot(
                         Request::builder()
                             .uri(format!("/api/v1/spaces/{space}/nodes?limit=100"))
+                            .header("host", "localhost")
                             .header("authorization", format!("Bearer {raw}"))
                             .body(Body::empty())
                             .unwrap(),

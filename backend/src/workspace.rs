@@ -109,6 +109,32 @@ async fn owned_directory(path: &Path, known: bool) -> Result<()> {
     }
     Ok(())
 }
+async fn publication_intent(s: &App, path: &Path, node: Uuid) -> Result<()> {
+    let mut connection =
+        tokio::time::timeout(std::time::Duration::from_millis(250), s.db.acquire())
+            .await
+            .map_err(|_| Error::unavailable())??;
+    let existing: Option<String> =
+        sqlx::query_scalar("SELECT target FROM workspace_publications WHERE node_id=$1")
+            .bind(node)
+            .fetch_optional(&mut *connection)
+            .await?;
+    if let Some(existing) = existing {
+        if Path::new(&existing) != path {
+            return Err(Error::conflict("workspace_path_occupied"));
+        }
+    } else {
+        if tokio::fs::try_exists(path).await? {
+            return Err(Error::conflict("workspace_path_occupied"));
+        }
+        sqlx::query("INSERT INTO workspace_publications(node_id,target) VALUES($1,$2)")
+            .bind(node)
+            .bind(path.to_string_lossy().as_ref())
+            .execute(&mut *connection)
+            .await?;
+    }
+    Ok(())
+}
 
 pub async fn content_path(s: &App, directory: &str, object: Uuid, name: &str) -> Result<PathBuf> {
     let mut tx = s.db.begin().await?;
@@ -132,7 +158,7 @@ pub async fn content_path_tx(
         if let Some(content_name) = e.content_name {
             let path = path.join(content_name);
             if let Ok(info) = tokio::fs::symlink_metadata(&path).await {
-                if !info.is_file() || info.file_type().is_symlink() {
+                if !info.is_file() || storage::unsafe_link(&info) {
                     return Err(Error::unavailable());
                 }
                 return Ok(path);
@@ -180,7 +206,7 @@ pub(crate) async fn entry_path(
         }
         path.push(entry.component);
         if let Ok(info) = tokio::fs::symlink_metadata(&path).await
-            && (!info.is_dir() || info.file_type().is_symlink())
+            && (!info.is_dir() || storage::unsafe_link(&info))
         {
             return Err(Error::conflict("workspace_path_occupied"));
         }
@@ -237,6 +263,10 @@ pub async fn sync_node(s: &App, id: Uuid) -> Result<()> {
         for node in nodes {
             sync_entry(s, &mut tx, &home, &directory, &node).await?;
             sqlx::query("DELETE FROM workspace_moves WHERE node_id=$1")
+                .bind(node.id)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("DELETE FROM workspace_publications WHERE node_id=$1")
                 .bind(node.id)
                 .execute(&mut *tx)
                 .await?;
@@ -319,7 +349,7 @@ async fn sync_entry(
             if tokio::fs::try_exists(&legacy).await? {
                 let info = tokio::fs::symlink_metadata(&legacy).await?;
                 if !info.is_dir()
-                    || info.file_type().is_symlink()
+                    || storage::unsafe_link(&info)
                     || tokio::fs::read_to_string(legacy.join(".drive-node"))
                         .await?
                         .trim()
@@ -346,7 +376,10 @@ async fn sync_entry(
             }
         }
     }
-    owned_directory(&path, old.is_some()).await?;
+    if old.is_none() {
+        publication_intent(s, &path, node.id).await?;
+    }
+    owned_directory(&path, true).await?;
     let mut content = None;
     if let Some(version) = node.current_version {
         let row=sqlx::query("SELECT o.id,o.original_name,o.size,o.sha256 FROM versions v JOIN objects o ON o.id=v.object_id WHERE v.id=$1 AND o.state='ready'")
@@ -371,7 +404,7 @@ async fn sync_entry(
             if tokio::fs::try_exists(&legacy).await? {
                 let info = tokio::fs::symlink_metadata(&legacy).await?;
                 if !info.is_file()
-                    || info.file_type().is_symlink()
+                    || storage::unsafe_link(&info)
                     || stage.exists()
                     || storage::checksum(&legacy).await?.1 != row.get::<String, _>("sha256")
                 {
@@ -384,7 +417,7 @@ async fn sync_entry(
             if stage.exists() {
                 let info = tokio::fs::symlink_metadata(&stage).await?;
                 if !info.is_file()
-                    || info.file_type().is_symlink()
+                    || storage::unsafe_link(&info)
                     || previous.as_ref().is_some_and(|p| p.exists())
                     || target.exists()
                 {
@@ -409,7 +442,7 @@ async fn sync_entry(
             }
         }
         let valid = match tokio::fs::symlink_metadata(&target).await {
-            Ok(info) if !info.is_file() || info.file_type().is_symlink() => {
+            Ok(info) if !info.is_file() || storage::unsafe_link(&info) => {
                 return Err(Error::conflict("workspace_path_occupied"));
             }
             Ok(info) => info.len() == row.get::<i64, _>("size") as u64,
@@ -420,7 +453,7 @@ async fn sync_entry(
             let source = storage::object(&s.root, directory, object, row.get("original_name"));
             if tokio::fs::try_exists(&source).await? {
                 if let Ok(info) = tokio::fs::symlink_metadata(&target).await
-                    && (!info.is_file() || info.file_type().is_symlink())
+                    && (!info.is_file() || storage::unsafe_link(&info))
                 {
                     return Err(Error::conflict("workspace_path_occupied"));
                 }

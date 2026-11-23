@@ -12,6 +12,203 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 #[sqlx::test]
+async fn host_proxy_failures_and_session_limits_are_enforced(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let a = h.account("hardened-user").await;
+    for headers in [
+        [("host", "attacker.example")],
+        [("x-forwarded-for", "203.0.113.7")],
+        [("x-forwarded-proto", "https")],
+        [("forwarded", "for=203.0.113.7")],
+    ] {
+        assert_eq!(
+            h.req("GET", "/api/v1/me", Some(&a.token), &headers, Body::empty())
+                .await
+                .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    let login = |password: &str| json!({"username":a.username,"password":password,"mobile":true});
+    assert_eq!(
+        h.json(
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            &[],
+            login("incorrect-password")
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let failures: (i32, bool) =
+        sqlx::query_as("SELECT failures,next_attempt>now() FROM login_failures WHERE key=$1")
+            .bind(format!("127.0.0.1:{}", auth::hash(&a.username)))
+            .fetch_one(&h.app.db)
+            .await
+            .unwrap();
+    assert_eq!(failures, (1, true));
+    assert_eq!(
+        h.json(
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            &[],
+            login("very strong test password")
+        )
+        .await
+        .0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    sqlx::query("UPDATE login_failures SET next_attempt=now()-interval '1 second'")
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        h.json(
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            &[],
+            login("very strong test password")
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM login_failures")
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    for _ in 0..11 {
+        assert_eq!(
+            h.json(
+                "POST",
+                "/api/v1/auth/login",
+                None,
+                &[],
+                login("very strong test password")
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+    }
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions WHERE user_id=$1")
+        .bind(a.id)
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(count, 10);
+    let (_, latest) = h
+        .json(
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            &[],
+            login("very strong test password"),
+        )
+        .await;
+    let raw = latest["token"].as_str().unwrap();
+    sqlx::query("INSERT INTO uploads(id,user_id,space_id,name,size,sha256) SELECT gen_random_uuid(),$1,$2,'pending-'||n,0,$3 FROM generate_series(1,32)n")
+        .bind(a.id).bind(a.space).bind("0".repeat(64)).execute(&h.app.db).await.unwrap();
+    assert_eq!(
+        h.json(
+            "POST",
+            "/api/v1/uploads",
+            Some(raw),
+            &[("idempotency-key", "max-pending")],
+            json!({"space_id":a.space,"name":"extra","size":0,"sha256":"0".repeat(64)})
+        )
+        .await
+        .0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(
+        h.req("GET", "/api/v1/me", Some(&a.token), &[], Body::empty())
+            .await
+            .0,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[sqlx::test]
+async fn first_publication_recovers_after_bytes_moved_before_metadata_commit(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let a = h.account("publication-user").await;
+    let upload = h
+        .start(
+            &a,
+            "original.bin",
+            b"precious content",
+            "publication-upload",
+            None,
+            None,
+            "\"1\"",
+        )
+        .await;
+    assert_eq!(
+        h.chunk(&a, upload, 0, b"precious content", true).await,
+        StatusCode::OK
+    );
+    let (_, created) = h.complete(&a, upload).await;
+    let node = id(&created, "id");
+    let path = h
+        .app
+        .root
+        .join("usuarios/publication-user/archivos/original.bin");
+    // The disk already contains the final bytes, but the main transaction never recorded its entry.
+    sqlx::query("DELETE FROM workspace_entries WHERE node_id=$1")
+        .bind(node)
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO workspace_publications(node_id,target) VALUES($1,$2)")
+        .bind(node)
+        .bind(path.to_string_lossy().as_ref())
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    let mut tx = h.app.db.begin().await.unwrap();
+    santolvdrive::workspace::schedule(&mut tx, node, a.space)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let mut cursor = Uuid::nil();
+    let mut cancelled = Uuid::nil();
+    worker::tick(&h.app, &mut cursor, &mut cancelled)
+        .await
+        .unwrap();
+    santolvdrive::workspace::sync_node(&h.app, node)
+        .await
+        .unwrap();
+    assert_eq!(
+        tokio::fs::read(path.join("original.bin")).await.unwrap(),
+        b"precious content"
+    );
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM workspace_publications WHERE node_id=$1")
+            .bind(node)
+            .fetch_one(&h.app.db)
+            .await
+            .unwrap();
+    assert_eq!(count, 0);
+    assert_eq!(
+        h.req(
+            "GET",
+            &format!("/api/v1/nodes/{node}/content"),
+            Some(&a.token),
+            &[],
+            Body::empty()
+        )
+        .await
+        .2,
+        b"precious content"
+    );
+}
+
+#[sqlx::test]
 async fn short_cookie_sessions_restore_csrf_after_reload_and_expire(pool: PgPool) {
     let h = Harness::new(pool).await;
     let a = h.account("cookie-reload").await;
@@ -76,37 +273,6 @@ async fn short_cookie_sessions_restore_csrf_after_reload_and_expire(pool: PgPool
         )
         .await;
     assert!(body.get("id").is_some());
-    sqlx::query("UPDATE rate_limits SET count=15 WHERE key=$1")
-        .bind(format!("login-account:{}", auth::hash(&a.username)))
-        .execute(&h.app.db)
-        .await
-        .unwrap();
-    assert_eq!(
-        h.req(
-            "POST",
-            "/api/v1/auth/login",
-            None,
-            &[("content-type", "application/json")],
-            Body::from(
-                json!({"username":a.username,"password":"very strong test password"}).to_string()
-            )
-        )
-        .await
-        .0,
-        StatusCode::TOO_MANY_REQUESTS
-    );
-    assert_eq!(
-        h.req(
-            "GET",
-            "/api/v1/me",
-            None,
-            &[("cookie", cookie)],
-            Body::empty()
-        )
-        .await
-        .0,
-        StatusCode::OK
-    );
     let duplicate = format!("{cookie}; {cookie}");
     assert_eq!(
         h.req(
@@ -757,6 +923,7 @@ impl Harness {
         let mut b = Request::builder()
             .method(method)
             .uri(path)
+            .header("host", self.app.origin.split("://").nth(1).unwrap())
             .extension(ConnectInfo(
                 "127.0.0.1:12345".parse::<std::net::SocketAddr>().unwrap(),
             ));
@@ -1171,7 +1338,7 @@ async fn native_https_login_uses_real_connection_ip(pool: PgPool) {
     let response=tokio::time::timeout(std::time::Duration::from_secs(10),async {
         let mut stream=client.connect("localhost".try_into().unwrap(),TcpStream::connect(address).await.unwrap()).await.unwrap();
         let body=json!({"username":user.username,"password":"very strong test password","mobile":true}).to_string();
-        let request=format!("POST /api/v1/auth/login HTTP/1.1\r\nHost: localhost\r\nX-Forwarded-For: 203.0.113.50\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len());
+        let request=format!("POST /api/v1/auth/login HTTP/1.1\r\nHost: localhost:{}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",address.port(),body.len());
         stream.write_all(request.as_bytes()).await.unwrap();stream.flush().await.unwrap();let mut bytes=Vec::new();stream.read_to_end(&mut bytes).await.unwrap();String::from_utf8(bytes).unwrap()
     }).await.unwrap();
     assert!(response.starts_with("HTTP/1.1 200"), "{response}");
@@ -2037,7 +2204,14 @@ async fn server_admin_is_console_only(pool: PgPool) {
     for headers in [vec![], vec![("origin", "null")]] {
         let (_, body)=h.json("POST","/api/v1/auth/login",None,&headers,
             json!({"username":"director","password":"administrator test password","mobile":headers.is_empty(),"local_file":!headers.is_empty()})).await;
-        assert_eq!(body["error"]["code"], "authentication_required");
+        assert_eq!(
+            body["error"]["code"],
+            if headers.is_empty() {
+                "authentication_required"
+            } else {
+                "opaque_origin_disabled"
+            }
+        );
         assert!(body.get("token").is_none());
     }
     for path in ["/api/v1/me", "/api/v1/spaces", "/api/v1/shared"] {
@@ -2319,83 +2493,24 @@ async fn migration_keeps_existing_accounts_and_content(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn standalone_file_uses_tokens_and_never_cookie_sessions(pool: PgPool) {
+async fn opaque_html_cannot_authenticate_or_reuse_tokens(pool: PgPool) {
     let h = Harness::new(pool).await;
     let a = h.account("file-client").await;
-    let file_headers = [("origin", "null"), ("sec-fetch-site", "cross-site")];
-    let (status, headers, bytes) = h.req("POST", "/api/v1/auth/login", None,
-        &[("origin", "null"), ("sec-fetch-site", "cross-site"), ("content-type", "application/json")],
-        Body::from(json!({"username":a.username,"password":"very strong test password","local_file":true}).to_string())).await;
-    assert_eq!(status, StatusCode::OK);
+    let (status,headers,_)=h.req("POST","/api/v1/auth/login",None,&[("origin","null"),("content-type","application/json")],Body::from(json!({"username":a.username,"password":"very strong test password","local_file":true}).to_string())).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
     assert!(!headers.contains_key("set-cookie"));
     assert!(!headers.contains_key("access-control-allow-credentials"));
-    let login: Value = serde_json::from_slice(&bytes).unwrap();
-    let token = login["token"].as_str().unwrap();
-    assert_eq!(login["expires_in"], 7200);
-    assert_eq!(
-        h.req("GET", "/api/v1/me", None, &file_headers, Body::empty())
-            .await
-            .0,
-        StatusCode::UNAUTHORIZED
-    );
     assert_eq!(
         h.req(
             "GET",
             "/api/v1/me",
-            Some(token),
-            &file_headers,
-            Body::empty()
-        )
-        .await
-        .0,
-        StatusCode::OK
-    );
-    let cookie = format!("drive_session={token}");
-    assert_eq!(
-        h.req(
-            "GET",
-            "/api/v1/me",
-            Some(token),
-            &[("origin", "null"), ("cookie", &cookie)],
+            Some(&a.token),
+            &[("origin", "null")],
             Body::empty()
         )
         .await
         .0,
         StatusCode::FORBIDDEN
-    );
-    let (status, _) = h
-        .json(
-            "POST",
-            &format!("/api/v1/spaces/{}/nodes", a.space),
-            Some(token),
-            &[("origin", "null"), ("idempotency-key", "file-folder")],
-            json!({"name":"Local folder"}),
-        )
-        .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(
-        h.req(
-            "POST",
-            "/api/v1/auth/logout",
-            Some(token),
-            &file_headers,
-            Body::empty()
-        )
-        .await
-        .0,
-        StatusCode::NO_CONTENT
-    );
-    assert_eq!(
-        h.req(
-            "GET",
-            "/api/v1/me",
-            Some(token),
-            &file_headers,
-            Body::empty()
-        )
-        .await
-        .0,
-        StatusCode::UNAUTHORIZED
     );
 }
 

@@ -115,6 +115,16 @@ pub async fn create(
         None
     };
     files::workspace_ready(&mut tx, c.space_id).await?;
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM uploads WHERE space_id=$1 AND user_id=$2 AND state='pending'",
+    )
+    .bind(c.space_id)
+    .bind(u.id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if pending >= 32 {
+        return Err(Error(StatusCode::TOO_MANY_REQUESTS, "pending_upload_limit"));
+    }
     storage::capacity(&s.root, c.size as u64).await?;
     let reserved=sqlx::query("UPDATE spaces SET reserved_bytes=reserved_bytes+$1 WHERE id=$2 AND $1<=quota-used_bytes-reserved_bytes").bind(c.size).bind(c.space_id).execute(&mut *tx).await?;
     if reserved.rows_affected() == 0 {

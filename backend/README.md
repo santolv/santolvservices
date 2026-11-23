@@ -1,5 +1,9 @@
 # SantolvDrive: backend local en Rust
 
+Revisión de seguridad vigente: [INFORME_SEGURIDAD_02.md](INFORME_SEGURIDAD_02.md). Se ha actualizado `url` por un aviso de RustSec; se exige Host autorizado, se rechazan cabeceras de proxy no configurado y se ha deshabilitado el acceso desde origen opaco. La instalación sigue siendo local y no constituye un despliegue público de Pangolin.
+
+Protección de login: espera progresiva de hasta 8 segundos por IP/cuenta tras errores, límite de 50 peticiones por IP en 15 minutos, máximo de 10 sesiones por usuario y 32 cargas pendientes por usuario/espacio. Las sesiones siguen durando dos horas; las iniciales pendientes de cambio de contraseña duran quince minutos. La primera publicación dispone de un journal durable para reanudar después de mover los bytes y antes de confirmar la ubicación.
+
 Axum + Tokio + Tower + Rustls. El backend y el instalador están escritos en Rust. La única dependencia externa es PostgreSQL, que se prepara automáticamente si falta. La API usa **http://localhost:8443** y la interfaz con cookies se abre en **http://localhost:5500**, desde el mismo equipo. No requiere dominio, túneles ni cuentas de servicios externos. No utiliza Docker.
 
 ## Instalación local

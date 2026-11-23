@@ -160,10 +160,32 @@ pub async fn security(State(s): State<App>, req: axum::extract::Request, next: N
         Ok(p) => p,
         Err(_) => return Error(StatusCode::TOO_MANY_REQUESTS, "request_capacity").into_response(),
     };
-    // Opaque origins have no trusted identity: never accept ambient cookie sessions.
+    if req.headers().get_all("host").iter().count() != 1
+        || !req
+            .headers()
+            .get("host")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|host| valid_host(&s, host))
+    {
+        return Error(StatusCode::FORBIDDEN, "host_not_allowed").into_response();
+    }
+    // The local deployment has no trusted proxy. Forwarded metadata must not change its trust boundary.
+    if [
+        "forwarded",
+        "x-forwarded-for",
+        "x-forwarded-host",
+        "x-forwarded-proto",
+        "x-real-ip",
+    ]
+    .iter()
+    .any(|h| req.headers().contains_key(*h))
+    {
+        return Error(StatusCode::FORBIDDEN, "proxy_not_configured").into_response();
+    }
+    // Opaque origins cannot identify a trusted frontend.
     let local_file = req.headers().get("origin").is_some_and(|v| v == "null");
-    if local_file && req.headers().contains_key("cookie") {
-        return Error(StatusCode::FORBIDDEN, "local_file_requires_bearer").into_response();
+    if local_file {
+        return Error(StatusCode::FORBIDDEN, "opaque_origin_disabled").into_response();
     }
     if let Some(origin) = req.headers().get("origin")
         && !local_file
@@ -221,6 +243,32 @@ pub async fn security(State(s): State<App>, req: axum::extract::Request, next: N
     }
     response
 }
+fn valid_host(s: &App, host: &str) -> bool {
+    let Ok(origin) = url::Url::parse(&s.origin) else {
+        return false;
+    };
+    let Some(name) = origin.host_str() else {
+        return false;
+    };
+    let Some(port) = origin.port_or_known_default() else {
+        return false;
+    };
+    let configured = origin.as_str().split_once("://").unwrap().1;
+    let configured = configured.trim_end_matches('/');
+    if host.eq_ignore_ascii_case(configured) {
+        return true;
+    }
+    if matches!(name, "localhost" | "127.0.0.1" | "[::1]") {
+        return [
+            format!("localhost:{port}"),
+            format!("127.0.0.1:{port}"),
+            format!("[::1]:{port}"),
+        ]
+        .iter()
+        .any(|v| host.eq_ignore_ascii_case(v));
+    }
+    false
+}
 
 pub async fn rate(s: &App, key: String, max: i32) -> Result<()> {
     let n:i32=sqlx::query_scalar("INSERT INTO rate_limits(key) VALUES($1) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN rate_limits.window_start<now()-interval '15 minutes' THEN 1 ELSE LEAST(rate_limits.count+1,100000) END,window_start=CASE WHEN rate_limits.window_start<now()-interval '15 minutes' THEN now() ELSE rate_limits.window_start END RETURNING count").bind(key).fetch_one(&s.db).await?;
@@ -249,15 +297,23 @@ pub async fn login(
         return Err(Error::auth());
     }
     rate(&s, format!("login-ip:{}", addr.ip()), 50).await?;
-    rate(&s, format!("login-account:{}", hash(&username)), 15).await?;
+    if c.local_file {
+        return Err(Error::bad("opaque_origin_disabled"));
+    }
+    let failure_key = format!("{}:{}", addr.ip(), hash(&username));
+    let delayed: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM login_failures WHERE key=$1 AND next_attempt>now())",
+    )
+    .bind(&failure_key)
+    .fetch_one(&s.db)
+    .await?;
+    if delayed {
+        return Err(Error(StatusCode::TOO_MANY_REQUESTS, "login_retry_later"));
+    }
     if c.mobile && (headers.contains_key("origin") || headers.contains_key("sec-fetch-site")) {
         return Err(Error::bad("browser_requires_cookie"));
     }
-    let opaque = headers.get("origin").is_some_and(|v| v == "null");
-    if opaque != c.local_file || (c.local_file && c.mobile) {
-        return Err(Error::bad("local_file_requires_bearer"));
-    }
-    let token_mode = c.mobile || c.local_file;
+    let token_mode = c.mobile;
     let row = sqlx::query("SELECT id,password_hash FROM users WHERE username=$1 AND NOT disabled AND account_type='user'")
         .bind(username)
         .fetch_optional(&s.db)
@@ -285,6 +341,9 @@ pub async fn login(
     .await
     .map_err(|_| Error::unavailable())?;
     if !verified {
+        sqlx::query("INSERT INTO login_failures(key,failures,next_attempt) VALUES($1,1,now()+interval '1 second') ON CONFLICT(key) DO UPDATE SET failures=CASE WHEN login_failures.updated_at<now()-interval '15 minutes' THEN 1 ELSE LEAST(login_failures.failures+1,5) END,next_attempt=now()+LEAST(power(2,LEAST(login_failures.failures,3)),8)*interval '1 second',updated_at=now()")
+            .bind(&failure_key).execute(&s.db).await?;
+        tracing::warn!(client_ip=%addr.ip(),"login rejected");
         return Err(Error::auth());
     }
     let row = row.ok_or_else(Error::auth)?;
@@ -305,6 +364,12 @@ pub async fn login(
     };
     let raw = token();
     let csrf = csrf_for(&raw);
+    sqlx::query("DELETE FROM login_failures WHERE key=$1")
+        .bind(&failure_key)
+        .execute(&mut *tx)
+        .await?;
+    // Bound active credentials per user; preserve at most nine prior sessions.
+    sqlx::query("DELETE FROM sessions WHERE user_id=$1 AND (expires_at<=now() OR token_hash IN(SELECT token_hash FROM sessions WHERE user_id=$1 ORDER BY expires_at DESC,token_hash DESC OFFSET 9))").bind(id).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO sessions VALUES($1,$2,$3,now()+$4*interval '1 second')")
         .bind(hash(&raw))
         .bind(id)

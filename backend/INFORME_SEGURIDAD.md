@@ -1,5 +1,7 @@
 # Revisión de seguridad de SantolvDrive
 
+> Documento histórico. Para las correcciones posteriores y los riesgos residuales vigentes, consultar [INFORME_SEGURIDAD_02.md](INFORME_SEGURIDAD_02.md).
+
 Fecha: 23 de noviembre de 2026. Alcance: revisión del código Rust, autenticación del HTML, permisos, almacenamiento local y configuración de despliegue. Se han realizado pruebas automatizadas, sin navegador ni capturas. No es una auditoría externa, un pentest completo ni una certificación de ausencia de vulnerabilidades.
 
 ## Resultado y decisión de sesiones

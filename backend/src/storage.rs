@@ -92,13 +92,26 @@ pub(crate) async fn private_dir(path: &Path) -> Result<()> {
         }
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
             let info = tokio::fs::symlink_metadata(path).await?;
-            if !info.is_dir() || info.file_type().is_symlink() {
+            if !info.is_dir() || unsafe_link(&info) {
                 return Err(Error::conflict("invalid_storage_directory"));
             }
         }
         Err(e) => return Err(e.into()),
     }
     Ok(())
+}
+pub(crate) fn unsafe_link(info: &std::fs::Metadata) -> bool {
+    if info.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if info.file_attributes() & 0x400 != 0 {
+            return true;
+        }
+    }
+    false
 }
 pub async fn prepare_space(root: &Path, directory: &str) -> Result<()> {
     let (branch, component) = directory
@@ -290,6 +303,10 @@ pub async fn sync_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 pub async fn checksum(path: &Path) -> Result<(i64, String)> {
+    let metadata = tokio::fs::symlink_metadata(path).await?;
+    if !metadata.is_file() || unsafe_link(&metadata) {
+        return Err(Error::conflict("invalid_storage_file"));
+    }
     let mut f = tokio::fs::File::open(path).await?;
     let mut b = vec![0; 256 * 1024];
     let mut h = Sha256::new();

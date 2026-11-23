@@ -609,8 +609,8 @@ pub async fn edit_node(
     let n = node(&mut tx, id).await?;
     lock(&mut tx, n.space_id).await?;
     let n = access(&mut tx, id, u.id, 2, false).await?;
-    workspace_ready(&mut tx, n.space_id).await?;
     check_revision(&n, &h)?;
+    workspace_ready(&mut tx, n.space_id).await?;
     let target = if c.move_to_root {
         None
     } else {

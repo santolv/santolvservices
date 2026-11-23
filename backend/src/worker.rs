@@ -143,7 +143,7 @@ pub async fn tick(s: &App, cursor: &mut Uuid, cancelled_cursor: &mut Uuid) -> Re
     }
     garbage_collect(s).await?;
     let objects = sqlx::query(
-        "SELECT o.id,o.space_id,o.size,o.sha256,o.state,o.original_name,s.storage_directory FROM objects o JOIN spaces s ON s.id=o.space_id WHERE o.state IN ('ready','missing') AND o.id>$1 ORDER BY o.id LIMIT 100",
+        "SELECT o.id,o.space_id,o.size,o.sha256,o.state,o.original_name,s.storage_directory FROM objects o JOIN spaces s ON s.id=o.space_id WHERE o.state IN ('ready','missing') AND o.id>$1 AND NOT EXISTS(SELECT 1 FROM versions v JOIN nodes n ON n.current_version=v.id JOIN workspace_jobs j ON j.node_id=n.id WHERE v.object_id=o.id AND NOT j.audit) ORDER BY o.id LIMIT 100",
     )
     .bind(*cursor)
     .fetch_all(&s.db)
@@ -165,7 +165,7 @@ pub async fn tick(s: &App, cursor: &mut Uuid, cancelled_cursor: &mut Uuid) -> Re
         storage::relocate_legacy(&s.root, directory, id, name).await?;
         let path = crate::workspace::content_path_tx(&mut tx, &s.root, directory, id, name).await?;
         let valid = match tokio::fs::symlink_metadata(&path).await {
-            Ok(m) => m.is_file() && !m.file_type().is_symlink() && m.len() == size as u64,
+            Ok(m) => m.is_file() && !storage::unsafe_link(&m) && m.len() == size as u64,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
             Err(e) => return Err(e.into()),
         };
@@ -194,6 +194,9 @@ pub async fn tick(s: &App, cursor: &mut Uuid, cancelled_cursor: &mut Uuid) -> Re
         .execute(&s.db)
         .await?;
     sqlx::query("DELETE FROM rate_limits WHERE window_start<now()-interval '1 day'")
+        .execute(&s.db)
+        .await?;
+    sqlx::query("DELETE FROM login_failures WHERE updated_at<now()-interval '1 day'")
         .execute(&s.db)
         .await?;
     sqlx::query("DELETE FROM idempotency WHERE created_at<now()-interval '7 days'")

@@ -8,8 +8,8 @@ pub fn document() -> Value {
         (
             "/api/v1/auth/login",
             "post",
-            "Login using username/password; cookie for hosted web, bearer for mobile or local_file (opaque origin, no cookies, 2 hours (15 minutes until initial password change))",
-            "username,password,mobile?,local_file?",
+            "Login using username/password; cookie for trusted web, bearer only for native mobile; opaque origins disabled; 2 hours (15 minutes until initial password change)",
+            "username,password,mobile?",
         ),
         ("/api/v1/auth/logout", "post", "Revoke current session", ""),
         (

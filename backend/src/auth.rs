@@ -20,6 +20,27 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 use uuid::Uuid;
 
+pub const SESSION_SECONDS: i64 = 2 * 60 * 60;
+fn cookie_session(headers: &HeaderMap) -> Result<Option<&str>> {
+    if headers.get_all("cookie").iter().count() > 1 {
+        return Err(Error::auth());
+    }
+    let mut values = headers
+        .get("cookie")
+        .and_then(|v| v.to_str().ok())
+        .into_iter()
+        .flat_map(|v| v.split(';'))
+        .filter_map(|c| c.trim().strip_prefix("drive_session="));
+    let first = values.next();
+    if values.next().is_some() {
+        return Err(Error::auth());
+    }
+    Ok(first)
+}
+fn csrf_for(raw: &str) -> String {
+    hash(&format!("SantolvDrive CSRF v1:{raw}"))
+}
+
 pub fn hash(s: &str) -> String {
     hex::encode(Sha256::digest(s.as_bytes()))
 }
@@ -83,17 +104,15 @@ impl FromRequestParts<App> for Principal {
             .get("authorization")
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.strip_prefix("Bearer "));
-        let cookie = p
-            .headers
-            .get("cookie")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| {
-                v.split(';')
-                    .find_map(|c| c.trim().strip_prefix("drive_session="))
-            });
+        let cookie = cookie_session(&p.headers)?;
+        if (cookie.is_some() && bearer.is_some())
+            || p.headers.get_all("authorization").iter().count() > 1
+        {
+            return Err(Error::auth());
+        }
         let raw = cookie
             .or(bearer)
-            .filter(|v| v.len() == 64)
+            .filter(|v| v.len() == 64 && v.bytes().all(|b| b.is_ascii_hexdigit()))
             .ok_or_else(Error::auth)?;
         let session = hash(raw);
         let r=sqlx::query("SELECT s.user_id,s.csrf_hash,u.account_type,u.must_change_password FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND NOT u.disabled AND u.account_type='user'").bind(&session).fetch_optional(&s.db).await?.ok_or_else(Error::auth)?;
@@ -279,13 +298,13 @@ pub async fn login(
         return Err(Error::auth());
     }
     let kind: String = current.get("account_type");
-    let expires: i64 = if kind == "admin" || c.local_file {
-        1800
+    let expires: i64 = if current.get::<bool, _>("must_change_password") {
+        900
     } else {
-        604800
+        SESSION_SECONDS
     };
     let raw = token();
-    let csrf = token();
+    let csrf = csrf_for(&raw);
     sqlx::query("INSERT INTO sessions VALUES($1,$2,$3,now()+$4*interval '1 second')")
         .bind(hash(&raw))
         .bind(id)
@@ -305,7 +324,17 @@ pub async fn login(
         r.headers_mut().insert(
             "set-cookie",
             format!(
-                "drive_session={raw}; Path=/; HttpOnly; SameSite=Strict; Max-Age={expires}{}",
+                "drive_session={raw}; Path=/api/v1; HttpOnly; SameSite=Strict; Max-Age={expires}{}",
+                if s.secure { "; Secure" } else { "" }
+            )
+            .parse()
+            .unwrap(),
+        );
+        // Clear the old, broader cookie so two credentials cannot be sent together.
+        r.headers_mut().append(
+            "set-cookie",
+            format!(
+                "drive_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0{}",
                 if s.secure { "; Secure" } else { "" }
             )
             .parse()
@@ -323,6 +352,15 @@ pub async fn logout(State(s): State<App>, u: Principal) -> Result<Response> {
     r.headers_mut().insert(
         "set-cookie",
         format!(
+            "drive_session=; Path=/api/v1; HttpOnly; SameSite=Strict; Max-Age=0{}",
+            if s.secure { "; Secure" } else { "" }
+        )
+        .parse()
+        .unwrap(),
+    );
+    r.headers_mut().append(
+        "set-cookie",
+        format!(
             "drive_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0{}",
             if s.secure { "; Secure" } else { "" }
         )
@@ -331,14 +369,23 @@ pub async fn logout(State(s): State<App>, u: Principal) -> Result<Response> {
     );
     Ok(r)
 }
-pub async fn me(State(s): State<App>, u: Principal) -> Result<Json<Value>> {
+pub async fn me(State(s): State<App>, u: Principal, headers: HeaderMap) -> Result<Json<Value>> {
     let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
         .bind(u.id)
         .fetch_one(&s.db)
         .await?;
-    Ok(Json(
-        json!({"id":u.id,"username":username,"account_type":u.account_type,"must_change_password":u.must_change_password}),
-    ))
+    let session=sqlx::query("SELECT csrf_hash,extract(epoch FROM expires_at)::bigint AS expires_at FROM sessions WHERE token_hash=$1 AND expires_at>now()")
+        .bind(&u.session).fetch_optional(&s.db).await?.ok_or_else(Error::auth)?;
+    let mut body = json!({"id":u.id,"username":username,"account_type":u.account_type,"must_change_password":u.must_change_password,"expires_at":session.get::<i64,_>("expires_at")});
+    if let Some(raw) = cookie_session(&headers)? {
+        let csrf = csrf_for(raw);
+        if hash(&csrf) != session.get::<String, _>("csrf_hash") {
+            return Err(Error::auth());
+        }
+        // The cookie stays HttpOnly. This non-authenticating token restores CSRF protection after reload.
+        body["csrf_token"] = csrf.into();
+    }
+    Ok(Json(body))
 }
 #[derive(Deserialize)]
 pub struct PasswordChange {

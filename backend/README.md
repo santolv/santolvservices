@@ -1,6 +1,6 @@
 # SantolvDrive: backend local en Rust
 
-Axum + Tokio + Tower + Rustls. El backend y el instalador están escritos en Rust. La única dependencia externa es PostgreSQL, que se prepara automáticamente si falta. La API usa **http://localhost:8443** y el HTML se abre con doble clic como archivo local, únicamente desde el mismo equipo. No requiere dominio, túneles ni cuentas de servicios externos. No utiliza Docker.
+Axum + Tokio + Tower + Rustls. El backend y el instalador están escritos en Rust. La única dependencia externa es PostgreSQL, que se prepara automáticamente si falta. La API usa **http://localhost:8443** y la interfaz con cookies se abre en **http://localhost:5500**, desde el mismo equipo. No requiere dominio, túneles ni cuentas de servicios externos. No utiliza Docker.
 
 ## Instalación local
 
@@ -20,7 +20,15 @@ En Linux/macOS, usar el binario correspondiente:
 
 El instalador solo pide las credenciales iniciales del administrador Drive. Prepara PostgreSQL, un clúster privado, contraseñas aleatorias, el rol limitado de aplicación, las migraciones y `server.json`. No solicita URL SQL, dominio ni certificados. El ejecutable instalado se conserva al reanudar; una versión diferente requiere reemplazarlo explícitamente con el servidor detenido.
 
-La API se inicia con `serve --config ...` y escucha en http://localhost:8443. Abrir frontend/pruebahtml/index.html con doble clic: solicita los datos por fetch, sin redirecciones ni servidor de HTML. El backend no sirve páginas; / devuelve JSON y /index.html no existe. El comando frontend se ha retirado.
+La API se inicia con `serve --config ...` y escucha en http://localhost:8443. Para conservar la sesión al recargar, iniciar además el listener estático independiente de Rust:
+
+```powershell
+.\dist\santolvdrive-windows-x64.exe serve --config .\servidor\server.json --frontend ..\frontend\pruebahtml\index.html
+```
+
+Abrir **http://localhost:5500/**. La API nunca entrega HTML: `/` sigue devolviendo JSON y `/index.html` no existe en el puerto de la API. El listener de 5500 solo entrega el HTML elegido. Abrir el archivo con doble clic muestra el enlace a esta interfaz; no guarda tokens para simular cookies en un origen opaco.
+
+Las sesiones normales duran dos horas y las iniciales pendientes de cambio de contraseña quince minutos. Cookie `HttpOnly`, `SameSite=Strict`, ámbito `/api/v1`, `Secure` al usar HTTPS. `/api/v1/me` recupera el CSRF al recargar sin exponer el identificador de sesión. No se guardan credenciales en almacenamiento del navegador. El cierre de sesión y el cambio/restablecimiento de contraseña revocan el acceso en el servidor. Consultar **INFORME_SEGURIDAD.md** para los riesgos pendientes y los requisitos antes de publicar mediante Pangolin.
 
 Para una configuración anterior, detener el proceso y ejecutar con el binario nuevo:
 
@@ -164,4 +172,4 @@ PostgreSQL registra la ubicación de cada nodo y las operaciones pendientes. Un 
 
 La respuesta `storage_pending` indica trabajo pendiente en disco. Los cambios estructurales del espacio esperan a que se complete. Los destinos ocupados por contenido no registrado no se sobrescriben. Las rutas se validan, se rechazan enlaces simbólicos y los permisos del directorio de datos deben restringirse al proceso del servidor. Toda modificación de la estructura debe hacerse mediante la API.
 
-La API entrega solo datos y contenidos, sin HTML. El frontend independiente se abre por `file://`; incluye menú Nuevo de ancho fijo, acciones con clic derecho y teclado, y selector de carpetas para mover. No se añaden dependencias ni programas: el backend sigue en Rust y PostgreSQL continúa siendo la excepción autorizada.
+La API entrega solo datos y contenidos, sin HTML. El frontend independiente se abre por `http://localhost:5500`; incluye menú Nuevo de ancho fijo, acciones con clic derecho y teclado, y selector de carpetas para mover. No se añaden dependencias ni programas: el backend sigue en Rust y PostgreSQL continúa siendo la excepción autorizada.

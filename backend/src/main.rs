@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .is_some_and(|v| matches!(v.as_str(), "--help" | "help"))
     {
         println!(
-            "santolvdrive [serve | users [list [AFTER_UUID] | create | disable USERNAME | enable USERNAME | reset-password | audit [AFTER_ID]] | install [--directory PATH] [--origin http://localhost:8443] [--dependencies-only] | install --check | configure-local | bootstrap-admin [--stdin] | reset-admin | admin-initialized | database-stop] [--config server.json]"
+            "santolvdrive [serve [--frontend PATH_TO_INDEX_HTML] | users [list [AFTER_UUID] | create | disable USERNAME | enable USERNAME | reset-password | audit [AFTER_ID]] | install [--directory PATH] [--origin http://localhost:8443] [--dependencies-only] | install --check | configure-local | bootstrap-admin [--stdin] | reset-admin | admin-initialized | database-stop] [--config server.json]"
         );
         return Ok(());
     }
@@ -107,6 +107,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => None,
     };
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
+    let frontend = if let Some(i) = args.iter().position(|v| v == "--frontend") {
+        let path = args.get(i + 1).ok_or("--frontend requires an HTML path")?;
+        let view = santolvdrive::frontend::Frontend::new(
+            std::path::Path::new(path),
+            &config.frontend_origin,
+            &config.app_origin,
+        )
+        .await?;
+        let origin = url::Url::parse(&config.frontend_origin)?;
+        let socket = tokio::net::TcpListener::bind((
+            std::net::Ipv4Addr::LOCALHOST,
+            origin.port().ok_or("frontend requires a port")?,
+        ))
+        .await?;
+        println!(
+            "Interfaz con sesiones persistentes: {}",
+            config.frontend_origin
+        );
+        Some(tokio::spawn(santolvdrive::tls::serve_http(
+            socket,
+            santolvdrive::frontend::router(view),
+            shutdown(),
+        )))
+    } else {
+        None
+    };
     println!("Servidor local: {}", config.app_origin);
     let task = tokio::spawn(worker::run(s.clone()));
     let result = if let Some(tls) = tls {
@@ -115,6 +141,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         santolvdrive::tls::serve_http(listener, router(s), shutdown()).await
     };
     task.abort();
+    if let Some(frontend) = frontend {
+        frontend.abort();
+    }
     result?;
     Ok(())
 }

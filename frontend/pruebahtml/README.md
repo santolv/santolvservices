@@ -1,20 +1,16 @@
 # SantolvDrive · HTML independiente
 
-Abrir index.html con doble clic. El archivo permanece en file://, no redirige a localhost ni necesita un servidor web para el frontend. Todo el CSS, JavaScript e iconos está incluido.
+Abrir **http://localhost:5500/** para conservar la sesión al recargar. El CSS, JavaScript e iconos siguen incluidos en un único HTML. El backend ofrece un listener estático separado, escrito en Rust, que solo entrega este archivo; la API de 8443 continúa entregando exclusivamente datos.
 
-Solo debe estar encendida la API. Desde backend:
+Desde backend:
 
 ```powershell
-.\dist\santolvdrive-windows-x64.exe serve --config .\servidor\server.json
+.\dist\santolvdrive-windows-x64.exe serve --config .\servidor\server.json --frontend ..\frontend\pruebahtml\index.html
 ```
 
-El HTML comprueba http://localhost:8443/health/live. Al pulsar Entrar envía POST /api/v1/auth/login con username, password y local_file: true. La API responde con datos JSON y un token de 30 minutos. El HTML lo guarda exclusivamente en memoria y lo presenta mediante Authorization: Bearer en consultas, cambios, subidas y descargas. credentials: omit impide enviar cookies. Recargar o cerrar la página requiere iniciar sesión otra vez. Cerrar sesión revoca el token en el servidor.
+La sesión se guarda en una cookie HttpOnly de dos horas, con SameSite=Strict y ámbito de API. El servidor verifica la caducidad, restaura CSRF al recargar y revoca la sesión al cerrarla. Una contraseña temporal solo permite quince minutos para cambiarla. No se guardan contraseñas ni tokens de acceso en localStorage/sessionStorage ni en URLs. Si abres index.html con doble clic, muestra el enlace a la interfaz con cookies en lugar de iniciar una sesión opaca.
 
-La API nunca entrega esta interfaz. Su raíz devuelve JSON y /index.html devuelve 404. Se ha retirado el comando frontend y no hay redirección automática.
-
-Seguridad: file:// tiene origen opaco null, que también puede proceder de otros documentos aislados. No identifica un archivo de confianza. La API no acepta cookies desde ese origen, no devuelve Access-Control-Allow-Credentials y requiere credenciales válidas y un token para operaciones privadas. Abre únicamente el HTML de confianza del proyecto. No se guardan contraseñas ni tokens en localStorage/sessionStorage ni se incluyen en URLs. Los clientes web alojados conservan sus sesiones con cookies y CSRF. El servidor continúa limitado al mismo equipo.
-
-El navegador puede pedir permiso para acceder a la red local: permite el acceso a localhost para este archivo. Una política del navegador que prohíba acceder a localhost desde archivos no se puede anular desde JavaScript.
+El listener del HTML está restringido a localhost, incluye CSP con nonce y no publica archivos del servidor ni rutas API. Para un futuro dominio HTTPS mediante Pangolin se requiere configurar el origen y el modelo de proxy; no se debe exponer el HTTP local directamente. Ver backend/INFORME_SEGURIDAD.md.
 
 Funciones: un único acceso de usuarios; espacios personales y organizaciones; carpetas; subidas reanudables; permisos; papelera; restauración y descargas autenticadas. El servidor verifica los permisos en cada operación.
 

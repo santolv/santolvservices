@@ -12,6 +12,158 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 #[sqlx::test]
+async fn short_cookie_sessions_restore_csrf_after_reload_and_expire(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let a = h.account("cookie-reload").await;
+    let (status, headers, body) = h
+        .req(
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            &[
+                ("origin", "http://localhost:5500"),
+                ("content-type", "application/json"),
+            ],
+            Body::from(
+                json!({"username":a.username,"password":"very strong test password"}).to_string(),
+            ),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let value: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(value["expires_in"], 7200);
+    assert!(value.get("token").is_none());
+    let set_cookie = headers["set-cookie"].to_str().unwrap();
+    assert!(set_cookie.contains("HttpOnly"));
+    assert!(set_cookie.contains("SameSite=Strict"));
+    assert!(set_cookie.contains("Max-Age=7200"));
+    assert!(set_cookie.contains("Path=/api/v1"));
+    let cookie = set_cookie.split(';').next().unwrap();
+    let raw = cookie.strip_prefix("drive_session=").unwrap();
+    let stored: String = sqlx::query_scalar("SELECT token_hash FROM sessions WHERE token_hash=$1")
+        .bind(auth::hash(raw))
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap();
+    assert_ne!(stored, raw);
+    for _ in 0..2 {
+        let (status, _, body) = h
+            .req(
+                "GET",
+                "/api/v1/me",
+                None,
+                &[("origin", "http://localhost:5500"), ("cookie", cookie)],
+                Body::empty(),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK);
+        let restored: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(restored["csrf_token"], value["csrf_token"]);
+        assert!(restored.get("token").is_none());
+    }
+    let (_, body) = h
+        .json(
+            "POST",
+            "/api/v1/spaces",
+            None,
+            &[
+                ("origin", "http://localhost:5500"),
+                ("cookie", cookie),
+                ("x-csrf-token", value["csrf_token"].as_str().unwrap()),
+                ("idempotency-key", "restored-cookie"),
+            ],
+            json!({"name":"Después de recargar"}),
+        )
+        .await;
+    assert!(body.get("id").is_some());
+    sqlx::query("UPDATE rate_limits SET count=15 WHERE key=$1")
+        .bind(format!("login-account:{}", auth::hash(&a.username)))
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        h.req(
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            &[("content-type", "application/json")],
+            Body::from(
+                json!({"username":a.username,"password":"very strong test password"}).to_string()
+            )
+        )
+        .await
+        .0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(
+        h.req(
+            "GET",
+            "/api/v1/me",
+            None,
+            &[("cookie", cookie)],
+            Body::empty()
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let duplicate = format!("{cookie}; {cookie}");
+    assert_eq!(
+        h.req(
+            "GET",
+            "/api/v1/me",
+            None,
+            &[("cookie", &duplicate)],
+            Body::empty()
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        h.req(
+            "GET",
+            "/api/v1/me",
+            Some(raw),
+            &[("cookie", cookie)],
+            Body::empty()
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        h.req(
+            "GET",
+            "/api/v1/me",
+            None,
+            &[("origin", "https://attacker.example"), ("cookie", cookie)],
+            Body::empty()
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    sqlx::query("UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1")
+        .bind(auth::hash(raw))
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        h.req(
+            "GET",
+            "/api/v1/me",
+            None,
+            &[("cookie", cookie)],
+            Body::empty()
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[sqlx::test]
 async fn recent_history_is_private_ordered_bounded_and_rechecks_permissions(pool: PgPool) {
     let h = Harness::new(pool).await;
     let a = h.account("recent-owner").await;
@@ -2179,7 +2331,7 @@ async fn standalone_file_uses_tokens_and_never_cookie_sessions(pool: PgPool) {
     assert!(!headers.contains_key("access-control-allow-credentials"));
     let login: Value = serde_json::from_slice(&bytes).unwrap();
     let token = login["token"].as_str().unwrap();
-    assert_eq!(login["expires_in"], 1800);
+    assert_eq!(login["expires_in"], 7200);
     assert_eq!(
         h.req("GET", "/api/v1/me", None, &file_headers, Body::empty())
             .await
@@ -2501,6 +2653,21 @@ async fn permanent_delete_removes_named_content_only_after_last_reference(pool: 
             .0,
             StatusCode::OK
         );
+        // Physical reconciliation is asynchronous; purge must wait for an acknowledged move.
+        for _ in 0..10 {
+            santolvdrive::workspace::process(&h.app, 100).await.unwrap();
+            let pending: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM workspace_jobs WHERE space_id=$1 AND NOT audit)",
+            )
+            .bind(a.space)
+            .fetch_one(&h.app.db)
+            .await
+            .unwrap();
+            if !pending {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
         assert_eq!(
             h.json(
                 "POST",

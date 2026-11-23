@@ -3,6 +3,7 @@ pub mod auth;
 pub mod dependencies;
 pub mod error;
 pub mod files;
+pub mod frontend;
 pub mod installer;
 pub mod openapi;
 pub mod permissions;

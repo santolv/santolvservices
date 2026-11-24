@@ -135,6 +135,69 @@ async fn photos_share_sessions_but_isolate_storage_and_persist_favorites(pool: P
         .json("GET", "/api/v1/recent", Some(&a.token), &[], json!({}))
         .await;
     assert!(recent["items"].as_array().unwrap().is_empty());
+    let (_, activity) = h
+        .json(
+            "GET",
+            "/api/v1/activity/recent",
+            Some(&a.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    assert_eq!(activity["items"][0]["id"], node.to_string());
+    assert_eq!(activity["items"][0]["service"], "photos");
+    let (_, other_activity) = h
+        .json(
+            "GET",
+            "/api/v1/activity/recent",
+            Some(&b.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    assert!(other_activity["items"].as_array().unwrap().is_empty());
+    let (_, requested) = h
+        .json(
+            "GET",
+            &format!("/api/v1/photos/library?id={node}"),
+            Some(&a.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    assert_eq!(requested["items"][0]["id"], node.to_string());
+    let (_, other_requested) = h
+        .json(
+            "GET",
+            &format!("/api/v1/photos/library?id={node}"),
+            Some(&b.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    assert!(other_requested["items"].as_array().unwrap().is_empty());
+    let (status, folder) = h
+        .json(
+            "POST",
+            &format!("/api/v1/spaces/{}/nodes", a.space),
+            Some(&a.token),
+            &[("idempotency-key", "activity-folder")],
+            json!({"name":"Trabajo","parent_id":null}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, activity) = h
+        .json(
+            "GET",
+            "/api/v1/activity/recent",
+            Some(&a.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    assert_eq!(activity["items"][0]["id"], folder["id"]);
+    assert_eq!(activity["items"][0]["service"], "drive");
+    assert_eq!(activity["items"][1]["service"], "photos");
     assert_eq!(
         h.json(
             "POST",

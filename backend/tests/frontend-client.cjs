@@ -17,7 +17,7 @@ function element(id) {
   return elements.get(id);
 }
 const requests = [];
-const context = vm.createContext({ console, Headers, Blob, ArrayBuffer, Uint8Array, AbortSignal, URL, DOMException, FormData:class extends Map{constructor(){super()}},crypto:require('node:crypto').webcrypto,
+const context = vm.createContext({ console, Headers, Blob, ArrayBuffer, Uint8Array, AbortSignal, URL, URLSearchParams, DOMException, FormData:class extends Map{constructor(){super()}},crypto:require('node:crypto').webcrypto,
   setTimeout:()=>0, clearTimeout(){}, location:{protocol:'http:'},innerWidth:800,innerHeight:600,
   document:{body:element('body'),documentElement:element('html'),getElementById:element, addEventListener(){}, querySelectorAll(){return []}, querySelector(){return null}},
   window:{addEventListener(){}}, sessionStorage:{getItem(){return null},setItem(){},removeItem(){}},

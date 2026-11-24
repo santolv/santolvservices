@@ -4,6 +4,12 @@ pub fn document() -> Value {
     let mut paths = serde_json::Map::new();
     let definitions = [
         (
+            "/api/v1/activity/recent",
+            "get",
+            "Authorized recent work across Drive and Photos; timestamp:UUID cursor",
+            "",
+        ),
+        (
             "/api/v1/photos/space",
             "post",
             "Create or retrieve own Photos space",

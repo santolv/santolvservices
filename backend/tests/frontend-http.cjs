@@ -18,7 +18,7 @@ async function main(){
  backend=cp.spawn(exe,['serve','--config',config,...(process.env.TEST_SERVICES?[]:['--frontend',path.resolve('../santolvdrive/frontend/pruebahtml/index.html')])],{windowsHide:true,stdio:'ignore'});
  let ready=false;for(let i=0;i<80;i++){try{if((await fetch(api+'/health/live')).ok){ready=true;break}}catch{}await pause(100)}assert(ready);
  const page=await fetch('http://localhost:15500/');assert.equal(page.status,200);const pageHtml=await page.text();assert(pageHtml.includes('nonce="'));assert(pageHtml.includes(api));assert(page.headers.get('content-security-policy').includes("frame-ancestors 'none'"));
- if(process.env.TEST_SERVICES){
+ {
    assert(pageHtml.includes('id="services"'));assert(!pageHtml.includes('id="navigation"'));
    for(const [route,title] of [['drive/','SantolvDrive'],['photos/','SantolvPhotos']]){const r=await fetch('http://localhost:15500/'+route);assert.equal(r.status,200);assert((await r.text()).includes(title))}
    assert.equal((await fetch('http://localhost:15500/photos/server.json')).status,404);

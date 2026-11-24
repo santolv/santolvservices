@@ -1,3 +1,21 @@
+# Inicio independiente y despliegue local — 24 de noviembre de 2026
+
+- El proceso activo usaba el ejecutable antiguo y pasaba la interfaz de Drive
+  como entrada. Sustituido por la compilación release del backend central;
+  los lanzadores antiguos con --frontend también sirven las tres pantallas.
+- Inicio sin barra lateral: servicios y actividad reciente autorizada de Drive
+  y Fotos. Cada elemento enlaza a su servicio; ambos ofrecen regreso a Inicio.
+- 25 pruebas de integración Rust pasan, incluidas actividad entre servicios,
+  permisos por usuario y consulta individual de fotos. Pasan los clientes de
+  Inicio, Drive y Fotos y ambos ensayos HTTP de arranque.
+- Navegador: Inicio → foto reciente → atrás → Drive → Inicio → Fotos → Inicio;
+  sin errores de consola. Comprobada la entrada real en localhost:5500.
+- Copia local de PostgreSQL, archivos, configuración y ejecutables antes del
+  cambio, fuera de Git. Usuarios, nodos y objetos conservan sus cantidades;
+  no quedan rutas pendientes de migrar. API lista y las tres rutas responden.
+
+---
+
 # Integración central — 24 de noviembre de 2026
 
 Backend trasladado a la raíz del repositorio sin duplicar su motor. Comprobaciones
@@ -9,14 +27,14 @@ instalado:
   instalación y una de carga permanecen ignoradas por su configuración original.
 - Clientes de Drive y Fotos en Node: pasan credenciales, CSRF, revisiones,
   transferencias binarias y actualización del estado tras confirmación.
-- Ensayo HTTP con Drive individual y con Inicio/Drive/Fotos: ambos pasan.
+- Ensayo HTTP de los arranques con y sin --frontend: ambos sirven Inicio/Drive/Fotos.
 - Navegador: acceso común, selector sin herramientas de los servicios, creación
   de álbum, subida de muestra, visor, favorito tras recargar, papelera,
   restauración y paso a Drive con la misma sesión; sin errores de consola.
 - Migración ensayada con nombres reales: conservación de bytes, reanudación tras
   cambio de directorio y rechazo de colisiones sin sobrescritura.
 
-No se ha migrado ni reiniciado la instalación del usuario. Las pruebas no incluyen
+En la primera entrega todavía no se había actualizado la instalación. Las pruebas no incluyen
 dispositivos móviles reales, miniaturas derivadas, EXIF ni vídeo. Los informes
 inferiores corresponden a verificaciones anteriores de Drive.
 

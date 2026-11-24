@@ -9,6 +9,9 @@ las interfaces HTML/CSS/JavaScript se mantienen separadas:
 | `/drive/` | `santolvdrive/frontend/pruebahtml/index.html` | Archivos, carpetas, compartidos y papelera |
 | `/photos/` | `santolvphotos/frontend/index.html` | Fototeca, álbumes, favoritos, subidas y papelera |
 
+El inicio muestra los servicios y lo último trabajado, sin barra lateral. El
+historial reúne elementos autorizados de Drive y Fotos y abre cada uno en su
+servicio. Las pantallas de Drive y Fotos ofrecen Inicio para volver al selector.
 El inicio no muestra herramientas de los servicios. Rust entrega el documento
 correspondiente con CSP y las tres interfaces se incluyen en el ejecutable al
 compilar. Comparten cookies HttpOnly, sesiones y protección CSRF; no guardan
@@ -64,8 +67,8 @@ Si ya existe una instalación, reutiliza su configuración. Consulta
 sigue llamándose `santolvdrive` para conservar los comandos existentes.
 Por defecto: web `http://localhost:5500`, API `http://localhost:8443`.
 Se conserva el despliegue limitado a loopback. En configuración HTTPS se mantiene
-el modo API existente; la interfaz integrada descrita aquí es para HTTP local. `serve --frontend <archivo.html>`
-mantiene el ensayo con una sola interfaz; las otras rutas web quedan desactivadas.
+el modo API existente; la interfaz integrada descrita aquí es para HTTP local. Los lanzadores antiguos que pasan `--frontend <archivo.html>` también abren el
+inicio central y habilitan Drive y Fotos; no se usa Drive como página principal.
 
 ## Fotos conectado
 
@@ -104,6 +107,7 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 node tests/frontend-client.cjs
 node tests/photos-client.cjs
+node tests/home-client.cjs
 ```
 
 Se comprueban permisos, separación de interfaces y servicios, persistencia de

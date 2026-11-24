@@ -39,5 +39,6 @@ jobs:
       - run: cargo test --locked
       - run: node tests/frontend-client.cjs
       - run: node tests/photos-client.cjs
+      - run: node tests/home-client.cjs
       - run: cargo install cargo-audit --version 0.23.0 --locked
       - run: cargo audit --deny warnings

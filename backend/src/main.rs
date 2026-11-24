@@ -107,30 +107,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => None,
     };
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
-    let frontend = if let Some(i) = args.iter().position(|v| v == "--frontend") {
-        let path = args.get(i + 1).ok_or("--frontend requires an HTML path")?;
-        let view = santolvdrive::frontend::Frontend::new(
-            std::path::Path::new(path),
-            &config.frontend_origin,
-            &config.app_origin,
-        )
-        .await?;
-        let origin = url::Url::parse(&config.frontend_origin)?;
-        let socket = tokio::net::TcpListener::bind((
-            std::net::Ipv4Addr::LOCALHOST,
-            origin.port().ok_or("frontend requires a port")?,
-        ))
-        .await?;
+    // Legacy launchers pass --frontend with the old Drive page; all services now share the entry point.
+    if let Some(i) = args.iter().position(|v| v == "--frontend") {
+        args.get(i + 1).ok_or("--frontend requires an HTML path")?;
         println!(
-            "Interfaz con sesiones persistentes: {}",
-            config.frontend_origin
+            "--frontend es una opción antigua; se sirve Inicio, Drive y Fotos desde el servidor central."
         );
-        Some(tokio::spawn(santolvdrive::tls::serve_http(
-            socket,
-            santolvdrive::frontend::router(view),
-            shutdown(),
-        )))
-    } else if config.app_origin.starts_with("http://") {
+    }
+    let frontend = if config.app_origin.starts_with("http://") {
         let view =
             santolvdrive::frontend::Frontend::bundled(&config.frontend_origin, &config.app_origin)?;
         let origin = url::Url::parse(&config.frontend_origin)?;

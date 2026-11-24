@@ -47,6 +47,7 @@ pub async fn space(State(s): State<App>, u: User) -> Result<Json<Value>> {
 #[derive(Deserialize)]
 pub struct LibraryQuery {
     after: Option<Uuid>,
+    id: Option<Uuid>,
 }
 pub async fn library(
     State(s): State<App>,
@@ -59,9 +60,9 @@ pub async fn library(
           UNION ALL SELECT n.* FROM nodes n JOIN library p ON n.parent_id=p.id AND n.space_id=p.space_id WHERE p.trashed_at IS NULL
         ) SELECT jsonb_build_object('id',n.id,'name',n.name,'kind',n.kind,'album',n.parent_id,'revision',n.revision,'deleted',n.trashed_at IS NOT NULL,'date',to_char(n.created_at AT TIME ZONE 'UTC','YYYY-MM-DD'),'favorite',COALESCE(m.favorite,false))
         FROM library n LEFT JOIN photo_metadata m ON m.node_id=n.id
-        WHERE ($2::uuid IS NULL OR n.id>$2) AND NOT EXISTS(SELECT 1 FROM purge_jobs p WHERE p.node_id=n.id)
+        WHERE ($2::uuid IS NULL OR n.id>$2) AND ($3::uuid IS NULL OR n.id=$3) AND NOT EXISTS(SELECT 1 FROM purge_jobs p WHERE p.node_id=n.id)
           AND (n.kind='folder' OR n.name ~* '\\.(jpe?g|png|webp|gif|avif)$') ORDER BY n.id LIMIT 101")
-        .bind(u.id).bind(q.after).fetch_all(&s.db).await?;
+        .bind(u.id).bind(q.after).bind(q.id).fetch_all(&s.db).await?;
     let next = if items.len() > 100 {
         items[99]["id"].clone()
     } else {
@@ -98,6 +99,7 @@ pub async fn favorite(
         .bind(id)
         .execute(&mut *tx)
         .await?;
+    files::touch_recent(&mut tx, u.id, id).await?;
     tx.commit().await?;
     Ok(Json(json!({"favorite":c.favorite,"revision":n.revision+1})))
 }

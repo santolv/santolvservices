@@ -192,6 +192,7 @@ pub fn router(s: App) -> Router {
         )
         .route("/api/v1/shared", get(files::shared))
         .route("/api/v1/recent", get(files::recent))
+        .route("/api/v1/activity/recent", get(files::activity))
         .route("/api/v1/nodes/{id}/touch", post(files::touch))
         .route(
             "/api/v1/spaces/{space}",

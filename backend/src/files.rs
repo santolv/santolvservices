@@ -311,6 +311,16 @@ pub async fn recent(
     u: User,
     Query(q): Query<RecentQuery>,
 ) -> Result<Json<Value>> {
+    recent_items(s, u, q, true).await
+}
+pub async fn activity(
+    State(s): State<App>,
+    u: User,
+    Query(q): Query<RecentQuery>,
+) -> Result<Json<Value>> {
+    recent_items(s, u, q, false).await
+}
+async fn recent_items(s: App, u: User, q: RecentQuery, drive_only: bool) -> Result<Json<Value>> {
     let (stamp, id) = match q.after {
         Some(v) => {
             let (a, b) = v
@@ -325,7 +335,7 @@ pub async fn recent(
         None => (i64::MAX, Uuid::max()),
     };
     let mut tx = s.db.begin().await?;
-    let rows=sqlx::query("SELECT r.node_id,r.used_at FROM recent_nodes r JOIN nodes n ON n.id=r.node_id JOIN spaces s ON s.id=n.space_id WHERE r.user_id=$1 AND s.service='drive' AND (used_at,node_id)<($2,$3) ORDER BY used_at DESC,node_id DESC LIMIT 101").bind(u.id).bind(stamp).bind(id).fetch_all(&mut *tx).await?;
+    let rows=sqlx::query("SELECT r.node_id,r.used_at,s.service FROM recent_nodes r JOIN nodes n ON n.id=r.node_id JOIN spaces s ON s.id=n.space_id WHERE r.user_id=$1 AND (NOT $4 OR s.service='drive') AND (used_at,node_id)<($2,$3) ORDER BY used_at DESC,node_id DESC LIMIT 101").bind(u.id).bind(stamp).bind(id).bind(drive_only).fetch_all(&mut *tx).await?;
     let next = if rows.len() > 100 {
         Some(format!(
             "{}:{}",
@@ -341,6 +351,7 @@ pub async fn recent(
             Ok(node) => {
                 let mut value = serde_json::to_value(node).map_err(|_| Error::unavailable())?;
                 value["last_used_at"] = row.get::<i64, _>("used_at").into();
+                value["service"] = row.get::<String, _>("service").into();
                 items.push(value);
             }
             Err(e) if matches!(e.0, StatusCode::NOT_FOUND | StatusCode::CONFLICT) => {}

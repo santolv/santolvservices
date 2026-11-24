@@ -5,7 +5,8 @@ backend. El plan histórico inferior describe la maqueta inicial y queda como
 referencia; sus restricciones de demo y repositorio independiente están superadas.
 
 - [x] Backend compartido Rust en ../../backend; interfaces separadas.
-- [x] Menú central y sesión HttpOnly/CSRF común.
+- [x] Inicio sin barra lateral, actividad reciente común y sesión HttpOnly/CSRF.
+- [x] Backend compartido desplegado en la instalación local, con copia previa.
 - [x] Almacenamiento usuarios/<UUID>/photos separado de Drive.
 - [x] Subida real por bloques con integridad y confirmación durable.
 - [x] Biblioteca paginada, originales autenticados, favoritos y álbumes persistentes.

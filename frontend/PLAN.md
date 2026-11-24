@@ -1,229 +1,331 @@
-# Plan de interfaz de SantolvPhotos
+# SantolvPhotos: plan de interfaz multiplataforma
 
-Fecha: 24 de noviembre de 2026.
+Actualizado: 24 de noviembre de 2026.
 
-## Objetivo y alcance
+## Objetivo y decisiones acordadas
 
-Construir una interfaz web para una biblioteca personal de fotos y vídeos que
-pueda alojarse en servidores propios. Google Fotos e Immich sirven de referencia
-funcional: biblioteca cronológica, visor, álbumes y gestión de la colección.
-La identidad visual será propia.
+Crear una galería de fotos y vídeos autohospedada, inspirada en Google Fotos e
+Immich, accesible desde ordenador, móvil y tableta mediante los servidores del
+propietario. La interfaz tendrá identidad visual propia.
 
-Este documento planifica únicamente `frontend/`. No incluye desarrollar la API,
-base de datos, almacenamiento, indexación, transcodificación ni despliegue del
-servidor. La primera interfaz funcionará con datos de demostración locales,
-identificados como tales. No se presentará como una aplicación con almacenamiento
-real, autenticación real o copias de seguridad.
+Se utilizará **el mismo sistema de SantolvDrive**:
 
-## Estado y decisiones
+- Backend escrito en Rust.
+- Interfaz HTML con CSS y JavaScript propios, sin framework frontend.
+- Comunicación con la API por HTTP/JSON y transferencias de archivos.
+- Recursos propios servidos localmente, sin dependencias de CDN.
+- Cookies HttpOnly y protección CSRF como referencia para las sesiones web.
 
-- [x] Comprobar Rust: rustc y Cargo 1.99.1; toolchain estable Windows MSVC.
-- [x] Revisar las dependencias y el servidor de interfaz de santolvdrive.
-- [x] Crear este plan local y registrar el flujo de commits y publicación.
-- [ ] Confirmar los archivos auxiliares permitidos antes de implementar la web.
-- [ ] Implementar las fases siguientes cuando el propietario lo solicite.
+La aclaración del propietario autoriza HTML, CSS y JavaScript para la interfaz.
+El requisito de Rust corresponde al backend. No hace falta volver a pedir permiso
+por esos lenguajes. Otros lenguajes o un cambio importante de sistema sí se consultarán.
 
-Rust es el lenguaje principal y la lógica propia se escribirá en Rust.
-**La propuesta web todavía no está aprobada para implementación:** requiere
-HTML mínimo, CSS y JavaScript de arranque generado por las herramientas de
-WebAssembly. Se pedirá autorización explícita explicando esa función antes de
-crear esos archivos. La petición de revisar santolvdrive no equivale a aprobarlos.
-No se propone escribir lógica propia en JavaScript o TypeScript.
+El trabajo inmediato sigue siendo la interfaz de `frontend/`. Aquí se documenta
+también cómo encaja en el producto completo y qué funcionalidades dependerán del
+servidor, pero no se implementa ni se detalla todavía un plan interno del backend.
+No se necesita Leptos, Trunk, WebAssembly, React, Vue, TypeScript ni un gestor npm
+para ejecutar la primera interfaz.
 
-Si se mantiene una restricción absoluta sobre esos archivos, habrá que revisar
-la plataforma y valorar una interfaz nativa Rust, por ejemplo con egui/eframe.
-Eso cambiaría la experiencia de acceso desde navegador y móvil; no se elegirá
-silenciosamente como sustituto de la web autohospedada.
+## Base comprobada en SantolvDrive
 
-## Qué reutilizamos de SantolvDrive
+Repositorio: https://github.com/santolv/santolvdrive
 
-Referencia revisada: rama `main`, commit
-`b9c19e100e15c85534ede1a38e331411d4d2edad`.
+Revisión consultada: `b9c19e100e15c85534ede1a38e331411d4d2edad`.
 
-| Evidencia | Hallazgo | Aplicación a este frontend |
+| Archivo | Qué utiliza | Qué tomaremos como base |
 | --- | --- | --- |
-| `backend/Cargo.toml` | Rust edición 2024; mínimo declarado 1.94 | Mantener Rust 2024; comprobar el mínimo real de las nuevas dependencias al implementarlas |
-| Manifiesto del backend | Axum 0.8, Tokio 1, Tower 0.5, SQLx 0.9, Rustls y PostgreSQL | Referencia futura del servidor; no son librerías de interfaz ni se añadirán ahora |
-| Manifiesto del backend | Serde 1, serde_json 1, uuid 1 y time 0.3 | Reutilizar estas familias de crates donde haya necesidad real en los modelos de interfaz |
-| `frontend/pruebahtml/README.md` | Un HTML con CSS y JavaScript propios, sin framework frontend | Referencia de flujos y acabado, no base de código compatible con la nueva restricción |
-| `backend/src/frontend.rs` | Axum entrega un HTML desde un listener separado limitado a localhost, con CSP y nonce | Mantener separación conceptual entre interfaz y API; no copiarlo como despliegue público |
+| `backend/Cargo.toml` | Rust 2024, mínimo declarado 1.94 | Backend Rust; fijar versiones compatibles al implementarlo |
+| El mismo manifiesto | Axum 0.8, Tokio 1, Tower 0.5, tower-http 0.6 | API, ejecución asíncrona y middleware |
+| El mismo manifiesto | SQLx 0.9 con PostgreSQL; Serde 1, serde_json 1, uuid 1, time 0.3 | Persistencia y contratos de datos, para la futura fase del servidor |
+| El mismo manifiesto | tokio-rustls 0.26, Argon2 0.5 y sha2 0.10 | Referencia de TLS, contraseñas e integridad de transferencias |
+| `frontend/pruebahtml/index.html` y su README | HTML con CSS, JavaScript e iconos SVG incluidos, sin framework | Mismo formato inicial y APIs web estándar |
+| `backend/src/frontend.rs` | Listener estático Rust separado de la API, CSP con nonce, validación de Host | Separación de responsabilidades y política de recursos explícita |
 
-El servidor actual de Drive solo sirve `/` e `/index.html`, limita el HTML a
-1 MiB y no publica un directorio de recursos. Una aplicación WASM con archivos
-separados necesitará otra forma de servirlos y una CSP compatible. Esto es una
-dependencia para la integración futura, no una tarea de backend de esta fase.
+No se importará todo el backend de Drive ni se supondrá que sus endpoints de
+archivos ya resuelven fotos, miniaturas, EXIF o álbumes. Se reutiliza el enfoque
+y se evalúa cada librería cuando corresponda; no se instalan dependencias de
+servidor para construir una maqueta de interfaz.
 
-Tomaremos como referencia las sesiones por cookies HttpOnly y la protección
-CSRF de Drive para el futuro cliente. No se guardarán contraseñas ni tokens de
-sesión en localStorage. No se presupone que sus endpoints sirvan para fotos.
+### Diferencia necesaria para acceder desde otros dispositivos
 
-## Tecnologías propuestas
+El listener actual de Drive está limitado a localhost, sirve solo `/` e
+`/index.html` y limita el HTML a 1 MiB. Es adecuado como referencia local,
+pero un móvil no puede acceder al localhost del ordenador.
 
-| Herramienta o crate | Para qué se utilizaría | Procedencia o condición |
-| --- | --- | --- |
-| Rust + Cargo | Componentes, lógica, estado y pruebas | Ya disponibles |
-| Leptos en modo CSR | Interfaz reactiva ejecutada en el navegador mediante WASM | Nueva dependencia propuesta; pendiente la decisión web |
-| leptos_router | Navegación y enlaces a biblioteca, álbumes y ajustes | Misma familia y versión compatible con Leptos |
-| Trunk | Desarrollo local y empaquetado estático de la aplicación Rust/WASM | Nueva herramienta; comprobar e instalar al empezar, no ahora |
-| wasm-bindgen, web-sys y wasm-bindgen-futures | Acceso desde Rust a archivos, eventos y tareas del navegador | Añadir solo las APIs necesarias |
-| serde / serde_json | Modelos y datos de demostración; futura serialización | Familia utilizada en Drive; JSON solo cuando sea necesario |
-| uuid / time | Identificadores y fechas de la biblioteca | Familia utilizada en Drive; verificar funciones compatibles con WASM |
-| web-sys o gloo-net | Futuro cliente HTTP asíncrono | Elegir una sola vía al integrar; no copiar reqwest del servidor sin evaluar WASM |
-| HTML mínimo y CSS propio | Entrada del navegador, disposición y diseño adaptable | Requieren aprobación antes de crearlos |
+Para el producto autohospedado se necesitará una dirección del servidor accesible
+desde los dispositivos, HTTPS y configuración explícita de host/origen/proxy.
+Se prevé una sola dirección HTTPS para el usuario, con encaminamiento interno
+separado para interfaz y API. El servidor continuará en Rust; un proxy de entrada
+es una opción de despliegue que se concretará más adelante.
 
-No se añadirán React, Vue, Node, npm, Tailwind ni servicios externos como
-requisitos de esta propuesta. El código de arranque JavaScript que genere WASM
-debe explicarse y aprobarse aunque no lo escribamos a mano.
+La primera interfaz seguirá siendo un HTML independiente con estilos y lógica
+incluidos. La fase PWA exigirá además manifiesto, iconos y, para la experiencia
+sin conexión propuesta, un service worker: el servidor deberá permitir esos
+recursos concretos. No se expondrá una carpeta arbitraria del disco.
 
-El target `wasm32-unknown-unknown` y Trunk no están disponibles en el entorno
-comprobado. Su instalación quedará para el comienzo de la implementación.
-Las versiones concretas se comprobarán entonces y se fijarán en Cargo.lock;
-no se elegirán números de versión sin validar su compatibilidad.
+## Qué significa multiplataforma
 
-## Diseño y navegación
+La primera entrega será una web adaptable compartida por todas las plataformas.
+Posteriormente podrá instalarse como PWA donde el sistema y navegador lo permitan.
+Instalar una PWA no convierte la web en un cliente nativo de sincronización.
 
-Interfaz en español, adaptable a ordenador, tableta y móvil. En escritorio:
-barra lateral, búsqueda superior y área de contenido. En móvil: navegación
-compacta y controles táctiles. Tipografía del sistema y recursos servidos
-localmente, sin depender de CDN para usar la aplicación.
+| Plataforma | Primera entrega | Evolución prevista | Verificación |
+| --- | --- | --- | --- |
+| Windows | Navegador de escritorio | PWA donde se admita | Edge, Chrome y Firefox para la web |
+| Linux | Navegador de escritorio | PWA según navegador/entorno | Chrome/Chromium y Firefox |
+| macOS | Navegador de escritorio | Instalación web donde se admita | Safari y Chrome |
+| Android | Web móvil con selector de fotos y vídeo | PWA y acceso desde pantalla de inicio | Chrome, tacto y selección múltiple |
+| iPhone/iPad | Web adaptable en Safari | Añadir a inicio donde esté disponible | Safari, áreas seguras, orientación y teclado |
 
-Secciones iniciales: Fotos, Álbumes, Favoritos, Papelera y Ajustes. La subida
-estará accesible desde la biblioteca. El visor abrirá sobre el contexto actual
-y conservará la posición de desplazamiento al cerrarse.
+La matriz es un objetivo de comprobación, no una afirmación de que todos los
+navegadores admitan las mismas funciones. Una función no soportada debe tener
+alternativa o mostrar su limitación sin impedir consultar la biblioteca.
 
-Estados comunes: cargando, vacío, error, sin conexión, selección activa y acción
-pendiente. Cada acción de demostración indicará que solo modifica datos locales
-y que se reinician al recargar, salvo una preferencia visual explícita.
+**Límite importante:** la web puede subir archivos seleccionados por el usuario,
+pero no se prometerá acceso permanente al carrete ni copia automática fiable con
+la aplicación cerrada. La actividad en segundo plano está limitada por el navegador
+y el sistema. Para una experiencia de copia móvil comparable a Immich habrá una
+fase independiente de clientes móviles, permisos y tareas de segundo plano.
+Su tecnología no se elige todavía; se consultará antes de añadir otros lenguajes.
 
-## Fases y criterios de entrega
+Un posible cliente de escritorio para vigilar carpetas y subir automáticamente
+también quedará para después. No es necesario para consultar o subir fotos desde
+el navegador en Windows, Linux o macOS.
 
-### 0. Confirmar la base web
+## Arquitectura prevista del producto
 
-- Resolver la autorización sobre HTML/CSS y JavaScript generado.
-- Confirmar Leptos CSR y la estrategia de compilación.
-- Mantener inicialmente un solo paquete Cargo en `frontend/`.
+```text
+Ordenador / móvil / tableta
+         |
+         | HTTPS: HTML + CSS + JavaScript y llamadas a la API
+         v
+Dirección del servidor propio
+         |-- Interfaz estática (servida por Rust)
+         `-- API Rust: Axum / Tokio
+                 |-- PostgreSQL: usuarios y metadatos
+                 |-- Disco: originales y recursos derivados
+                 `-- Trabajos de medios: miniaturas e indexación (fase futura)
+```
 
-**Se completa cuando:** las decisiones permiten implementar sin introducir
-lenguajes o dependencias no autorizados.
+Los originales se conservarán independientes de las miniaturas y las
+previsualizaciones. La interfaz pedirá miniaturas para la cuadrícula y versiones
+adecuadas para el visor; no descargará toda la colección original al abrir Fotos.
+La generación de esos derivados corresponde al servidor futuro.
 
-### 1. Esqueleto y sistema visual
+La interfaz tendrá una capa de acceso a datos sustituible: primero proveedor
+de demostración, después cliente real. Los botones no mostrarán una operación
+como guardada, subida o respaldada hasta recibir confirmación del servidor.
 
-- Crear la aplicación Rust, navegación y estructura de componentes.
-- Definir colores, espacios, tamaños, foco visible, botones, menús y diálogos.
-- Implementar tema claro/oscuro y adaptación a pantallas pequeñas.
-- Usar iconos locales; si se reutilizan Lucide/SVG, conservar licencia y
-  confirmar su encaje con los formatos permitidos.
+## Tecnologías de la interfaz
 
-**Se completa cuando:** todas las rutas iniciales se pueden abrir y recargar,
-la navegación funciona con teclado y no hay desbordamiento horizontal en móvil.
+| Tecnología | Uso |
+| --- | --- |
+| HTML semántico | Estructura, formularios, navegación y diálogos |
+| CSS propio: Grid, Flexbox y variables | Cuadrícula fotográfica, temas y adaptación de tamaños |
+| JavaScript estándar | Estado, selección, navegación, visor, búsqueda y llamadas a la API |
+| Fetch y, si se necesita progreso de subida, XMLHttpRequest | Consultas y transferencias sin librerías de cliente |
+| File/Blob y URLs temporales | Selección y previsualización local con liberación de recursos |
+| SVG locales Lucide/Feather | Iconos con sus licencias, siguiendo Drive |
+| JSON y manifiesto web | Contratos de datos y futura instalación PWA |
+| Service worker, en una fase posterior | Caché limitada de la interfaz y aviso de actualizaciones |
 
-### 2. Biblioteca cronológica
+Empezar como Drive: `frontend/index.html` con `<style>` y `<script>`, organizado
+internamente por responsabilidades. Las muestras y licencias estarán en recursos
+locales. Si el crecimiento exige separar CSS/JS, se conservará el mismo sistema
+sin framework y se coordinarán rutas y CSP con el servidor Rust.
 
-- Crear modelos Rust para fotos, vídeos, fechas, dimensiones y favoritos.
-- Preparar datos de ejemplo y recursos locales sin fotos privadas del usuario.
-- Mostrar una cuadrícula por días/meses, con proporciones variadas y vídeos
-  identificados. Definir fecha de captura frente a fecha de incorporación.
-- Añadir carga diferida de miniaturas, paginación de demostración y errores
-  de imagen. Evaluar virtualización si las mediciones la justifican.
+La navegación inicial usará fragmentos (`#/photos`, `#/albums`, etc.) para
+permitir recargas y enlaces sin exigir reescritura de todas las rutas del servidor.
+Los nombres y metadatos se insertarán como texto, sin interpretar HTML recibido.
 
-**Se completa cuando:** se puede recorrer una colección de ejemplo amplia sin
-cargar los originales de toda la biblioteca, y se muestran estados vacíos y errores.
+## Pantallas y experiencia
 
-### 3. Visor de foto y vídeo
+| Pantalla | Funciones iniciales |
+| --- | --- |
+| Acceso | Formulario, estado de conexión, errores y sesión caducada |
+| Fotos | Cronología por día/mes, cuadrícula, selección y acceso al visor |
+| Buscar | Nombre, fechas, tipo de medio y favoritos; indicar si el resultado es local o global |
+| Álbumes | Listado, portada, creación, renombrado y gestión de fotos |
+| Favoritos | Colección marcada por el usuario |
+| Papelera | Restaurar y confirmar eliminación definitiva |
+| Subidas | Cola, progreso, cancelación, errores y reintento |
+| Ajustes | Tema, preferencias visuales, sesión y almacenamiento cuando exista API |
+| Visor | Foto/vídeo, anterior/siguiente, zoom e información disponible |
 
-- Abrir/cerrar, avanzar/retroceder, zoom y panel de información.
-- Atajos de teclado, navegación táctil y restauración del foco al salir.
-- Reproducir vídeos de muestra compatibles con el navegador.
-- Mostrar nombre, fecha y dimensiones sin inventar metadatos ausentes.
+En escritorio: barra lateral, búsqueda superior y cuadrícula amplia. En móvil:
+navegación compacta, acciones alcanzables con el pulgar y controles táctiles.
+Mantener modo claro/oscuro, tipografía del sistema y foco visible. No depender
+de hover para acceder a una acción.
 
-**Se completa cuando:** el visor conserva selección y posición de la biblioteca,
-permite usar Escape/flechas y gestiona medios no compatibles sin bloquearse.
+El visor conservará posición y filtros al cerrarse. Permitirá Escape, flechas,
+gestos compatibles y retorno del foco al elemento de origen. Los vídeos mostrarán
+su duración cuando se conozca y un mensaje útil si el formato no es reproducible.
+No se garantizará HEIC, RAW o todos los códecs sin derivados del servidor.
 
-### 4. Organización y búsqueda local
+## Fases de trabajo
 
-- Selección individual y múltiple; favorito y envío a papelera con confirmación
-  cuando corresponda. Restaurar desde papelera; borrado solo en la demostración.
-- Crear/renombrar álbumes y añadir o quitar fotos sin duplicar sus contenidos.
-- Buscar por nombre y filtrar por fecha, tipo y favoritos sobre los datos demo.
-- Conservar los filtros al entrar y salir del visor.
+### 0. Base y planificación — completada
 
-**Se completa cuando:** los cambios locales se reflejan coherentemente en todas
-las vistas y se indica que todavía no persisten en un servidor.
+- [x] Revisar el sistema real de SantolvDrive.
+- [x] Confirmar backend Rust y frontend HTML/CSS/JavaScript.
+- [x] Definir alcance web, evolución PWA y límites de sincronización móvil.
+- [x] Guardar el plan y la regla de commit local más push al finalizar.
 
-### 5. Subida y pantallas de cuenta
+### 1. Estructura visual adaptable
 
-- Selector de archivos y arrastrar/soltar con previsualización local.
-- Cola visual con progreso, cancelación y errores claramente simulados.
-- Liberar URLs temporales y evitar cargar archivos grandes completos en memoria.
-- Pantallas de acceso, sesión caducada, ajustes y uso de almacenamiento con
-  estados de demostración; no fingir autenticación ni espacio real.
+- [ ] Crear `frontend/index.html`, menú, cabecera, navegación y estilos comunes.
+- [ ] Preparar temas claro/oscuro, diálogos, menús y notificaciones.
+- [ ] Diseñar Fotos, Álbumes, Favoritos, Papelera y Ajustes.
+- [ ] Preparar muestras locales con licencia o permiso, sin fotos privadas.
 
-**Se completa cuando:** la experiencia puede revisarse sin backend y ninguna
-pantalla afirma que una foto ha quedado guardada o respaldada realmente.
+**Entrega:** interfaz navegable en escritorio y móvil, con datos de demostración
+identificados, sin desbordamiento horizontal y utilizable mediante teclado.
 
-### 6. Preparación para integrar y revisión final
+### 2. Biblioteca y visor
 
-- Separar el proveedor de datos de demostración de los componentes Rust.
-- Documentar qué datos y operaciones necesita la interfaz, sin implementar
-  endpoints, base de datos ni decisiones de servidor.
-- Preparar el paquete estático y las instrucciones de desarrollo y compilación.
-- Revisar carga de recursos, errores, navegación, temas y uso desde móvil.
+- [ ] Cuadrícula por días y meses, fotos verticales/horizontales y vídeos.
+- [ ] Fecha de captura con alternativa explícita cuando falte; ordenar de forma estable.
+- [ ] Carga diferida de miniaturas y paginación de ejemplo; valorar virtualización
+  según medición con una colección grande de metadatos.
+- [ ] Visor con navegación, zoom, reproducción e información.
+- [ ] Estados vacío, cargando, imagen fallida, formato no compatible y sin conexión.
 
-**Se completa cuando:** la interfaz demo es compilable, revisable y tiene una
-frontera clara para sustituir los datos locales por una API futura.
+**Entrega:** recorrer y abrir medios sin cargar todos los originales, conservando
+posición, filtros y foco al volver a la biblioteca.
 
-## Organización prevista de frontend/
+### 3. Organización y búsqueda
+
+- [ ] Selección individual/múltiple con teclado y tacto.
+- [ ] Favoritos, álbumes y búsqueda por nombre/fecha/tipo sobre la colección demo.
+- [ ] Papelera, restauración y confirmación de borrado, todo solo en memoria demo.
+- [ ] Mostrar si la búsqueda cubre solo elementos cargados; no presentarla como
+  búsqueda global hasta tener API para ello.
+
+**Entrega:** las vistas mantienen un estado coherente y la interfaz explica
+que los cambios demo no están guardados en un servidor.
+
+### 4. Experiencia de subida y cuenta
+
+- [ ] Selector múltiple, arrastrar/soltar y previsualización local.
+- [ ] Cola, cancelación, progreso y errores, claramente simulados en modo demo.
+- [ ] Preparar flujos de sesión caducada, permisos insuficientes y cuota agotada.
+- [ ] Evitar leer vídeos completos en memoria y liberar URLs al retirar previsualizaciones.
+
+**Entrega:** el flujo completo puede revisarse sin API; ninguna subida simulada
+se anuncia como copia de seguridad real.
+
+### 5. Integración con el backend — dependiente de una fase posterior del servidor
+
+- [ ] Documentar contratos de medios, álbumes, paginación, sesión y transferencias.
+- [ ] Sustituir el proveedor demo por HTTP manteniendo componentes y estados.
+- [ ] Integrar cookies HttpOnly, recuperación de sesión y CSRF, sin tokens en
+  localStorage/sessionStorage ni en enlaces.
+- [ ] Gestionar rechazo, progreso, reintento y reanudación conforme a la API real.
+- [ ] Conectar miniaturas, visor, vídeo y descarga con control de acceso.
+- [ ] Comprobar persistencia tras recargar y aislamiento entre usuarios.
+
+**Entrega:** las operaciones sobreviven a recargas porque están confirmadas en
+el servidor; los errores no dejan falsos estados de éxito en la interfaz.
+Esta fase no empieza hasta disponer de los servicios Rust correspondientes.
+
+### 6. PWA e instalación multiplataforma
+
+- [ ] Añadir manifiesto, iconos locales y experiencia de instalación donde exista soporte.
+- [ ] Introducir service worker con caché de recursos estáticos y actualización controlada.
+- [ ] Mostrar el estado sin conexión sin prometer acceso a toda la biblioteca.
+- [ ] Mantener inicialmente fuera de caché los medios privados y respuestas de cuenta.
+  Limpiar estado local de usuario al cerrar sesión y evitar cruces entre cuentas.
+- [ ] Comprobar instalación y actualización en dispositivos reales cuando estén disponibles.
+
+**Entrega:** funciona desde navegador y desde el acceso instalado en los entornos
+verificados. No se promete sincronización automática del carrete con la app cerrada.
+
+### 7. Revisión y preparación para uso propio
+
+- [ ] Revisar accesibilidad, contraste, foco, tacto, orientación y áreas seguras.
+- [ ] Medir carga y memoria con una colección amplia; limitar nodos y solicitudes activas.
+- [ ] Revisar CSP, recursos propios, manejo de texto y ausencia de secretos en cliente.
+- [ ] Documentar uso local y acceso al servidor desde otros dispositivos.
+- [ ] Ensayar pérdidas de conexión y cambios de sesión durante una acción.
+
+**Entrega:** frontend preparado para acompañar una versión del backend que haya
+validado por separado almacenamiento, permisos, HTTPS y recuperación de datos.
+
+## Necesidades futuras del servidor, sin implementarlas ahora
+
+| Necesidad de interfaz | Capacidad que deberá ofrecer Rust |
+| --- | --- |
+| Biblioteca cronológica | Metadatos ordenados, fechas, paginación estable y permisos |
+| Miniaturas y visor | Derivados de imagen, tamaños y entrega autenticada |
+| Vídeo | Streaming con rangos y formatos compatibles; evaluar transcodificación |
+| Subida fiable | Bloques, integridad, cancelación, reanudación y confirmación durable |
+| Álbumes y favoritos | Relaciones persistentes sin duplicar originales |
+| Papelera | Estado persistente, restauración y eliminación explícita |
+| Buscar | Consulta sobre toda la biblioteca autorizada |
+| Cuenta y cuota | Sesiones, aislamiento de usuarios y consumo real de almacenamiento |
+
+La elección de bibliotecas de imagen, EXIF, HEIC/RAW y procesamiento de vídeo
+requiere una revisión específica. No se presupone que las dependencias actuales
+de Drive ya cubran esas tareas. Una herramienta externa como FFmpeg no se añade
+por defecto; se explicará y acordará al planificar esa capacidad.
+
+Copias de seguridad, restauración, actualizaciones e instalación del servidor
+tendrán su propia fase. Subir una foto al servidor no equivale a tener un backup
+independiente del servidor.
+
+## Evolución posterior al producto web
+
+1. Compartición privada de álbumes con permisos y revocación.
+2. Metadatos ampliados, mapas y búsqueda avanzada cuando exista soporte real.
+3. Clientes Android/iOS para copia automática, con estudio de permisos,
+   restricciones de batería, segundo plano y distribución. Consultar tecnología.
+4. Cliente de escritorio para vigilar carpetas, si se necesita.
+5. Reconocimiento facial, búsqueda semántica y edición, como proyectos separados.
+
+Estas funciones no formarán parte de la primera maqueta ni se mostrarán como
+operativas antes de implementarse y comprobarse.
+
+## Organización prevista
 
 ```text
 frontend/
   PLAN.md
-  README.md             # Instrucciones cuando exista una aplicación
-  Cargo.toml
-  Cargo.lock
-  src/
-    main.rs
-    app.rs
-    routes.rs
-    models.rs
-    state.rs
-    components/
-    pages/
-    data/               # Proveedor demo y futura interfaz de datos
-  public/               # Muestras e iconos autorizados y sus licencias
-  tests/                # Pruebas Rust con valor funcional
+  README.md                  # Uso y verificación cuando exista interfaz
+  index.html                 # HTML + CSS + JavaScript, como SantolvDrive
+  assets/                    # Iconos y muestras autorizadas
+  licenses/                  # Licencias de recursos reutilizados
+  manifest.webmanifest       # Fase PWA
+  service-worker.js          # Fase PWA
+  tests/                     # Pruebas de estado/cliente cuando aporten valor
+backend/                     # Reservado para la fase de implementación Rust
 ```
 
-Si se autoriza la propuesta web, se añadirán `index.html`, estilos CSS y
-`Trunk.toml`. La estructura es una previsión; hoy solo se crea este documento.
+La organización es prevista. Este trabajo solo modifica documentación.
 
-## Comprobación y flujo de trabajo
+## Comprobación y flujo de entrega
 
-En cada entrega: revisar el diff, comprobar lo que se haya modificado, actualizar
-las casillas del plan, crear commit local y hacer push al repositorio autorizado.
-Revisar el estado remoto antes de subir; no sobrescribir cambios ajenos.
-Si la autenticación falla, conservar el commit e indicar el inicio de sesión necesario.
+Para documentación: revisar contenido, enlaces, coherencia con el código de
+referencia y `git diff --check`. No instalar frameworks ni generar aplicaciones.
 
-Cuando exista código: `cargo fmt --check`, comprobación del target WASM,
-Clippy y compilación de producción con Trunk. Usar `--locked` cuando exista
-Cargo.lock. Probar en Rust las reglas de selección, filtros, fechas y álbumes;
-adaptar el ejecutor al target en vez de intentar ejecutar WASM como binario nativo.
-Revisión en navegador de teclado/foco, recarga de rutas y tamaños aproximados
-de 360, 768 y 1440 píxeles. No introducir otro lenguaje para pruebas sin permiso.
-Un documento de planificación se verifica por contenido, enlaces y diff;
-no requiere generar una aplicación ni instalar sus herramientas.
+Cuando exista interfaz: revisar aproximadamente 360, 768 y 1440 píxeles,
+teclado completo, controles táctiles, orientación y tamaños de texto ampliados.
+Comprobar rutas al recargar, filtros, selección y fechas. Probar pérdida de red,
+errores de transferencia, doble pulsación y sesión caducada donde corresponda.
+Las pruebas del cliente podrán escribirse en JavaScript, igual que la interfaz;
+si se necesita un ejecutor de desarrollo, documentarlo sin convertirlo en un
+requisito de ejecución del producto. Las herramientas de QA no añaden un framework
+a la interfaz. Marcar como pendientes los sistemas sin dispositivo de prueba.
 
-## Funciones posteriores, fuera de esta primera interfaz
+En cada trabajo que modifique archivos: actualizar este plan si procede, revisar
+el diff, ejecutar las comprobaciones pertinentes, crear commit local y hacer
+push a `https://github.com/santolv/santolvphotos.git`. Verificar el resultado.
+No usar force push ni incorporar cambios ajenos. Si falla el acceso, conservar
+el commit local e indicar qué autorización o inicio de sesión hace falta.
 
-Reconocimiento facial, búsqueda semántica, mapas, edición de fotos, enlaces
-compartidos, sincronización automática móvil, reproducción de todos los codecs,
-generación de miniaturas y copias de seguridad requieren trabajo adicional.
-No se mostrarán como funciones operativas durante la fase demo.
-
-## Fuentes
+## Fuentes revisadas
 
 - [Manifiesto de SantolvDrive](https://github.com/santolv/santolvdrive/blob/b9c19e100e15c85534ede1a38e331411d4d2edad/backend/Cargo.toml).
-- [Servidor de interfaz de SantolvDrive](https://github.com/santolv/santolvdrive/blob/b9c19e100e15c85534ede1a38e331411d4d2edad/backend/src/frontend.rs).
-- [Documentación de la interfaz de Drive](https://github.com/santolv/santolvdrive/blob/b9c19e100e15c85534ede1a38e331411d4d2edad/frontend/pruebahtml/README.md).
-- [Libro oficial de Leptos](https://book.leptos.dev/).
-- [Despliegue estático CSR con Leptos](https://book.leptos.dev/deployment/csr.html).
-- [Repositorio oficial de Trunk](https://github.com/trunk-rs/trunk).
+- [Servidor estático Rust de Drive](https://github.com/santolv/santolvdrive/blob/b9c19e100e15c85534ede1a38e331411d4d2edad/backend/src/frontend.rs).
+- [Documentación de su interfaz HTML/CSS/JavaScript](https://github.com/santolv/santolvdrive/blob/b9c19e100e15c85534ede1a38e331411d4d2edad/frontend/pruebahtml/README.md).
+- [MDN: instalación de una PWA](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable).
+- [MDN: funcionamiento sin conexión y en segundo plano](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Offline_and_background_operation).

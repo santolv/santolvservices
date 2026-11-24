@@ -1,11 +1,12 @@
 # Instrucciones del proyecto
 
-- Utilizar Rust como lenguaje principal para el código del proyecto.
-- Antes de introducir otro lenguaje, explicar por qué hace falta y pedir aprobación
-  explícita. Esto incluye HTML/CSS y JavaScript generado si aún no se han autorizado.
-  La existencia de esos lenguajes en santolvdrive no constituye autorización aquí.
-- Los documentos Markdown y la configuración necesaria no sustituyen el código Rust.
-- El alcance actual es planificar el frontend dentro de `frontend/PLAN.md`.
+- El backend debe escribirse en Rust, siguiendo la base técnica de santolvdrive.
+- El usuario ha autorizado el mismo sistema de frontend que santolvdrive:
+  HTML, CSS y JavaScript propios, sin framework ni compilación WASM.
+  No volver a pedir permiso por estos lenguajes o por SVG/JSON necesarios para la web.
+- Consultar antes de introducir otros lenguajes o cambiar sustancialmente este sistema.
+- El alcance actual es el plan multiplataforma dentro de `frontend/PLAN.md`,
+  centrado en la interfaz y con las dependencias futuras del servidor identificadas.
   No desarrollar el backend ni implementar la interfaz hasta recibir esa petición.
 - Usar `https://github.com/santolv/santolvdrive` como referencia técnica, comprobando
   el código real y distinguiendo las dependencias del servidor de las del navegador.

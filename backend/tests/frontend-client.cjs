@@ -33,7 +33,13 @@ const ids=[...markup.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
 assert.equal(new Set(ids).size,ids.length,'Duplicate HTML identifiers');
 vm.runInContext("actions['toggle-theme']()",context);
 assert.equal(element('html').dataset.theme,'dark');
-assert.equal(vm.runInContext('state.view',context),'recent');
+assert.equal(vm.runInContext('state.view',context),'home');
+vm.runInContext("state.me={id:'home-user',username:'<Santi>'};state.rows=[{id:'recent-one',name:'Real file.pdf',last_used_at:1700000000000}];render()",context);
+assert(element('items').innerHTML.includes('portal-apps'));
+assert(element('items').innerHTML.includes('&lt;Santi&gt;'));
+assert(element('items').innerHTML.includes('Real file.pdf'));
+assert(element('items').innerHTML.includes('Configurar acceso'));
+vm.runInContext("state.view='recent';state.me=null;state.rows=[]",context);
 assert(!html.includes('Destacados'));
 (async()=>{
   await vm.runInContext("api('/me')", context);

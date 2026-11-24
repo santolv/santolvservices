@@ -4,19 +4,26 @@ Abre `index.html` en un navegador de escritorio. Funciona como archivo local,
 sin instalación, compilación, framework, conexión a una API ni recursos de CDN.
 Conserva `assets/` junto al HTML para que aparezcan las fotos de muestra.
 
-El diseño se inspira en las capturas oficiales de Fotos de Apple para Mac:
-barra lateral compacta, cuadrícula continua de borde a borde, herramientas
-flotantes, vistas temporales y visor sobre fondo oscuro. No se incluyen logotipos
+El diseño actual sigue las capturas de iCloud Photos aportadas por el propietario:
+cabecera de marca, barra lateral clara, herramientas separadas de las imágenes,
+fechas visibles, cuadrícula con pequeños márgenes y selección azul. Se mantiene
+Liquid Glass en controles, buscador, filtros y ventanas: transparencia, desenfoque,
+saturación, bordes iluminados y sombras suaves, con alternativa opaca si el
+navegador no admite desenfoque. No se incluyen logotipos
 ni capturas de Apple dentro del producto. La identidad sigue siendo SantolvPhotos.
 La base técnica se conserva de SantolvDrive: HTML/CSS/JavaScript sin framework.
 
 ## Qué puedes probar
 
-- Veinte fotos locales en una cuadrícula continua, sin tarjetas ni títulos bajo las imágenes.
+- Veinte fotos locales en una cuadrícula ordenada, sin títulos bajo las imágenes.
 - Vistas Años, Meses y Todas las fotos; entrar en un año abre sus meses y en un mes sus fotos.
 - Búsqueda por nombre/lugar, filtros y orden desde el botón de filtros.
 - Ajuste del tamaño de las miniaturas con el deslizador y los botones −/+ en escritorio.
 - Tres álbumes de muestra, favoritos, papelera y restauración.
+- Selección múltiple con contornos azules, contador y seleccionar/deseleccionar
+  todas las fotos de la vista. También puedes usar Ctrl, Cmd o Mayús al pulsar una foto
+  para activar la selección. Favoritos y papelera admiten acciones sobre el grupo.
+  No se seleccionan fotos ocultas por los filtros y la selección se limpia al navegar.
 - Visor con flechas, Escape, zoom y favoritos.
 - Temas claro/oscuro y preferencia del sistema desde Ajustes.
 - Selección o arrastre de imágenes para previsualizarlas en la pestaña, hasta
@@ -62,3 +69,9 @@ En la entrega de animaciones también se comprobaron: zoom seguido de favorito
 con `F` sin perder la ampliación, papelera → Deshacer (19 → 20 fotos), navegación
 temporal, quitar el filtro de mes, búsqueda y su limpieza con Escape, y cambio
 de tamaño de miniaturas. No hubo errores en la consola de la aplicación.
+
+En la adaptación a las capturas se revisaron visualmente los temas claro y oscuro,
+el contador y los contornos de selección, y papelera de grupo → Deshacer
+(20 → 18 → 20 fotos). En escritorio a 1280 píxeles, la barra de herramientas,
+el título/fecha y la cuadrícula quedan separados y no hay desbordamiento horizontal.
+El desenfoque efectivo de los controles es de 26 píxeles con saturación del 180 %.

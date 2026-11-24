@@ -7,7 +7,8 @@ Actualizado: 24 de noviembre de 2026.
 Crear una galería de fotos y vídeos autohospedada, inspirada en Google Fotos e
 Immich, accesible desde ordenador, móvil y tableta mediante los servidores del
 propietario. La interfaz mantiene la marca SantolvPhotos con una distribución
-inspirada en Fotos de Apple para Mac, nueva referencia solicitada por el propietario.
+inspirada en las capturas de iCloud Photos aportadas por el propietario, manteniendo
+el efecto Liquid Glass y las animaciones de la base anterior.
 
 Se utilizará **el mismo sistema de SantolvDrive**:
 
@@ -207,6 +208,17 @@ Mejoras de interacción sobre esta base:
 Las comprobaciones de esta entrega incluyen visor/zoom/favoritos, papelera y
 Deshacer, navegación temporal, filtros y redimensionado. No se incorporan
 dependencias de animación ni se cambia el alcance de la demo.
+
+Adaptación visual a las capturas de iCloud Photos:
+
+- [x] Separar cabecera de marca, herramientas, título/fechas y cuadrícula.
+- [x] Usar barra lateral clara, iconos azules, márgenes discretos y superficies Liquid Glass.
+- [x] Añadir selección múltiple con contorno azul y contador visible.
+- [x] Añadir seleccionar todas, favoritos de grupo y papelera de grupo con Deshacer.
+- [x] Comprobar claro/oscuro y recuperación de una selección de dos fotos al deshacer.
+
+Las capturas son referencias de composición; no se incorporan como recursos ni
+se publica su contenido. La interfaz sigue siendo una demo local sin API.
 
 **Entrega:** interfaz navegable en escritorio y móvil, con datos de demostración
 identificados, sin desbordamiento horizontal y utilizable mediante teclado.

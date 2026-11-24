@@ -6,9 +6,10 @@
   No volver a pedir permiso por estos lenguajes o por SVG/JSON necesarios para la web.
 - Consultar antes de introducir otros lenguajes o cambiar sustancialmente este sistema.
 - El alcance actual es implementar el HTML base de la interfaz web/de PC en
-  `frontend/index.html`, siguiendo la nueva referencia visual de Fotos de Apple
-  para Mac y `frontend/PLAN.md`. La base técnica sigue siendo la de SantolvDrive;
-  el usuario ha sustituido la referencia visual anterior.
+  `frontend/index.html`, siguiendo las capturas de iCloud Photos proporcionadas
+  por el usuario: barra lateral clara, herramientas y fechas fuera de las fotos,
+  cuadrícula ordenada y selección azul. Mantener Liquid Glass y las animaciones.
+  La base técnica sigue siendo la de SantolvDrive y el plan está en `frontend/PLAN.md`.
   El backend no se desarrolla en esta fase. La interfaz móvil y las aplicaciones
   descargables quedan pendientes de que el propietario decida su tecnología.
 - Usar `https://github.com/santolv/santolvdrive` como referencia técnica, comprobando

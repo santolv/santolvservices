@@ -2,8 +2,13 @@
 
 ## Diseño e iconos
 
-La referencia visual vigente son las capturas oficiales de Fotos de Apple para
-Mac, consultadas por petición del propietario:
+La referencia visual vigente son dos capturas de iCloud Photos proporcionadas
+por el propietario en este chat: herramientas y fechas sobre la cuadrícula,
+barra lateral clara y selección múltiple azul. Se combinan con controles
+Liquid Glass propios. Las capturas no se copian al repositorio ni se distribuyen.
+
+La referencia de la versión anterior fueron las capturas oficiales de Fotos
+de Apple para Mac, consultadas por petición del propietario:
 [manual de Fotos](https://support.apple.com/es-es/guide/photos/pht53854a251/mac)
 y [captura de la fototeca](https://help.apple.com/assets/68CC87B9CAAD76736901E52B/68CC87BBC2E039F703036A8A/en_AU/36444314b8e0804b991e70a9208c3063.png).
 Se adapta la distribución al navegador; no se redistribuyen imágenes, logotipos

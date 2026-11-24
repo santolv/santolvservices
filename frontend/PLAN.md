@@ -6,7 +6,8 @@ Actualizado: 24 de noviembre de 2026.
 
 Crear una galería de fotos y vídeos autohospedada, inspirada en Google Fotos e
 Immich, accesible desde ordenador, móvil y tableta mediante los servidores del
-propietario. La interfaz tendrá identidad visual propia.
+propietario. La interfaz mantiene la marca SantolvPhotos con una distribución
+inspirada en Fotos de Apple para Mac, nueva referencia solicitada por el propietario.
 
 Se utilizará **el mismo sistema de SantolvDrive**:
 
@@ -182,11 +183,15 @@ No se garantizará HEIC, RAW o todos los códecs sin derivados del servidor.
 - [x] Diseñar Fotos, Álbumes, Favoritos, Papelera y Ajustes.
 - [x] Preparar muestras locales con licencia o permiso, sin fotos privadas.
 
-Implementación inicial creada con los colores, medidas y estructura visual de
-SantolvDrive. Incluye visor, favoritos, búsqueda, filtros, álbumes de muestra,
-papelera con restauración y previsualización de imágenes locales en memoria.
-Todavía pendientes: revisión visual/interactiva en navegador de escritorio y
-comprobación de accesibilidad. El navegador integrado rechazó abrir `file://`.
+Primera versión visual de Drive sustituida por la referencia de Fotos de Apple
+para Mac: barra lateral compacta, cuadrícula continua sin tarjetas, herramientas
+flotantes, vistas Años/Meses/Todas las fotos y tamaño variable de miniaturas.
+Incluye visor, favoritos, búsqueda, filtros, álbumes de muestra, papelera con
+restauración y previsualización de imágenes locales en memoria. Hay 20 muestras.
+Revisión visual e interactiva realizada en vista previa HTTP local: navegación
+temporal, búsqueda, filtro de ciudad, visor con teclado, favoritos y temas.
+Sin errores de consola observados. Pendientes: otros navegadores, dispositivos
+reales y revisión completa de accesibilidad.
 Ver `README.md` para uso y `ASSETS.md` para procedencia de recursos.
 
 **Entrega:** interfaz navegable en escritorio y móvil, con datos de demostración

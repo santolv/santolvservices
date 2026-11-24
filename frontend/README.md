@@ -4,14 +4,18 @@ Abre `index.html` en un navegador de escritorio. Funciona como archivo local,
 sin instalación, compilación, framework, conexión a una API ni recursos de CDN.
 Conserva `assets/` junto al HTML para que aparezcan las fotos de muestra.
 
-La estructura, los colores base, la tipografía del sistema, la barra lateral,
-el buscador, los botones, los temas y los iconos siguen el frontend de
-[SantolvDrive](https://github.com/santolv/santolvdrive/tree/b9c19e100e15c85534ede1a38e331411d4d2edad/frontend/pruebahtml).
-La galería, los álbumes y el visor se han adaptado para SantolvPhotos.
+El diseño se inspira en las capturas oficiales de Fotos de Apple para Mac:
+barra lateral compacta, cuadrícula continua de borde a borde, herramientas
+flotantes, vistas temporales y visor sobre fondo oscuro. No se incluyen logotipos
+ni capturas de Apple dentro del producto. La identidad sigue siendo SantolvPhotos.
+La base técnica se conserva de SantolvDrive: HTML/CSS/JavaScript sin framework.
 
 ## Qué puedes probar
 
-- Fotos por fecha, búsqueda por nombre/lugar, filtros y dos densidades de cuadrícula.
+- Veinte fotos locales en una cuadrícula continua, sin tarjetas ni títulos bajo las imágenes.
+- Vistas Años, Meses y Todas las fotos; entrar en un año abre sus meses y en un mes sus fotos.
+- Búsqueda por nombre/lugar, filtros y orden desde el botón de filtros.
+- Ajuste del tamaño de las miniaturas con el deslizador y los botones −/+ en escritorio.
 - Tres álbumes de muestra, favoritos, papelera y restauración.
 - Visor con flechas, Escape, zoom y favoritos.
 - Temas claro/oscuro y preferencia del sistema desde Ajustes.
@@ -32,7 +36,11 @@ El HTML se adapta a ventanas estrechas, sin implementar PWA ni instaladores.
 Ver [ASSETS.md](ASSETS.md) para las fotografías, la referencia de diseño y sus
 fuentes. La licencia de los iconos se conserva en [LUCIDE-LICENSE.txt](LUCIDE-LICENSE.txt).
 
-La comprobación de esta entrega cubre sintaxis JavaScript, referencias locales,
-identificadores HTML y diff de Git. La revisión interactiva en el navegador
-integrado quedó bloqueada porque no admite abrir direcciones `file://`.
-La comprobación visual e interactiva queda pendiente en un navegador de escritorio.
+Esta versión se ha revisado visual e interactivamente mediante una vista previa
+HTTP local en el navegador integrado: años → meses → fotos, búsqueda, filtro de
+ciudad, visor, flecha de teclado, Escape y favoritos; revisión de temas claro y
+oscuro. No se observaron errores de consola ni desbordamiento horizontal en las
+ventanas observadas de 1280 y 347 píxeles. El archivo local sigue funcionando sin
+servidor; HTTP se utilizó solo para la verificación. Sintaxis JavaScript, imágenes,
+referencias locales, identificadores HTML y diff de Git también comprobados.
+Quedan pendientes las pruebas en otros navegadores y dispositivos reales.

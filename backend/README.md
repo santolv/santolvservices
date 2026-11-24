@@ -1,3 +1,9 @@
+> Este backend es compartido por Santolv Services y ahora está en backend/ de
+> santolv/santolvservices. La guía actual de rutas, migración, Fotos y Git está
+> en [../README.md](../README.md). Las rutas por nombre de usuario descritas en
+> las secciones históricas inferiores se migran a usuarios/<UUID>/drive.
+> El servidor incluye Inicio, Drive y Fotos por defecto en el ejecutable.
+
 # SantolvDrive: backend local en Rust
 
 La interfaz incluye un inicio central con accesos a aplicaciones y los recientes reales de la cuenta de Drive. Drive puede abrirse en la pestaña actual o en una nueva. Fotos es un proyecto independiente: «Configurar acceso a Fotos» permite indicar su URL HTTP/HTTPS, guardada por cuenta durante la sesión de la pestaña. Ese enlace no comparte cookies, credenciales ni historial entre aplicaciones. Actualmente SantolvPhotos solo tiene una demo de frontend, sin backend ni servidor HTTP configurado. Documentos y las otras aplicaciones aparecen como próximas; no se simulan datos ni servicios disponibles.
@@ -29,7 +35,7 @@ El instalador solo pide las credenciales iniciales del administrador Drive. Prep
 La API se inicia con `serve --config ...` y escucha en http://localhost:8443. Para conservar la sesión al recargar, iniciar además el listener estático independiente de Rust:
 
 ```powershell
-.\dist\santolvdrive-windows-x64.exe serve --config .\servidor\server.json --frontend ..\frontend\pruebahtml\index.html
+.\dist\santolvdrive-windows-x64.exe serve --config .\servidor\server.json
 ```
 
 Abrir **http://localhost:5500/**. La API nunca entrega HTML: `/` sigue devolviendo JSON y `/index.html` no existe en el puerto de la API. El listener de 5500 solo entrega el HTML elegido, leído una vez al arrancar; tras editarlo hay que reiniciar el servidor. Abrir el archivo con doble clic muestra el enlace a esta interfaz; no guarda tokens para simular cookies en un origen opaco.

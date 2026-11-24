@@ -2,7 +2,7 @@
 use axum::{
     Router,
     body::Body,
-    extract::State,
+    extract::{OriginalUri, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
@@ -13,6 +13,8 @@ use tokio::io::AsyncReadExt;
 #[derive(Clone)]
 pub struct Frontend {
     html: Arc<str>,
+    drive: Option<Arc<str>>,
+    photos: Option<Arc<str>>,
     authority: String,
     api_origin: String,
 }
@@ -22,12 +24,27 @@ impl Frontend {
         origin: &str,
         api_origin: &str,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        let file = tokio::fs::canonicalize(file).await?;
+        if file.extension().and_then(|v| v.to_str()) != Some("html") {
+            return Err("frontend must be an HTML file".into());
+        }
+        Self::from_html(Self::read(&file).await?.into(), origin, api_origin)
+    }
+    fn from_html(
+        html: Arc<str>,
+        origin: &str,
+        api_origin: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let origin = url::Url::parse(origin)?;
         if origin.scheme() != "http"
             || origin.host_str() != Some("localhost")
             || origin.port().is_none()
+            || origin.as_str().trim_end_matches('/') != origin.origin().ascii_serialization()
         {
-            return Err("static frontend requires an explicit HTTP localhost port".into());
+            return Err(
+                "static frontend requires a canonical HTTP localhost origin with explicit port"
+                    .into(),
+            );
         }
         let mut api = url::Url::parse(api_origin)?;
         if api.scheme() != "http"
@@ -35,21 +52,27 @@ impl Frontend {
         {
             return Err("local cookie frontend requires an HTTP loopback API; public HTTPS needs its own deployment configuration".into());
         }
-        // localhost and 127.0.0.1 are different cookie sites, even on the same machine.
         api.set_host(Some("localhost"))?;
-        let file = tokio::fs::canonicalize(file).await?;
-        if file.extension().and_then(|v| v.to_str()) != Some("html") {
-            return Err("frontend must be an HTML file".into());
-        }
-        let s = Self {
-            html: Self::read(&file).await?.into(),
+        Ok(Self {
+            html,
+            drive: None,
+            photos: None,
             authority: origin
                 .as_str()
                 .trim_start_matches("http://")
                 .trim_end_matches('/')
                 .into(),
             api_origin: api.origin().ascii_serialization(),
-        };
+        })
+    }
+    pub fn bundled(origin: &str, api_origin: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut s = Self::from_html(
+            include_str!("../../frontend/index.html").into(),
+            origin,
+            api_origin,
+        )?;
+        s.drive = Some(include_str!("../../santolvdrive/frontend/pruebahtml/index.html").into());
+        s.photos = Some(include_str!("../../santolvphotos/frontend/index.html").into());
         Ok(s)
     }
     async fn read(path: &Path) -> Result<String, std::io::Error> {
@@ -70,10 +93,20 @@ pub fn router(s: Frontend) -> Router {
     Router::new()
         .route("/", get(index))
         .route("/index.html", get(index))
+        .route("/drive", get(index))
+        .route("/drive/", get(index))
+        .route("/drive/index.html", get(index))
+        .route("/photos", get(index))
+        .route("/photos/", get(index))
+        .route("/photos/index.html", get(index))
         .fallback(|| async { StatusCode::NOT_FOUND })
         .with_state(s)
 }
-async fn index(State(s): State<Frontend>, headers: HeaderMap) -> Response {
+async fn index(
+    State(s): State<Frontend>,
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+) -> Response {
     if headers.get_all("host").iter().count() != 1
         || !headers
             .get("host")
@@ -82,7 +115,16 @@ async fn index(State(s): State<Frontend>, headers: HeaderMap) -> Response {
     {
         return StatusCode::FORBIDDEN.into_response();
     }
-    let html = &*s.html;
+    let html = if uri.path().starts_with("/drive") {
+        s.drive.as_deref()
+    } else if uri.path().starts_with("/photos") {
+        s.photos.as_deref()
+    } else {
+        Some(&*s.html)
+    };
+    let Some(html) = html else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
     let nonce = crate::auth::token();
     let html = html.replace(
         "const API_ORIGIN=location.protocol==='https:'?location.origin:'http://localhost:8443';",
@@ -124,6 +166,64 @@ async fn index(State(s): State<Frontend>, headers: HeaderMap) -> Response {
 mod tests {
     use super::*;
     use tower::ServiceExt;
+    #[tokio::test]
+    async fn services_serve_separate_documents_without_exposing_source_files() {
+        let app =
+            router(Frontend::bundled("http://localhost:5500", "http://127.0.0.1:8443").unwrap());
+        for (path, expected, absent) in [
+            ("/", "Elige el servicio", "id=\"navigation\""),
+            ("/drive/", "SantolvDrive", "id=\"periods\""),
+            ("/photos/index.html", "SantolvPhotos", "id=\"navigation\""),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .uri(path)
+                        .header("host", "localhost:5500")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert!(
+                response.headers()["content-security-policy"]
+                    .to_str()
+                    .unwrap()
+                    .contains("script-src 'nonce-")
+            );
+            let body = String::from_utf8(
+                axum::body::to_bytes(response.into_body(), 1024 * 1024)
+                    .await
+                    .unwrap()
+                    .to_vec(),
+            )
+            .unwrap();
+            assert!(body.contains(expected), "{path}");
+            assert!(!body.contains(absent), "{path}");
+        }
+        for path in [
+            "/server.json",
+            "/photos/AGENTS.md",
+            "/drive/../../server.json",
+        ] {
+            assert_eq!(
+                app.clone()
+                    .oneshot(
+                        axum::http::Request::builder()
+                            .uri(path)
+                            .header("host", "localhost:5500")
+                            .body(Body::empty())
+                            .unwrap()
+                    )
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::NOT_FOUND
+            );
+        }
+    }
     #[tokio::test]
     async fn only_the_selected_html_is_public_and_active_scripts_need_a_nonce() {
         let dir = tempfile::tempdir().unwrap();

@@ -70,17 +70,8 @@ pub fn portable_username(value: &str) -> bool {
             && (base.starts_with("com") || base.starts_with("lpt"))
             && base.as_bytes()[3].is_ascii_digit()))
 }
-pub fn user_directory(username: &str, id: Uuid) -> String {
-    if (3..=64).contains(&username.len())
-        && portable_username(username)
-        && username.bytes().all(|b| {
-            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'-' | b'.')
-        })
-    {
-        format!("usuarios/{username}")
-    } else {
-        format!("usuarios_compat/{id}")
-    }
+pub fn user_directory(_username: &str, id: Uuid) -> String {
+    format!("usuarios/{id}/drive")
 }
 pub(crate) async fn private_dir(path: &Path) -> Result<()> {
     match tokio::fs::create_dir(path).await {
@@ -112,11 +103,27 @@ pub(crate) fn unsafe_link(info: &std::fs::Metadata) -> bool {
     }
 }
 pub async fn prepare_space(root: &Path, directory: &str) -> Result<()> {
+    let parts: Vec<_> = directory.split('/').collect();
+    if let ["usuarios", user, service @ ("drive" | "photos")] = parts.as_slice() {
+        if user.parse::<Uuid>().is_err() {
+            return Err(Error::bad("invalid_storage_directory"));
+        }
+        private_dir(&root.join("usuarios")).await?;
+        private_dir(&root.join("usuarios").join(user)).await?;
+        private_dir(&root.join("usuarios").join(user).join(service)).await?;
+        return prepare_contents(root, directory).await;
+    }
     let (branch, component) = directory
         .split_once('/')
         .ok_or_else(|| Error::bad("invalid_storage_directory"))?;
     let valid = match branch {
-        "usuarios" => user_directory(component, Uuid::nil()) == directory,
+        "usuarios" => {
+            (3..=64).contains(&component.len())
+                && portable_username(component)
+                && component.bytes().all(|b| {
+                    b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'-' | b'.')
+                })
+        }
         "usuarios_compat" | "organizaciones" => component.parse::<Uuid>().is_ok(),
         _ => false,
     };
@@ -126,6 +133,10 @@ pub async fn prepare_space(root: &Path, directory: &str) -> Result<()> {
     private_dir(&root.join(branch)).await?;
     let home = root.join(directory);
     private_dir(&home).await?;
+    prepare_contents(root, directory).await
+}
+async fn prepare_contents(root: &Path, directory: &str) -> Result<()> {
+    let home = root.join(directory);
     private_dir(&home.join("archivos")).await?;
     private_dir(&root.join(".temporal")).await?;
     for name in ["cargas", "publicaciones", "movimientos"] {
@@ -608,7 +619,7 @@ mod tests {
     async fn workspaces_are_private_safe_and_legacy_moves_are_resumable() {
         let root = tempfile::tempdir().unwrap();
         let id = Uuid::new_v4();
-        assert_eq!(user_directory("alice", id), "usuarios/alice");
+        assert_eq!(user_directory("alice", id), format!("usuarios/{id}/drive"));
         for invalid in [
             "con",
             "aux.txt",
@@ -617,7 +628,7 @@ mod tests {
             "../escape",
             "legacy@example.com",
         ] {
-            assert_eq!(user_directory(invalid, id), format!("usuarios_compat/{id}"));
+            assert_eq!(user_directory(invalid, id), format!("usuarios/{id}/drive"));
         }
         for invalid in [
             "../escape",

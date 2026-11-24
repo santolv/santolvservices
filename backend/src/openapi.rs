@@ -3,6 +3,24 @@ use serde_json::{Value, json};
 pub fn document() -> Value {
     let mut paths = serde_json::Map::new();
     let definitions = [
+        (
+            "/api/v1/photos/space",
+            "post",
+            "Create or retrieve own Photos space",
+            "",
+        ),
+        (
+            "/api/v1/photos/library",
+            "get",
+            "Own Photos library and albums; 100 items per page; upload dates in UTC",
+            "",
+        ),
+        (
+            "/api/v1/photos/{id}/favorite",
+            "put",
+            "Persist own photo favorite with If-Match revision",
+            "favorite",
+        ),
         ("/health/live", "get", "Liveness", ""),
         ("/health/ready", "get", "Database and disk readiness", ""),
         (
@@ -189,8 +207,8 @@ pub fn document() -> Value {
         if idem {
             p.push(json!({"name":"Idempotency-Key","in":"header","required":true,"description":"1–128 bytes; retained 7 days; same payload replays original result","schema":{"type":"string","maxLength":128}}));
         }
-        if path.starts_with("/api/v1/nodes/")
-            && matches!(method, "patch" | "post")
+        if (path.starts_with("/api/v1/nodes/") && matches!(method, "patch" | "post")
+            || path == "/api/v1/photos/{id}/favorite")
             && !path.contains("grants")
             && !path.ends_with("touch")
         {
@@ -204,6 +222,7 @@ pub fn document() -> Value {
                 || path.ends_with("/shared")
                 || path.ends_with("/members")
                 || path == "/api/v1/spaces"
+                || path == "/api/v1/photos/library"
                 || path.ends_with("/grants"))
         {
             p.push(json!({"name":"after","in":"query","schema":json!({"type":"string","format":"uuid"})}));
@@ -249,6 +268,7 @@ pub fn document() -> Value {
                     || f == "local_file"
                     || f == "move_to_root"
                     || f == "disabled"
+                    || f == "favorite"
                 {
                     json!({"type":"boolean","default":false})
                 } else if f.ends_with("_id") {
@@ -265,7 +285,7 @@ pub fn document() -> Value {
         }
         paths.entry(path.to_owned()).or_insert_with(|| json!({}))[method] = op;
     }
-    json!({"openapi":"3.0.3","info":{"title":"SantolvDrive","version":"0.1.0","description":"Local storage backend listening only on loopback. Drive sessions are required for protected operations. Cookies require CSRF for writes. Role 1 reader, 2 editor, 3 manager. Members see all space contents; external grants are additive and inherited. See README for deployment guarantees."},"paths":paths,"components":{"securitySchemes":{"cookieAuth":{"type":"apiKey","in":"cookie","name":"drive_session"},"bearerAuth":{"type":"http","scheme":"bearer"}}}})
+    json!({"openapi":"3.0.3","info":{"title":"Santolv Services","version":"0.1.0","description":"Local storage backend listening only on loopback. Drive sessions are required for protected operations. Cookies require CSRF for writes. Role 1 reader, 2 editor, 3 manager. Members see all space contents; external grants are additive and inherited. See README for deployment guarantees."},"paths":paths,"components":{"securitySchemes":{"cookieAuth":{"type":"apiKey","in":"cookie","name":"drive_session"},"bearerAuth":{"type":"http","scheme":"bearer"}}}})
 }
 #[cfg(test)]
 mod tests {

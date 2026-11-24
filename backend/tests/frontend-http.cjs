@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const root=path.resolve('target/independent-frontend-test');fs.mkdirSync(root,{recursive:true});
 const pg=path.join(process.env.POSTGRES_BIN||'C:/Users/Santi/AppData/Local/Temp/santolvdrive-postgresql/pgsql/bin',process.platform==='win32'?'psql.exe':'psql');
-const exe=path.resolve('target/debug/'+(process.platform==='win32'?'santolvdrive.exe':'santolvdrive'));
+const exe=path.resolve(process.env.CARGO_TARGET_DIR||'target','debug/'+(process.platform==='win32'?'santolvdrive.exe':'santolvdrive'));
 const pgPort=process.env.TEST_POSTGRES_PORT||'5432';
 const db='drive_file_'+crypto.randomBytes(5).toString('hex'),api='http://localhost:19843',password=crypto.randomBytes(20).toString('hex');let backend;
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
@@ -15,9 +15,14 @@ async function main(){
  const cli=(args,input)=>{const result=cp.spawnSync(exe,[...args,'--config',config],{windowsHide:true,input:input?JSON.stringify(input):undefined,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return JSON.parse(result.stdout)};
  cli(['users','create','--stdin'],{username:'file-user',password});
  const users=cli(['users','list']);assert.equal(users.items.length,1);assert.equal(users.items[0].username,'file-user');assert(!users.items[0].password_hash);
- backend=cp.spawn(exe,['serve','--config',config,'--frontend',path.resolve('../frontend/pruebahtml/index.html')],{windowsHide:true,stdio:'ignore'});
+ backend=cp.spawn(exe,['serve','--config',config,...(process.env.TEST_SERVICES?[]:['--frontend',path.resolve('../santolvdrive/frontend/pruebahtml/index.html')])],{windowsHide:true,stdio:'ignore'});
  let ready=false;for(let i=0;i<80;i++){try{if((await fetch(api+'/health/live')).ok){ready=true;break}}catch{}await pause(100)}assert(ready);
  const page=await fetch('http://localhost:15500/');assert.equal(page.status,200);const pageHtml=await page.text();assert(pageHtml.includes('nonce="'));assert(pageHtml.includes(api));assert(page.headers.get('content-security-policy').includes("frame-ancestors 'none'"));
+ if(process.env.TEST_SERVICES){
+   assert(pageHtml.includes('id="services"'));assert(!pageHtml.includes('id="navigation"'));
+   for(const [route,title] of [['drive/','SantolvDrive'],['photos/','SantolvPhotos']]){const r=await fetch('http://localhost:15500/'+route);assert.equal(r.status,200);assert((await r.text()).includes(title))}
+   assert.equal((await fetch('http://localhost:15500/photos/server.json')).status,404);
+ }
  const rootResponse=await fetch(api+'/');assert(rootResponse.headers.get('content-type').includes('application/json'));assert.equal((await fetch(api+'/index.html')).status,404);
  const preflight=await fetch(api+'/api/v1/auth/login',{method:'OPTIONS',headers:{Origin:'null','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,authorization'}});
  assert.equal(preflight.headers.get('access-control-allow-origin'),null);assert.equal(preflight.headers.get('access-control-allow-credentials'),null);
@@ -40,13 +45,13 @@ async function main(){
  assert.equal((await fetch(api+'/api/v1/uploads/'+upload.id+'/content',{method:'PATCH',headers:{...headers,'Content-Type':'application/octet-stream','Upload-Offset':'0','X-Chunk-SHA256':sha256},body:payload})).status,200);
  assert.equal((await fetch(api+'/api/v1/uploads/'+upload.id+'/complete',{method:'POST',headers})).status,202);
  let status;for(let i=0;i<80;i++){status=await (await fetch(api+'/api/v1/uploads/'+upload.id,{headers})).json();if(status.state==='ready'&&!status.storage_pending)break;await pause(100)}assert.equal(status.state,'ready');
- const saved=path.join(root,'data','usuarios','file-user','archivos','informe ñ.custom','informe ñ.custom');assert.deepEqual(fs.readFileSync(saved),payload);
+ const saved=path.join(root,'data','usuarios',users.items[0].id,'drive','archivos','informe ñ.custom','informe ñ.custom');assert.deepEqual(fs.readFileSync(saved),payload);
  const downloaded=await fetch(api+'/api/v1/nodes/'+status.result_node+'/content',{headers});assert.equal(downloaded.status,200);assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),payload);
  assert(downloaded.headers.get('content-disposition').includes("filename*=UTF-8''informe%20%C3%B1.custom"));
  assert.equal((await fetch(api+'/api/v1/nodes/'+status.result_node+'/touch',{method:'POST',headers})).status,204);
  const recent=await (await fetch(api+'/api/v1/recent',{headers})).json();assert.equal(recent.items[0].id,status.result_node);assert.equal(recent.items.length,1);
- const archive=path.join(root,'data','usuarios','file-user','.versions',upload.id,'informe ñ.custom');assert(!fs.existsSync(archive));assert(!fs.existsSync(path.join(path.dirname(saved),'.drive-node')));
- const trashed=path.join(root,'data','usuarios','file-user','papelera','informe ñ.custom','informe ñ.custom');
+ const archive=path.join(root,'data','usuarios',users.items[0].id,'drive','.versions',upload.id,'informe ñ.custom');assert(!fs.existsSync(archive));assert(!fs.existsSync(path.join(path.dirname(saved),'.drive-node')));
+ const trashed=path.join(root,'data','usuarios',users.items[0].id,'drive','papelera','informe ñ.custom','informe ñ.custom');
  const nodePath=api+'/api/v1/nodes/'+status.result_node;
  const mutateHeaders={...headers,'Idempotency-Key':crypto.randomUUID(),'If-Match':'"1"'};
  assert.equal((await fetch(nodePath+'/trash',{method:'POST',headers:mutateHeaders})).status,200);

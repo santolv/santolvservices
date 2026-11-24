@@ -1,3 +1,25 @@
+# Estado actual: integración en Santolv Services
+
+Actualización del 24 de noviembre de 2026: el propietario ha autorizado la fase
+backend. El plan histórico inferior describe la maqueta inicial y queda como
+referencia; sus restricciones de demo y repositorio independiente están superadas.
+
+- [x] Backend compartido Rust en ../../backend; interfaces separadas.
+- [x] Menú central y sesión HttpOnly/CSRF común.
+- [x] Almacenamiento usuarios/<UUID>/photos separado de Drive.
+- [x] Subida real por bloques con integridad y confirmación durable.
+- [x] Biblioteca paginada, originales autenticados, favoritos y álbumes persistentes.
+- [x] Papelera y restauración mediante el motor de Drive.
+- [x] Fechas de subida explícitas y búsqueda sobre elementos cargados.
+- [ ] Miniaturas derivadas, EXIF, vídeo y clientes móviles.
+- [ ] Reanudación de la cola de Fotos tras cerrar la pestaña.
+- [ ] Renombrar álbumes y organizar fotos ya subidas desde la interfaz de Fotos.
+
+Repositorio activo: santolv/santolvservices; conservar el historial importado.
+Consulta ../../README.md para ejecución, migración y comprobaciones actuales.
+
+---
+
 # SantolvPhotos: plan de interfaz multiplataforma
 
 Actualizado: 24 de noviembre de 2026.

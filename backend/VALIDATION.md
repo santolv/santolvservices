@@ -1,3 +1,27 @@
+# Integración central — 24 de noviembre de 2026
+
+Backend trasladado a la raíz del repositorio sin duplicar su motor. Comprobaciones
+de esta entrega, realizadas sobre PostgreSQL temporal independiente del servidor
+instalado:
+
+- `cargo fmt --check` y `cargo clippy --locked --all-targets -- -D warnings`: pasan.
+- `cargo test --locked -- --test-threads=2`: 52 pruebas pasan; tres pruebas de
+  instalación y una de carga permanecen ignoradas por su configuración original.
+- Clientes de Drive y Fotos en Node: pasan credenciales, CSRF, revisiones,
+  transferencias binarias y actualización del estado tras confirmación.
+- Ensayo HTTP con Drive individual y con Inicio/Drive/Fotos: ambos pasan.
+- Navegador: acceso común, selector sin herramientas de los servicios, creación
+  de álbum, subida de muestra, visor, favorito tras recargar, papelera,
+  restauración y paso a Drive con la misma sesión; sin errores de consola.
+- Migración ensayada con nombres reales: conservación de bytes, reanudación tras
+  cambio de directorio y rechazo de colisiones sin sobrescritura.
+
+No se ha migrado ni reiniciado la instalación del usuario. Las pruebas no incluyen
+dispositivos móviles reales, miniaturas derivadas, EXIF ni vídeo. Los informes
+inferiores corresponden a verificaciones anteriores de Drive.
+
+---
+
 # Validación del backend local — 21 de noviembre de 2026
 
 La aplicación funciona por defecto en http://127.0.0.1:8443, únicamente desde el propio equipo. La instalación solo prepara PostgreSQL y la cuenta administrativa local. Se retiraron los módulos, comandos, campos de configuración, credenciales requeridas, supervisión y descargas de conectores externos. El descargador solo admite el host oficial EDB para el PostgreSQL portable. No cambió el esquema SQL ni se eliminaron datos.

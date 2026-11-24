@@ -130,6 +130,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             santolvdrive::frontend::router(view),
             shutdown(),
         )))
+    } else if config.app_origin.starts_with("http://") {
+        let view =
+            santolvdrive::frontend::Frontend::bundled(&config.frontend_origin, &config.app_origin)?;
+        let origin = url::Url::parse(&config.frontend_origin)?;
+        let socket = tokio::net::TcpListener::bind((
+            std::net::Ipv4Addr::LOCALHOST,
+            origin.port().ok_or("frontend requires a port")?,
+        ))
+        .await?;
+        println!("Servicios: {}", config.frontend_origin);
+        Some(tokio::spawn(santolvdrive::tls::serve_http(
+            socket,
+            santolvdrive::frontend::router(view),
+            shutdown(),
+        )))
     } else {
         None
     };

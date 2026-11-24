@@ -217,7 +217,7 @@ pub async fn spaces(
     u: User,
     Query(q): Query<VersionQuery>,
 ) -> Result<Json<Value>> {
-    let v:Vec<Value>=sqlx::query_scalar("SELECT (to_jsonb(s)-'storage_directory'-'storage_removed'-'deleted_at')||jsonb_build_object('storage_pending',EXISTS(SELECT 1 FROM workspace_jobs j WHERE j.space_id=s.id AND NOT j.audit)) FROM spaces s JOIN members m ON m.space_id=s.id WHERE m.user_id=$1 AND s.deleted_at IS NULL AND ($2::uuid IS NULL OR s.id>$2) ORDER BY s.id LIMIT 101").bind(u.id).bind(q.after).fetch_all(&s.db).await?;
+    let v:Vec<Value>=sqlx::query_scalar("SELECT (to_jsonb(s)-'storage_directory'-'legacy_storage_directory'-'storage_removed'-'deleted_at')||jsonb_build_object('storage_pending',EXISTS(SELECT 1 FROM workspace_jobs j WHERE j.space_id=s.id AND NOT j.audit)) FROM spaces s JOIN members m ON m.space_id=s.id WHERE m.user_id=$1 AND s.service='drive' AND s.deleted_at IS NULL AND ($2::uuid IS NULL OR s.id>$2) ORDER BY s.id LIMIT 101").bind(u.id).bind(q.after).fetch_all(&s.db).await?;
     Ok(page(v, "id"))
 }
 pub async fn shared(
@@ -325,7 +325,7 @@ pub async fn recent(
         None => (i64::MAX, Uuid::max()),
     };
     let mut tx = s.db.begin().await?;
-    let rows=sqlx::query("SELECT node_id,used_at FROM recent_nodes WHERE user_id=$1 AND (used_at,node_id)<($2,$3) ORDER BY used_at DESC,node_id DESC LIMIT 101").bind(u.id).bind(stamp).bind(id).fetch_all(&mut *tx).await?;
+    let rows=sqlx::query("SELECT r.node_id,r.used_at FROM recent_nodes r JOIN nodes n ON n.id=r.node_id JOIN spaces s ON s.id=n.space_id WHERE r.user_id=$1 AND s.service='drive' AND (used_at,node_id)<($2,$3) ORDER BY used_at DESC,node_id DESC LIMIT 101").bind(u.id).bind(stamp).bind(id).fetch_all(&mut *tx).await?;
     let next = if rows.len() > 100 {
         Some(format!(
             "{}:{}",

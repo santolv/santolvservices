@@ -1,0 +1,7 @@
+/santolvdrive/backend/
+/backend/target/
+/backend/dist/
+/backend/servidor/
+/data/
+.env
+*.log

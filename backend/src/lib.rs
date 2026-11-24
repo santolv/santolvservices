@@ -8,8 +8,10 @@ pub mod installer;
 pub mod limits;
 pub mod openapi;
 pub mod permissions;
+pub mod photos;
 pub mod postgres;
 pub mod provisioning;
+pub mod services;
 pub mod storage;
 pub mod tls;
 pub mod uploads;
@@ -114,7 +116,7 @@ impl App {
                 crate::permissions::private_directory(dir)?;
             }
         }
-        Ok(Self {
+        let app = Self {
             journal: Self::journal_pool(&db),
             db,
             root,
@@ -127,7 +129,9 @@ impl App {
             quota,
             requests: Arc::new(Semaphore::new(128)),
             retention_days,
-        })
+        };
+        services::migrate_storage(&app).await?;
+        Ok(app)
     }
 }
 pub fn router(s: App) -> Router {
@@ -180,6 +184,12 @@ pub fn router(s: App) -> Router {
         .route("/api/v1/auth/logout", post(auth::logout))
         .route("/api/v1/auth/password", post(auth::change_password))
         .route("/api/v1/me", get(auth::me))
+        .route("/api/v1/photos/library", get(photos::library))
+        .route("/api/v1/photos/space", post(photos::space))
+        .route(
+            "/api/v1/photos/{id}/favorite",
+            axum::routing::put(photos::favorite),
+        )
         .route("/api/v1/shared", get(files::shared))
         .route("/api/v1/recent", get(files::recent))
         .route("/api/v1/nodes/{id}/touch", post(files::touch))

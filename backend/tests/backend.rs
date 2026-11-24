@@ -12,6 +12,245 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 #[sqlx::test]
+async fn photos_share_sessions_but_isolate_storage_and_persist_favorites(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let a = h.account("photo-owner").await;
+    let b = h.account("photo-other").await;
+    let (status, created) = h
+        .json(
+            "POST",
+            "/api/v1/photos/space",
+            Some(&a.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let space = id(&created, "id");
+    let (_, again) = h
+        .json(
+            "POST",
+            "/api/v1/photos/space",
+            Some(&a.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    assert_eq!(again, created);
+    let directory: String = sqlx::query_scalar("SELECT storage_directory FROM spaces WHERE id=$1")
+        .bind(space)
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(directory, format!("usuarios/{}/photos", a.id));
+    assert!(h.app.root.join(&directory).join("archivos").is_dir());
+    let photo_account = Account {
+        id: a.id,
+        space,
+        token: a.token.clone(),
+        username: a.username.clone(),
+    };
+    let upload = h
+        .start(
+            &photo_account,
+            "original.jpg",
+            b"abc",
+            "photo-upload",
+            None,
+            None,
+            "\"1\"",
+        )
+        .await;
+    assert_eq!(
+        h.chunk(&photo_account, upload, 0, b"abc", true).await,
+        StatusCode::OK
+    );
+    let (status, done) = h.complete(&photo_account, upload).await;
+    assert_eq!(status, StatusCode::OK);
+    let node = id(&done, "id");
+    let favorite = format!("/api/v1/photos/{node}/favorite");
+    assert_eq!(
+        h.json(
+            "PUT",
+            &favorite,
+            Some(&b.token),
+            &[("if-match", "\"1\"")],
+            json!({"favorite":true})
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        h.json(
+            "PUT",
+            &favorite,
+            Some(&a.token),
+            &[("if-match", "\"1\"")],
+            json!({"favorite":true})
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        h.json(
+            "PUT",
+            &favorite,
+            Some(&a.token),
+            &[("if-match", "\"1\"")],
+            json!({"favorite":false})
+        )
+        .await
+        .0,
+        StatusCode::PRECONDITION_FAILED
+    );
+    let (_, library) = h
+        .json(
+            "GET",
+            "/api/v1/photos/library",
+            Some(&a.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    assert_eq!(library["items"][0]["id"], node.to_string());
+    assert_eq!(library["items"][0]["favorite"], true);
+    let (_, other) = h
+        .json(
+            "GET",
+            "/api/v1/photos/library",
+            Some(&b.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    assert!(other["items"].as_array().unwrap().is_empty());
+    let (_, drive) = h
+        .json("GET", "/api/v1/spaces", Some(&a.token), &[], json!({}))
+        .await;
+    assert_eq!(drive["items"].as_array().unwrap().len(), 1);
+    assert!(drive["items"][0].get("legacy_storage_directory").is_none());
+    let (_, recent) = h
+        .json("GET", "/api/v1/recent", Some(&a.token), &[], json!({}))
+        .await;
+    assert!(recent["items"].as_array().unwrap().is_empty());
+    assert_eq!(
+        h.json(
+            "POST",
+            &format!("/api/v1/nodes/{node}/trash"),
+            Some(&a.token),
+            &[("if-match", "\"2\""), ("idempotency-key", "photo-trash")],
+            json!({})
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (_, trash) = h
+        .json(
+            "GET",
+            "/api/v1/photos/library",
+            Some(&a.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    assert_eq!(trash["items"][0]["deleted"], true);
+    assert_eq!(
+        h.json(
+            "POST",
+            &format!("/api/v1/nodes/{node}/restore"),
+            Some(&a.token),
+            &[("if-match", "\"3\""), ("idempotency-key", "photo-restore")],
+            json!({})
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, _, bytes) = h
+        .req(
+            "GET",
+            &format!("/api/v1/nodes/{node}/content"),
+            Some(&a.token),
+            &[],
+            Body::empty(),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bytes, b"abc");
+}
+
+#[sqlx::test]
+async fn service_storage_migration_preserves_names_resumes_and_refuses_collisions(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let a = h.account("migrate-user").await;
+    let new = storage::user_directory(&a.username, a.id);
+    let old = "usuarios/migrate-user";
+    let relative = "archivos/Recuerdos";
+    tokio::fs::create_dir(h.app.root.join(&new).join(relative))
+        .await
+        .unwrap();
+    tokio::fs::write(
+        h.app.root.join(&new).join(relative).join("foto.jpg"),
+        b"original",
+    )
+    .await
+    .unwrap();
+    tokio::fs::rename(h.app.root.join(&new), h.app.root.join(old))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE spaces SET legacy_storage_directory=$1 WHERE id=$2")
+        .bind(old)
+        .bind(a.space)
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    santolvdrive::services::migrate_storage(&h.app)
+        .await
+        .unwrap();
+    assert_eq!(
+        tokio::fs::read(h.app.root.join(&new).join(relative).join("foto.jpg"))
+            .await
+            .unwrap(),
+        b"original"
+    );
+    assert!(!h.app.root.join(old).exists());
+    // Simulate interruption after the filesystem rename and before the SQL commit.
+    sqlx::query("UPDATE spaces SET legacy_storage_directory=$1 WHERE id=$2")
+        .bind(old)
+        .bind(a.space)
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    santolvdrive::services::migrate_storage(&h.app)
+        .await
+        .unwrap();
+    storage::prepare_space(&h.app.root, old).await.unwrap();
+    tokio::fs::write(h.app.root.join(old).join("keep.txt"), b"keep")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE spaces SET legacy_storage_directory=$1 WHERE id=$2")
+        .bind(old)
+        .bind(a.space)
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    assert!(
+        santolvdrive::services::migrate_storage(&h.app)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        tokio::fs::read(h.app.root.join(old).join("keep.txt"))
+            .await
+            .unwrap(),
+        b"keep"
+    );
+}
+
+#[sqlx::test]
 async fn reserved_journal_survives_exhausted_application_pool(pool: PgPool) {
     let journal = App::journal_pool(&pool);
     let mut held = Vec::new();
@@ -220,7 +459,8 @@ async fn first_publication_recovers_after_bytes_moved_before_metadata_commit(poo
     let path = h
         .app
         .root
-        .join("usuarios/publication-user/archivos/original.bin");
+        .join(storage::user_directory("", a.id))
+        .join("archivos/original.bin");
     // The disk already contains the final bytes, but the main transaction never recorded its entry.
     sqlx::query("DELETE FROM workspace_entries WHERE node_id=$1")
         .bind(node)
@@ -687,7 +927,8 @@ async fn workspace_owner_can_delete_contents_and_pending_uploads_durably(pool: P
     assert!(
         h.app
             .root
-            .join("usuarios/space-owner/archivos/Conservar")
+            .join(storage::user_directory("", owner.id))
+            .join("archivos/Conservar")
             .is_dir()
     );
     assert_eq!(
@@ -2525,10 +2766,7 @@ async fn migration_keeps_existing_accounts_and_content(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(
-        directory,
-        storage::user_directory("legacy@example.com", user)
-    );
+    assert_eq!(directory, format!("usuarios_compat/{user}"));
     assert!(
         sqlx::query("UPDATE spaces SET storage_directory='../outside' WHERE id=$1")
             .bind(space)
@@ -2584,7 +2822,7 @@ async fn user_storage_isolated_shared_edits_and_legacy_content_survive(pool: PgP
     let h = Harness::new(pool).await;
     let a = h.account("alice").await;
     let b = h.account("bob").await;
-    let directory = format!("usuarios/{}", a.username);
+    let directory = storage::user_directory(&a.username, a.id);
     assert!(h.app.root.join(&directory).join("archivos").is_dir());
     assert!(!h.app.root.join("usuarios/bob/.uploads").exists());
     assert!(!h.app.root.join("usuarios/director").exists());
@@ -2902,7 +3140,11 @@ async fn permanent_delete_removes_named_content_only_after_last_reference(pool: 
 async fn named_workspace_folders_files_rename_move_and_restore(pool: PgPool) {
     let h = Harness::new(pool).await;
     let a = h.account("named-owner").await;
-    let root = h.app.root.join("usuarios/named-owner/archivos");
+    let root = h
+        .app
+        .root
+        .join(storage::user_directory("", a.id))
+        .join("archivos");
     let work = h.folder(&a, None, "Trabajo", "work").await;
     let child = h.folder(&a, Some(work), "Proyectos", "child").await;
     assert!(root.join("Trabajo/Proyectos").is_dir());
@@ -2996,7 +3238,8 @@ async fn named_workspace_folders_files_rename_move_and_restore(pool: PgPool) {
     assert!(
         h.app
             .root
-            .join("usuarios/named-owner/papelera/Trabajo/Proyectos 2026")
+            .join(storage::user_directory("", a.id))
+            .join("papelera/Trabajo/Proyectos 2026")
             .exists()
     );
     assert_eq!(
@@ -3192,7 +3435,13 @@ async fn named_workspace_folders_files_rename_move_and_restore(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(count, 1);
-    assert!(!h.app.root.join("usuarios/named-owner/.versions").exists());
+    assert!(
+        !h.app
+            .root
+            .join(storage::user_directory("", a.id))
+            .join(".versions")
+            .exists()
+    );
     assert!(!current.parent().unwrap().join(".drive-node").exists());
     assert!(current.parent().unwrap().join("analisis.json").exists());
     let long = "Carpeta".repeat(13);
@@ -3206,7 +3455,11 @@ async fn named_workspace_folders_files_rename_move_and_restore(pool: PgPool) {
 async fn named_workspace_does_not_overwrite_unmanaged_directories(pool: PgPool) {
     let h = Harness::new(pool).await;
     let a = h.account("collision-owner").await;
-    let root = h.app.root.join("usuarios/collision-owner/archivos");
+    let root = h
+        .app
+        .root
+        .join(storage::user_directory("", a.id))
+        .join("archivos");
     tokio::fs::create_dir(root.join("Ocupada")).await.unwrap();
     tokio::fs::write(root.join("Ocupada/keep.txt"), b"untouched")
         .await
@@ -3277,7 +3530,7 @@ async fn simple_storage_adopts_legacy_copy_and_trash_names_are_distinct(pool: Pg
     );
     let (_, created) = h.complete(&a, upload).await;
     let node = id(&created, "id");
-    let home = h.app.root.join("usuarios/simple-owner");
+    let home = h.app.root.join(storage::user_directory("", a.id));
     let live = home.join("archivos/original.pdf/original.pdf");
     // Simulate the preceding release's archive plus independent working copy.
     let legacy = home.join(".versions").join(upload.to_string());
@@ -3291,7 +3544,7 @@ async fn simple_storage_adopts_legacy_copy_and_trash_names_are_distinct(pool: Pg
     santolvdrive::workspace::sync_node(&h.app, node)
         .await
         .unwrap();
-    storage::prepare_space(&h.app.root, "usuarios/simple-owner")
+    storage::prepare_space(&h.app.root, &storage::user_directory("", a.id))
         .await
         .unwrap();
     assert_eq!(tokio::fs::read(&live).await.unwrap(), b"pdf content");

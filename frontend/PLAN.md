@@ -20,7 +20,10 @@ La aclaración del propietario autoriza HTML, CSS y JavaScript para la interfaz.
 El requisito de Rust corresponde al backend. No hace falta volver a pedir permiso
 por esos lenguajes. Otros lenguajes o un cambio importante de sistema sí se consultarán.
 
-El trabajo inmediato sigue siendo la interfaz de `frontend/`. Aquí se documenta
+El trabajo inmediato es el HTML base de la interfaz web/de PC en navegador de
+`frontend/`. El propietario decidirá después la interfaz móvil y las aplicaciones
+descargables; las secciones PWA y clientes de este plan son posibilidades futuras,
+no tecnologías elegidas para esta entrega. Aquí se documenta
 también cómo encaja en el producto completo y qué funcionalidades dependerán del
 servidor, pero no se implementa ni se detalla todavía un plan interno del backend.
 No se necesita Leptos, Trunk, WebAssembly, React, Vue, TypeScript ni un gestor npm
@@ -66,7 +69,8 @@ recursos concretos. No se expondrá una carpeta arbitraria del disco.
 ## Qué significa multiplataforma
 
 La primera entrega será una web adaptable compartida por todas las plataformas.
-Posteriormente podrá instalarse como PWA donde el sistema y navegador lo permitan.
+Una posible evolución es instalarla como PWA donde el sistema y navegador lo
+permitan, pendiente de la decisión del propietario.
 Instalar una PWA no convierte la web en un cliente nativo de sincronización.
 
 | Plataforma | Primera entrega | Evolución prevista | Verificación |
@@ -173,10 +177,17 @@ No se garantizará HEIC, RAW o todos los códecs sin derivados del servidor.
 
 ### 1. Estructura visual adaptable
 
-- [ ] Crear `frontend/index.html`, menú, cabecera, navegación y estilos comunes.
-- [ ] Preparar temas claro/oscuro, diálogos, menús y notificaciones.
-- [ ] Diseñar Fotos, Álbumes, Favoritos, Papelera y Ajustes.
-- [ ] Preparar muestras locales con licencia o permiso, sin fotos privadas.
+- [x] Crear `frontend/index.html`, menú, cabecera, navegación y estilos comunes.
+- [x] Preparar temas claro/oscuro, diálogos, navegación y notificaciones.
+- [x] Diseñar Fotos, Álbumes, Favoritos, Papelera y Ajustes.
+- [x] Preparar muestras locales con licencia o permiso, sin fotos privadas.
+
+Implementación inicial creada con los colores, medidas y estructura visual de
+SantolvDrive. Incluye visor, favoritos, búsqueda, filtros, álbumes de muestra,
+papelera con restauración y previsualización de imágenes locales en memoria.
+Todavía pendientes: revisión visual/interactiva en navegador de escritorio y
+comprobación de accesibilidad. El navegador integrado rechazó abrir `file://`.
+Ver `README.md` para uso y `ASSETS.md` para procedencia de recursos.
 
 **Entrega:** interfaz navegable en escritorio y móvil, con datos de demostración
 identificados, sin desbordamiento horizontal y utilizable mediante teclado.
@@ -300,7 +311,9 @@ frontend/
 backend/                     # Reservado para la fase de implementación Rust
 ```
 
-La organización es prevista. Este trabajo solo modifica documentación.
+Ya existen el HTML base, las fotografías de muestra, sus fuentes y las
+instrucciones. El manifiesto y el service worker no se crean: las aplicaciones
+instalables y la interfaz móvil se decidirán más adelante.
 
 ## Comprobación y flujo de entrega
 

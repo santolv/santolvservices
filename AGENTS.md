@@ -5,9 +5,10 @@
   HTML, CSS y JavaScript propios, sin framework ni compilación WASM.
   No volver a pedir permiso por estos lenguajes o por SVG/JSON necesarios para la web.
 - Consultar antes de introducir otros lenguajes o cambiar sustancialmente este sistema.
-- El alcance actual es el plan multiplataforma dentro de `frontend/PLAN.md`,
-  centrado en la interfaz y con las dependencias futuras del servidor identificadas.
-  No desarrollar el backend ni implementar la interfaz hasta recibir esa petición.
+- El alcance actual es implementar el HTML base de la interfaz web/de PC en
+  `frontend/index.html`, siguiendo el diseño de SantolvDrive y `frontend/PLAN.md`.
+  El backend no se desarrolla en esta fase. La interfaz móvil y las aplicaciones
+  descargables quedan pendientes de que el propietario decida su tecnología.
 - Usar `https://github.com/santolv/santolvdrive` como referencia técnica, comprobando
   el código real y distinguiendo las dependencias del servidor de las del navegador.
 - Mantener el plan actualizado al completar cada fase o cambiar una decisión.

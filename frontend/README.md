@@ -42,6 +42,17 @@ Se desactivan cuando el sistema indica `prefers-reduced-motion: reduce`; la
 navegación, los filtros y los diálogos siguen funcionando sin movimiento.
 La entrada escalonada se limita a un máximo de 24 elementos visibles.
 
+Los detalles de Liquid Glass incluyen una lente que se desliza entre Años,
+Meses y Todas las fotos, y una segunda lente que sigue la opción señalada o con
+foco. El selector también admite flechas izquierda/derecha, Inicio y Fin.
+Las lentes recalculan su posición al cambiar de vista, de tamaño o de tipografía.
+
+Al pasar el cursor sobre una foto, o enfocarla con el teclado, aparece una tarjeta
+de cristal con nombre, fecha y lugar de muestra. Se oculta durante la selección
+múltiple y no se exige hover en dispositivos táctiles. Los controles incluyen
+reflejos suaves y ayudas flotantes; las colecciones y la navegación responden
+con pequeños movimientos. No se añaden animaciones continuas en reposo.
+
 Las fechas, nombres y colecciones son ficticios. Solo el tema se guarda en
 localStorage; favoritos, papelera e imágenes añadidas se reinician al recargar.
 No existe autenticación, subida al servidor, almacenamiento remoto ni backup.
@@ -75,3 +86,8 @@ el contador y los contornos de selección, y papelera de grupo → Deshacer
 (20 → 18 → 20 fotos). En escritorio a 1280 píxeles, la barra de herramientas,
 el título/fecha y la cuadrícula quedan separados y no hay desbordamiento horizontal.
 El desenfoque efectivo de los controles es de 26 píxeles con saturación del 180 %.
+
+En la entrega de microinteracciones se comprobaron la tarjeta de detalles, las
+ayudas de controles, la navegación Años → Meses → Todas las fotos con ratón y
+teclado y la alineación de la lente con el botón activo (4 px en Años y 123 px
+en Todas las fotos en la ventana de prueba). Sin errores de consola observados.

@@ -220,6 +220,17 @@ Adaptación visual a las capturas de iCloud Photos:
 Las capturas son referencias de composición; no se incorporan como recursos ni
 se publica su contenido. La interfaz sigue siendo una demo local sin API.
 
+Microinteracciones añadidas sobre la misma distribución:
+
+- [x] Lente Liquid Glass deslizante para la opción temporal seleccionada.
+- [x] Lente de anticipación al señalar o enfocar Años, Meses o Todas las fotos.
+- [x] Nombre, fecha y lugar en una tarjeta de cristal al señalar/enfocar una foto.
+- [x] Reflejos en controles, ayudas flotantes y respuesta de navegación y colecciones.
+- [x] Navegación del selector con flechas, Inicio y Fin; reajuste de lentes al redimensionar.
+
+Se mantienen las alternativas de movimiento reducido y acceso por teclado.
+Las posiciones del selector y la ausencia de errores se comprobaron en navegador.
+
 **Entrega:** interfaz navegable en escritorio y móvil, con datos de demostración
 identificados, sin desbordamiento horizontal y utilizable mediante teclado.
 

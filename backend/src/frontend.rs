@@ -171,7 +171,7 @@ mod tests {
         let app =
             router(Frontend::bundled("http://localhost:5500", "http://127.0.0.1:8443").unwrap());
         for (path, expected, absent) in [
-            ("/", "Elige el servicio", "id=\"navigation\""),
+            ("/", "Elige una app", "id=\"navigation\""),
             ("/drive/", "SantolvDrive", "id=\"periods\""),
             ("/photos/index.html", "SantolvPhotos", "id=\"navigation\""),
         ] {

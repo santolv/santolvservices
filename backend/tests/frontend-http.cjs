@@ -57,7 +57,10 @@ async function main(){
  const purge=await fetch(nodePath+'/purge',{method:'POST',headers:{...headers,'If-Match':'"4"'}});assert.equal(purge.status,202);assert.equal(await purge.text(),'');
  trashList=await (await fetch(api+'/api/v1/spaces/'+spaces.items[0].id+'/nodes?trash=true',{headers})).json();assert(!trashList.items.some(n=>n.id===status.result_node));
  for(let i=0;i<180&&(fs.existsSync(archive)||fs.existsSync(trashed));i++)await pause(100);assert(!fs.existsSync(archive));assert(!fs.existsSync(trashed));assert(!fs.existsSync(path.dirname(saved)));
- const afterDeletion=await (await fetch(api+'/api/v1/spaces',{headers})).json();assert.equal(Number(afterDeletion.items[0].used_bytes),0);
+ // Physical removal can become visible just before the worker commits quota release.
+ let afterDeletion;
+ for(let i=0;i<100;i++){afterDeletion=await (await fetch(api+'/api/v1/spaces',{headers})).json();if(Number(afterDeletion.items[0].used_bytes)===0)break;await pause(100)}
+ assert.equal(Number(afterDeletion.items[0].used_bytes),0);
  const orgResponse=await fetch(api+'/api/v1/spaces',{method:'POST',headers:{...headers,'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({name:'Eliminar espacio HTTP'})});assert.equal(orgResponse.status,200);const organization=await orgResponse.json();
  const orgDirectory=path.join(root,'data','organizaciones',organization.id);assert(fs.existsSync(orgDirectory));
  const deletingSpace=await fetch(api+'/api/v1/spaces/'+organization.id,{method:'DELETE',headers});assert.equal(deletingSpace.status,202);assert.equal(await deletingSpace.text(),'');

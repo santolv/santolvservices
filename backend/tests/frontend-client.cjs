@@ -19,11 +19,20 @@ function element(id) {
 const requests = [];
 const context = vm.createContext({ console, Headers, Blob, ArrayBuffer, Uint8Array, AbortSignal, URL, DOMException, FormData:class extends Map{constructor(){super()}},crypto:require('node:crypto').webcrypto,
   setTimeout:()=>0, clearTimeout(){}, location:{protocol:'http:'},innerWidth:800,innerHeight:600,
-  document:{body:element('body'),getElementById:element, addEventListener(){}, querySelectorAll(){return []}, querySelector(){return null}},
+  document:{body:element('body'),documentElement:element('html'),getElementById:element, addEventListener(){}, querySelectorAll(){return []}, querySelector(){return null}},
   window:{addEventListener(){}}, sessionStorage:{getItem(){return null},setItem(){},removeItem(){}},
   fetch:async (url, options={}) => { requests.push({url, options}); return {ok:true,status:200,json:async()=>({items:[],next_cursor:null})}; }
 });
 vm.runInContext(script, context);
+assert(!/demoNodes|demoUser|Vista previa sin conexión|Opcional en esta demo/.test(html));
+const markup=html.slice(0,html.indexOf('<script>'));
+for (const match of markup.matchAll(/data-action="([^"]+)"/g)) {
+  assert.equal(vm.runInContext(`typeof actions[${JSON.stringify(match[1])}]`, context), 'function', match[1]);
+}
+const ids=[...markup.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
+assert.equal(new Set(ids).size,ids.length,'Duplicate HTML identifiers');
+vm.runInContext("actions['toggle-theme']()",context);
+assert.equal(element('html').dataset.theme,'dark');
 assert.equal(vm.runInContext('state.view',context),'recent');
 assert(!html.includes('Destacados'));
 (async()=>{
@@ -89,14 +98,26 @@ assert(!html.includes('Destacados'));
   assert(element('items').innerHTML.includes('files grid'));
   assert(element('items').innerHTML.includes('data-t="PDF"'));
   assert(element('items').innerHTML.includes('Budget &lt;2027&gt;.pdf'));
-  assert.equal(element('selbar').hidden,false);
+  assert.equal(element('selbar').hidden,true);
+  assert.equal(element('toolbar-download').disabled,false);
+  assert.equal(element('finder-share').disabled,false);
   vm.runInContext('state.grid=false;render()',context);
   assert(element('items').innerHTML.includes('files list'));
+  assert(element('items').innerHTML.includes('cloud-columns'));
+  assert(element('items').innerHTML.includes('class="col size">—'));
+  assert(!element('items').innerHTML.includes('0 B'));
   vm.runInContext('state.selected=state.rows[0];detail()',context);
   assert.equal(element('detail').open,true);
   assert(element('detail').innerHTML.includes('http://localhost:8443/api/v1/nodes/file-1/content'));
   assert(element('detail').innerHTML.includes('Budget &lt;2027&gt;.pdf'));
   assert(!element('detail').innerHTML.includes('Historial de versiones'));
+  const link={click(){this.clicked=true},remove(){this.removed=true}};
+  context.document.createElement=()=>link;
+  context.document.body.appendChild=()=>{};
+  vm.runInContext("actions['download-selected']()",context);
+  assert.equal(link.href,'http://localhost:8443/api/v1/nodes/file-1/content');
+  assert.equal(link.download,'Budget <2027>.pdf');
+  assert(link.clicked&&link.removed);
   vm.runInContext("actions['new-menu']($('newBtn'))",context);
   assert.equal(element('new-menu').classList.contains('show'),true);
   assert(html.includes('right:auto;bottom:auto;width:250px'));

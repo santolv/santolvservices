@@ -21,11 +21,24 @@ La base técnica se conserva de SantolvDrive: HTML/CSS/JavaScript sin framework.
 - Temas claro/oscuro y preferencia del sistema desde Ajustes.
 - Selección o arrastre de imágenes para previsualizarlas en la pestaña, hasta
   30 MB por archivo, en JPEG, PNG, WebP, GIF o AVIF.
+- Entrada escalonada de fotos y colecciones, transiciones entre periodos y
+  reorganización animada al cambiar el tamaño de las miniaturas.
+- Apertura/cierre animados del visor, transición al avanzar de foto y respuesta
+  visual de botones y favoritos. Marcar un favorito conserva el zoom del visor.
+- Indicadores de filtros activos con botón para quitarlos y «Deshacer» durante
+  siete segundos al enviar una foto a la papelera de demostración.
+- Atajo `F` para favoritos en el visor, `/` para buscar y Escape para cerrar
+  ventanas o limpiar la búsqueda. La ventana de información incluye una guía.
+
+Las animaciones usan CSS y las APIs nativas del navegador, sin dependencias.
+Se desactivan cuando el sistema indica `prefers-reduced-motion: reduce`; la
+navegación, los filtros y los diálogos siguen funcionando sin movimiento.
+La entrada escalonada se limita a un máximo de 24 elementos visibles.
 
 Las fechas, nombres y colecciones son ficticios. Solo el tema se guarda en
 localStorage; favoritos, papelera e imágenes añadidas se reinician al recargar.
 No existe autenticación, subida al servidor, almacenamiento remoto ni backup.
-La información de cuenta es de demostración y no solicita credenciales.
+La interfaz no solicita credenciales.
 
 El alcance actual es la interfaz web/de PC en navegador. La distribución móvil
 y las aplicaciones descargables quedan pendientes de decisión del propietario.
@@ -44,3 +57,8 @@ ventanas observadas de 1280 y 347 píxeles. El archivo local sigue funcionando s
 servidor; HTTP se utilizó solo para la verificación. Sintaxis JavaScript, imágenes,
 referencias locales, identificadores HTML y diff de Git también comprobados.
 Quedan pendientes las pruebas en otros navegadores y dispositivos reales.
+
+En la entrega de animaciones también se comprobaron: zoom seguido de favorito
+con `F` sin perder la ampliación, papelera → Deshacer (19 → 20 fotos), navegación
+temporal, quitar el filtro de mes, búsqueda y su limpieza con Escape, y cambio
+de tamaño de miniaturas. No hubo errores en la consola de la aplicación.

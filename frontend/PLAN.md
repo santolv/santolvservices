@@ -194,6 +194,20 @@ Sin errores de consola observados. Pendientes: otros navegadores, dispositivos
 reales y revisión completa de accesibilidad.
 Ver `README.md` para uso y `ASSETS.md` para procedencia de recursos.
 
+Mejoras de interacción sobre esta base:
+
+- [x] Animar entrada de elementos visibles, navegación temporal y visor.
+- [x] Reorganizar suavemente las miniaturas al cambiar su tamaño.
+- [x] Actualizar favoritos sin reconstruir la cuadrícula ni reiniciar el zoom.
+- [x] Mostrar filtros activos y permitir retirarlos directamente.
+- [x] Añadir Deshacer a la papelera de demostración y ampliar atajos de teclado.
+- [x] Respetar la preferencia del sistema de reducir movimiento, con alternativa
+  inmediata cuando las animaciones no están disponibles.
+
+Las comprobaciones de esta entrega incluyen visor/zoom/favoritos, papelera y
+Deshacer, navegación temporal, filtros y redimensionado. No se incorporan
+dependencias de animación ni se cambia el alcance de la demo.
+
 **Entrega:** interfaz navegable en escritorio y móvil, con datos de demostración
 identificados, sin desbordamiento horizontal y utilizable mediante teclado.
 

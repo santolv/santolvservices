@@ -1,0 +1,83 @@
+// HTTP-only standalone-file authentication check; no browser or screenshots.
+const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+const root=path.resolve('target/independent-frontend-test');fs.mkdirSync(root,{recursive:true});
+const pg=path.join(process.env.POSTGRES_BIN||'C:/Users/Santi/AppData/Local/Temp/santolvdrive-postgresql/pgsql/bin',process.platform==='win32'?'psql.exe':'psql');
+const exe=path.resolve('target/debug/'+(process.platform==='win32'?'santolvdrive.exe':'santolvdrive'));
+const pgPort=process.env.TEST_POSTGRES_PORT||'5432';
+const db='drive_file_'+crypto.randomBytes(5).toString('hex'),api='http://localhost:19843',password=crypto.randomBytes(20).toString('hex');let backend;
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+function sql(command){return cp.execFileSync(pg,['-h','127.0.0.1','-p',pgPort,'-U','drive_test','-d','drive_test','-w','-c',command],{windowsHide:true,stdio:'pipe'})}
+async function main(){
+ sql('CREATE DATABASE '+db);
+ const config=path.join(root,'server.json');
+ fs.writeFileSync(config,JSON.stringify({database_url:`postgres://drive_test@127.0.0.1:${pgPort}/${db}`,frontend_origin:'http://localhost:15500',app_origin:api.replace('localhost','127.0.0.1'),bind:'127.0.0.1:19843',storage_root:path.join(root,'data'),tls_cert_file:null,tls_key_file:null,default_quota_bytes:1048576,trash_retention_days:30,allow_insecure_localhost:true}));
+ const bootstrap=cp.spawnSync(exe,['bootstrap-admin','--stdin','--config',config],{windowsHide:true,input:JSON.stringify({username:'file-admin',password}),encoding:'utf8'});assert.equal(bootstrap.status,0,bootstrap.stderr);
+ const cli=(args,input)=>{const result=cp.spawnSync(exe,[...args,'--config',config],{windowsHide:true,input:input?JSON.stringify(input):undefined,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return JSON.parse(result.stdout)};
+ cli(['users','create','--stdin'],{username:'file-user',password});
+ const users=cli(['users','list']);assert.equal(users.items.length,1);assert.equal(users.items[0].username,'file-user');assert(!users.items[0].password_hash);
+ backend=cp.spawn(exe,['serve','--config',config,'--frontend',path.resolve('../frontend/pruebahtml/index.html')],{windowsHide:true,stdio:'ignore'});
+ let ready=false;for(let i=0;i<80;i++){try{if((await fetch(api+'/health/live')).ok){ready=true;break}}catch{}await pause(100)}assert(ready);
+ const page=await fetch('http://localhost:15500/');assert.equal(page.status,200);const pageHtml=await page.text();assert(pageHtml.includes('nonce="'));assert(pageHtml.includes(api));assert(page.headers.get('content-security-policy').includes("frame-ancestors 'none'"));
+ const rootResponse=await fetch(api+'/');assert(rootResponse.headers.get('content-type').includes('application/json'));assert.equal((await fetch(api+'/index.html')).status,404);
+ const preflight=await fetch(api+'/api/v1/auth/login',{method:'OPTIONS',headers:{Origin:'null','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,authorization'}});
+ assert.equal(preflight.headers.get('access-control-allow-origin'),null);assert.equal(preflight.headers.get('access-control-allow-credentials'),null);
+ const login=await fetch(api+'/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'file-user',password,mobile:true})});assert.equal(login.status,200);assert.equal(login.headers.get('set-cookie'),null);
+ let body=await login.json();assert.equal(body.token.length,64);assert.equal(body.expires_in,900);assert(!body.csrf_token);
+ const headers={Authorization:'Bearer '+body.token};
+ assert.equal((await fetch(api+'/api/v1/me',{headers})).status,200);
+ const permanentPassword=crypto.randomBytes(20).toString('hex');
+ assert.equal((await fetch(api+'/api/v1/auth/password',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({current_password:password,new_password:permanentPassword})})).status,204);
+ const again=await fetch(api+'/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'file-user',password:permanentPassword,mobile:true})});assert.equal(again.status,200);body=await again.json();headers.Authorization='Bearer '+body.token;
+ const cookieLogin=await fetch(api+'/api/v1/auth/login',{method:'POST',headers:{Origin:'http://localhost:15500','Content-Type':'application/json'},body:JSON.stringify({username:'file-user',password:permanentPassword})});assert.equal(cookieLogin.status,200);
+ const cookieBody=await cookieLogin.json();assert.equal(cookieBody.expires_in,7200);assert(!cookieBody.token);const sessionCookie=cookieLogin.headers.getSetCookie().find(v=>v.includes('Max-Age=7200'));assert(sessionCookie.includes('HttpOnly'));assert(sessionCookie.includes('SameSite=Strict'));const cookie=sessionCookie.split(';')[0];
+ const cookieHeaders={Origin:'http://localhost:15500',Cookie:cookie};
+ const restored=await (await fetch(api+'/api/v1/me',{headers:cookieHeaders})).json();assert.equal(restored.csrf_token,cookieBody.csrf_token);assert(!restored.token);
+ const secondPage=await fetch('http://localhost:15500/');assert.equal(secondPage.status,200);
+ const logout=await fetch(api+'/api/v1/auth/logout',{method:'POST',headers:{...cookieHeaders,'X-CSRF-Token':restored.csrf_token}});assert.equal(logout.status,204);assert.equal((await fetch(api+'/api/v1/me',{headers:cookieHeaders})).status,401);
+ const spaces=await (await fetch(api+'/api/v1/spaces',{headers})).json();assert(!spaces.items[0].storage_directory);
+ const payload=Buffer.from([0,1,255,10,42]),sha256=crypto.createHash('sha256').update(payload).digest('hex');
+ const start=await fetch(api+'/api/v1/uploads',{method:'POST',headers:{...headers,'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({space_id:spaces.items[0].id,name:'informe ñ.custom',size:payload.length,sha256})});assert.equal(start.status,200);const upload=await start.json();
+ assert.equal((await fetch(api+'/api/v1/uploads/'+upload.id+'/content',{method:'PATCH',headers:{...headers,'Content-Type':'application/octet-stream','Upload-Offset':'0','X-Chunk-SHA256':sha256},body:payload})).status,200);
+ assert.equal((await fetch(api+'/api/v1/uploads/'+upload.id+'/complete',{method:'POST',headers})).status,202);
+ let status;for(let i=0;i<80;i++){status=await (await fetch(api+'/api/v1/uploads/'+upload.id,{headers})).json();if(status.state==='ready'&&!status.storage_pending)break;await pause(100)}assert.equal(status.state,'ready');
+ const saved=path.join(root,'data','usuarios','file-user','archivos','informe ñ.custom','informe ñ.custom');assert.deepEqual(fs.readFileSync(saved),payload);
+ const downloaded=await fetch(api+'/api/v1/nodes/'+status.result_node+'/content',{headers});assert.equal(downloaded.status,200);assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),payload);
+ assert(downloaded.headers.get('content-disposition').includes("filename*=UTF-8''informe%20%C3%B1.custom"));
+ assert.equal((await fetch(api+'/api/v1/nodes/'+status.result_node+'/touch',{method:'POST',headers})).status,204);
+ const recent=await (await fetch(api+'/api/v1/recent',{headers})).json();assert.equal(recent.items[0].id,status.result_node);assert.equal(recent.items.length,1);
+ const archive=path.join(root,'data','usuarios','file-user','.versions',upload.id,'informe ñ.custom');assert(!fs.existsSync(archive));assert(!fs.existsSync(path.join(path.dirname(saved),'.drive-node')));
+ const trashed=path.join(root,'data','usuarios','file-user','papelera','informe ñ.custom','informe ñ.custom');
+ const nodePath=api+'/api/v1/nodes/'+status.result_node;
+ const mutateHeaders={...headers,'Idempotency-Key':crypto.randomUUID(),'If-Match':'"1"'};
+ assert.equal((await fetch(nodePath+'/trash',{method:'POST',headers:mutateHeaders})).status,200);
+ assert(!fs.existsSync(saved));assert(fs.existsSync(trashed));
+ let trashList=await (await fetch(api+'/api/v1/spaces/'+spaces.items[0].id+'/nodes?trash=true',{headers})).json();assert(trashList.items.some(n=>n.id===status.result_node));
+ assert.equal((await fetch(nodePath+'/restore',{method:'POST',headers:{...headers,'Idempotency-Key':crypto.randomUUID(),'If-Match':'"2"'}})).status,200);
+ assert.equal((await fetch(nodePath+'/trash',{method:'POST',headers:{...headers,'Idempotency-Key':crypto.randomUUID(),'If-Match':'"3"'}})).status,200);
+ const purge=await fetch(nodePath+'/purge',{method:'POST',headers:{...headers,'If-Match':'"4"'}});assert.equal(purge.status,202);assert.equal(await purge.text(),'');
+ trashList=await (await fetch(api+'/api/v1/spaces/'+spaces.items[0].id+'/nodes?trash=true',{headers})).json();assert(!trashList.items.some(n=>n.id===status.result_node));
+ for(let i=0;i<180&&(fs.existsSync(archive)||fs.existsSync(trashed));i++)await pause(100);assert(!fs.existsSync(archive));assert(!fs.existsSync(trashed));assert(!fs.existsSync(path.dirname(saved)));
+ // Physical removal can become visible just before the worker commits quota release.
+ let afterDeletion;
+ for(let i=0;i<100;i++){afterDeletion=await (await fetch(api+'/api/v1/spaces',{headers})).json();if(Number(afterDeletion.items[0].used_bytes)===0)break;await pause(100)}
+ assert.equal(Number(afterDeletion.items[0].used_bytes),0);
+ const orgResponse=await fetch(api+'/api/v1/spaces',{method:'POST',headers:{...headers,'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({name:'Eliminar espacio HTTP'})});assert.equal(orgResponse.status,200);const organization=await orgResponse.json();
+ const orgDirectory=path.join(root,'data','organizaciones',organization.id);assert(fs.existsSync(orgDirectory));
+ const deletingSpace=await fetch(api+'/api/v1/spaces/'+organization.id,{method:'DELETE',headers});assert.equal(deletingSpace.status,202);assert.equal(await deletingSpace.text(),'');
+ const visibleSpaces=await (await fetch(api+'/api/v1/spaces',{headers})).json();assert(!visibleSpaces.items.some(s=>s.id===organization.id));
+ for(let i=0;i<150&&fs.existsSync(orgDirectory);i++)await pause(100);assert(!fs.existsSync(orgDirectory));
+ assert.equal((await fetch(api+'/api/v1/me',{headers:{Origin:'null'}})).status,403);
+ assert.equal((await fetch(api+'/api/v1/me',{headers:{...headers,Cookie:'drive_session='+body.token}})).status,401);
+ assert.equal((await fetch(api+'/api/v1/me',{headers:{...headers,Origin:'https://evil.example'}})).status,403);
+ const adminLogin=await fetch(api+'/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'file-admin',password,mobile:true})});assert.equal(adminLogin.status,401);
+ assert.equal((await fetch(api+'/api/v1/admin/users',{headers})).status,404);
+ const spec=await (await fetch(api+'/api/v1/openapi.json',{headers})).json();assert(!Object.keys(spec.paths).some(p=>p.includes('/admin/')));
+ assert(!fs.existsSync(saved));cli(['users','disable','file-user']);assert.equal((await fetch(api+'/api/v1/me',{headers})).status,401);
+ cli(['users','enable','file-user']);
+ const audit=cli(['users','audit']);assert(audit.items.length>=4);
+ const reset=cli(['users','reset-password','--stdin'],{username:'file-user',password:crypto.randomBytes(20).toString('hex')});assert(reset.must_change_password);
+
+ assert.equal((await fetch(api+'/api/v1/me',{headers})).status,401);
+ console.log('PASS API-only JSON, file-origin preflight, token login, binary upload in private user directory, original filename, download integrity, trash/restore/permanent physical deletion, server-only user management, superuser login rejection, cookie rejection and foreign-origin rejection. No browser.');
+}
+main().catch(error=>{console.error(error);process.exitCode=1}).finally(async()=>{backend?.kill();await pause(350);try{sql(`DROP DATABASE ${db} WITH (FORCE)`)}catch{console.error('Temporary database cleanup failed')}});

@@ -1,0 +1,34 @@
+# Credenciales y configuración privada
+.env
+.env.*
+!.env.example
+.aws/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Datos locales y originales privados (las muestras están en frontend/assets/)
+/data/
+/uploads/
+/originals/
+/private/
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+
+# Compilación, dependencias y registros
+target/
+node_modules/
+dist/
+build/
+coverage/
+*.log
+
+# Archivos locales del sistema y del editor
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.tmp

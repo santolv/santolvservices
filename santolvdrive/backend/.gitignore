@@ -1,0 +1,17 @@
+/target/
+/dist/
+/data/
+.env
+server*.json
+/dependencies/
+postgres-state.json
+tls-state.json
+.pg-password-*
+*.pending
+/santolvdrive-server/
+/servidor/
+*.pem
+*.key
+*.log
+
+*.before-*.json

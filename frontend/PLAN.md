@@ -359,6 +359,20 @@ instalables y la interfaz móvil se decidirán más adelante.
 
 ## Comprobación y flujo de entrega
 
+### Preparación del repositorio local — 24 de noviembre de 2026
+
+- Git local inicializado sobre el historial existente de `origin/main`, sin
+  sustituir los commits publicados. Los archivos recibidos coinciden con esa base.
+- Remoto `origin`: `https://github.com/santolv/santolvphotos.git`; rama `main`
+  con seguimiento de `origin/main`.
+- Identidad local del autor: `santolv <santi@local>`. La autenticación de GitHub
+  se gestiona por separado.
+- Añadidos `.gitignore` para credenciales, originales privados y archivos
+  generados, y `.gitattributes` para texto e imágenes.
+- Instrucciones de clonación, revisión, commit y push en el README principal.
+- El alcance sigue siendo la demo web existente; no se añaden dependencias
+  ni se desarrolla el backend en esta preparación.
+
 Para documentación: revisar contenido, enlaces, coherencia con el código de
 referencia y `git diff --check`. No instalar frameworks ni generar aplicaciones.
 

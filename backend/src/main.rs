@@ -1,4 +1,4 @@
-use santolvdrive::{router, worker};
+use santolvdrive::{core::manager, router};
 use std::{env, path::PathBuf};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .is_some_and(|v| matches!(v.as_str(), "--help" | "help"))
     {
         println!(
-            "santolvdrive [serve [--frontend PATH_TO_INDEX_HTML] | users [list [AFTER_UUID] | create | disable USERNAME | enable USERNAME | reset-password | audit [AFTER_ID]] | install [--directory PATH] [--origin http://localhost:8443] [--dependencies-only] | install --check | configure-local | bootstrap-admin [--stdin] | reset-admin | admin-initialized | database-stop] [--config server.json]"
+            "santolvdrive [serve [--frontend PATH_TO_INDEX_HTML] | services [list | enable ID | disable ID] | users [list [AFTER_UUID] | create | disable USERNAME | enable USERNAME | reset-password | audit [AFTER_ID]] | install [--directory PATH] [--origin http://localhost:8443] [--dependencies-only] | install --check | configure-local | bootstrap-admin [--stdin] | reset-admin | admin-initialized | database-stop] [--config server.json]"
         );
         return Ok(());
     }
@@ -23,6 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         command,
         "serve"
             | "users"
+            | "services"
             | "configure-local"
             | "bootstrap-admin"
             | "reset-admin"
@@ -63,12 +64,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     let s = config.connect().await?;
-    if command == "users" {
+    if matches!(command, "users" | "services") {
         let end = args
             .iter()
             .position(|v| v == "--config")
             .unwrap_or(args.len());
-        let result = santolvdrive::admin::console(&s, &args[1..end]).await?;
+        let result = if command == "services" {
+            santolvdrive::core::manager::console(&s, &args[1..end]).await?
+        } else {
+            santolvdrive::admin::console(&s, &args[1..end]).await?
+        };
         println!("{}", serde_json::to_string_pretty(&result)?);
         return Ok(());
     }
@@ -116,7 +121,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let frontend = if config.app_origin.starts_with("http://") {
         let view =
-            santolvdrive::frontend::Frontend::bundled(&config.frontend_origin, &config.app_origin)?;
+            santolvdrive::frontend::Frontend::bundled(&config.frontend_origin, &config.app_origin)?
+                .with_services(s.db.clone());
         let origin = url::Url::parse(&config.frontend_origin)?;
         let socket = tokio::net::TcpListener::bind((
             std::net::Ipv4Addr::LOCALHOST,
@@ -133,7 +139,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
     println!("Servidor local: {}", config.app_origin);
-    let task = tokio::spawn(worker::run(s.clone()));
+    let task = tokio::spawn(manager::run(s.clone()));
     let result = if let Some(tls) = tls {
         santolvdrive::tls::serve(listener, tls, router(s), shutdown()).await
     } else {

@@ -13,8 +13,8 @@ use tokio::io::AsyncReadExt;
 #[derive(Clone)]
 pub struct Frontend {
     html: Arc<str>,
-    drive: Option<Arc<str>>,
-    photos: Option<Arc<str>>,
+    modules: Vec<(crate::core::manager::Service, Arc<str>)>,
+    db: Option<sqlx::PgPool>,
     authority: String,
     api_origin: String,
 }
@@ -55,8 +55,8 @@ impl Frontend {
         api.set_host(Some("localhost"))?;
         Ok(Self {
             html,
-            drive: None,
-            photos: None,
+            modules: Vec::new(),
+            db: None,
             authority: origin
                 .as_str()
                 .trim_start_matches("http://")
@@ -71,13 +71,15 @@ impl Frontend {
             origin,
             api_origin,
         )?;
-        s.drive = Some(Self::with_shell(include_str!(
-            "../../santolvdrive/frontend/pruebahtml/index.html"
-        )));
-        s.photos = Some(Self::with_shell(include_str!(
-            "../../santolvphotos/frontend/index.html"
-        )));
+        s.modules = crate::modules::REGISTERED
+            .iter()
+            .map(|service| (*service, Self::with_shell(service.html)))
+            .collect();
         Ok(s)
+    }
+    pub fn with_services(mut self, db: sqlx::PgPool) -> Self {
+        self.db = Some(db);
+        self
     }
     fn with_shell(html: &str) -> Arc<str> {
         html.replacen(
@@ -106,18 +108,21 @@ impl Frontend {
     }
 }
 pub fn router(s: Frontend) -> Router {
-    Router::new()
+    let mut router = Router::new()
         .route("/", get(index))
-        .route("/index.html", get(index))
-        .route("/drive", get(index))
-        .route("/drive/", get(index))
-        .route("/drive/index.html", get(index))
-        .route("/photos", get(index))
-        .route("/photos/", get(index))
-        .route("/photos/index.html", get(index))
-        .fallback(|| async { StatusCode::NOT_FOUND })
-        .with_state(s)
+        .route("/index.html", get(index));
+    for (service, _) in &s.modules {
+        for path in [
+            service.page.to_owned(),
+            format!("{}/", service.page),
+            format!("{}/index.html", service.page),
+        ] {
+            router = router.route(&path, get(index));
+        }
+    }
+    router.with_state(s)
 }
+
 async fn index(
     State(s): State<Frontend>,
     OriginalUri(uri): OriginalUri,
@@ -131,16 +136,36 @@ async fn index(
     {
         return StatusCode::FORBIDDEN.into_response();
     }
-    let html = if uri.path().starts_with("/drive") {
-        s.drive.as_deref()
-    } else if uri.path().starts_with("/photos") {
-        s.photos.as_deref()
-    } else {
-        Some(&*s.html)
-    };
-    let Some(html) = html else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
+    let module = s.modules.iter().find(|(service, _)| {
+        uri.path() == service.page
+            || uri
+                .path()
+                .strip_prefix(service.page)
+                .is_some_and(|suffix| matches!(suffix, "/" | "/index.html"))
+    });
+    let mut html = module.map_or_else(|| s.html.to_string(), |(_, html)| html.to_string());
+    if let Some(db) = &s.db {
+        if let Some((service, _)) = module {
+            match crate::core::manager::enabled(db, service.id).await {
+                Ok(true) => {}
+                Ok(false) => return crate::core::manager::disabled().into_response(),
+                Err(error) => return error.into_response(),
+            }
+        } else {
+            for (service, _) in &s.modules {
+                match crate::core::manager::enabled(db, service.id).await {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        html = html.replace(
+                            &format!("class=\"service\" href=\"{}/\"", service.page),
+                            &format!("hidden inert class=\"service\" href=\"{}/\"", service.page),
+                        );
+                    }
+                    Err(error) => return error.into_response(),
+                }
+            }
+        }
+    }
     let nonce = crate::auth::token();
     let html = html.replace(
         "const API_ORIGIN=location.protocol==='https:'?location.origin:'http://localhost:8443';",

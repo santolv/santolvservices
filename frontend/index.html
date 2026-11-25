@@ -39,7 +39,7 @@ async function loadRecent(request){
 }
 for(const id of ['login','change-password'])$(id).addEventListener('submit',async event=>{event.preventDefault();const button=event.target.querySelector('button');button.disabled=true;$('status').textContent='Conectando…';try{if(id==='login'){await api('/auth/login','POST',{username:$('username').value.trim(),password:$('password').value});$('password').value=''}else{await api('/auth/password','POST',{current_password:$('current-password').value,new_password:$('new-password').value});$('current-password').value='';$('new-password').value='';signedOut();$('status').textContent='Contraseña actualizada. Inicia sesión con la nueva contraseña.';return}await enter();$('status').textContent=''}catch(error){$('status').textContent=error.message}finally{button.disabled=false}});
 $('logout').addEventListener('click',async()=>{try{await api('/auth/logout','POST');signedOut();$('status').textContent='Sesión cerrada.'}catch(error){$('status').textContent=error.message}});
-function filterHome(){const query=$('home-search').value.trim().toLocaleLowerCase('es');for(const item of document.querySelectorAll('.service,.recent-row'))item.hidden=!item.textContent.toLocaleLowerCase('es').includes(query)}
+function filterHome(){const query=$('home-search').value.trim().toLocaleLowerCase('es');for(const item of document.querySelectorAll('.service:not([inert]),.recent-row'))item.hidden=!item.textContent.toLocaleLowerCase('es').includes(query)}
 $('home-search').addEventListener('input',filterHome);
 window.addEventListener('pageshow',()=>enter().catch(()=>signedOut()));
 </script></body></html>

@@ -13,6 +13,24 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+pub const SERVICE: crate::core::manager::Service = crate::core::manager::Service {
+    id: "photos",
+    schema: "photos",
+    page: "/photos",
+    html: include_str!("../../../../santolvphotos/frontend/index.html"),
+    uses_file_store: true,
+    worker: |app, id| Box::pin(crate::worker::run(app, id)),
+    routes,
+};
+
+fn routes() -> axum::Router<App> {
+    use axum::routing::{get, post, put};
+    axum::Router::new()
+        .route("/api/v1/photos/library", get(library))
+        .route("/api/v1/photos/space", post(space))
+        .route("/api/v1/photos/{id}/favorite", put(favorite))
+}
+
 pub async fn space(State(s): State<App>, u: User) -> Result<Json<Value>> {
     let mut tx = s.db.begin().await?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")

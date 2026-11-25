@@ -506,16 +506,18 @@ pub async fn process(s: &App, limit: i64) -> Result<()> {
     Ok(())
 }
 
-pub async fn run(s: App) {
+pub async fn run(s: App, service: &str) {
     let mut cursor = Uuid::nil();
     let mut round = 0u8;
     loop {
-        if let Err(e) = process(&s, 20).await {
-            tracing::error!(code = e.1, "workspace synchronization failed")
-        }
-        round = (round + 1) % 10;
-        if round == 0 {
-            let result=async {
+        match crate::core::manager::lease(&s.db, service).await {
+            Ok(Some(_lease)) => {
+                if let Err(e) = process(&s, 20).await {
+                    tracing::error!(code = e.1, "workspace synchronization failed")
+                }
+                round = (round + 1) % 10;
+                if round == 0 {
+                    let result=async {
                 let rows=sqlx::query("SELECT id,space_id FROM nodes WHERE id>$1 ORDER BY id LIMIT 50").bind(cursor).fetch_all(&s.db).await?;
                 for row in &rows {
                     let node:Uuid=row.get("id");
@@ -525,9 +527,13 @@ pub async fn run(s: App) {
                 if rows.len()<50 {cursor=Uuid::nil()}
                 Ok::<_,sqlx::Error>(())
             }.await;
-            if let Err(e) = result {
-                tracing::error!(error=%e,"workspace audit failed")
+                    if let Err(e) = result {
+                        tracing::error!(error=%e,"workspace audit failed")
+                    }
+                }
             }
+            Ok(None) => {}
+            Err(error) => tracing::error!(service,%error,"workspace lease failed"),
         }
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }

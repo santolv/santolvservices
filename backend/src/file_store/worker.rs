@@ -1,24 +1,26 @@
 use crate::{App, error::Result, files, storage, uploads};
-use axum::{extract::State, http::StatusCode};
+use axum::http::StatusCode;
 use sqlx::Row;
 use std::time::Duration;
 use uuid::Uuid;
 
-pub async fn health(State(s): State<App>) -> Result<StatusCode> {
-    sqlx::query("SELECT 1").execute(&s.db).await?;
-    storage::capacity(&s.root, 0).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-pub async fn run(s: App) {
+pub async fn run(s: App, service: &'static str) {
     tokio::join!(
-        maintenance(s.clone()),
-        finalization(s.clone()),
-        crate::workspace::run(s)
+        maintenance(s.clone(), service),
+        finalization(s.clone(), service),
+        crate::workspace::run(s, service)
     );
 }
-async fn finalization(s: App) {
+async fn finalization(s: App, service: &str) {
     loop {
-        if let Err(e) = finalize_requested(&s).await {
+        if let Err(e) = async {
+            if let Some(_lease) = crate::core::manager::lease(&s.db, service).await? {
+                finalize_requested(&s).await?;
+            }
+            Ok::<_, crate::error::Error>(())
+        }
+        .await
+        {
             tracing::error!(code = e.1, "finalization pass failed");
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -41,19 +43,21 @@ pub async fn finalize_requested(s: &App) -> Result<()> {
     }
     Ok(())
 }
-async fn maintenance(s: App) {
+async fn maintenance(s: App, service: &str) {
     let mut cursor = Uuid::nil();
     let mut cancelled_cursor = Uuid::nil();
     let mut workspace_cursor = Uuid::nil();
     loop {
-        if let Err(e) = prepare_workspaces(&s, &mut workspace_cursor).await {
-            tracing::error!(code = e.1, "workspace preparation failed");
+        let result = async {
+            if let Some(_lease) = crate::core::manager::lease(&s.db, service).await? {
+                prepare_workspaces(&s, &mut workspace_cursor).await?;
+                tick(&s, &mut cursor, &mut cancelled_cursor).await?;
+            }
+            Ok::<_, crate::error::Error>(())
         }
-        if let Err(e) = tick(&s, &mut cursor, &mut cancelled_cursor).await {
-            tracing::error!(code = e.1, "maintenance pass failed");
-        }
-        if let Err(e) = storage::cleanup_legacy_roots(&s.root).await {
-            tracing::warn!(code = e.1, "legacy directory cleanup deferred");
+        .await;
+        if let Err(e) = result {
+            tracing::error!(service, code = e.1, "maintenance pass failed");
         }
         tokio::time::sleep(Duration::from_secs(10)).await;
     }
@@ -190,18 +194,6 @@ pub async fn tick(s: &App, cursor: &mut Uuid, cancelled_cursor: &mut Uuid) -> Re
     if objects.len() < 100 {
         *cursor = Uuid::nil();
     }
-    sqlx::query("DELETE FROM sessions WHERE expires_at<now()")
-        .execute(&s.db)
-        .await?;
-    sqlx::query("DELETE FROM rate_limits WHERE window_start<now()-interval '1 day'")
-        .execute(&s.db)
-        .await?;
-    sqlx::query("DELETE FROM login_failures WHERE updated_at<now()-interval '1 day'")
-        .execute(&s.db)
-        .await?;
-    sqlx::query("DELETE FROM idempotency WHERE created_at<now()-interval '7 days'")
-        .execute(&s.db)
-        .await?;
     sqlx::query("DELETE FROM uploads WHERE id IN(SELECT id FROM uploads WHERE state='ready' AND expires_at<now()-interval '7 days' LIMIT 100)").execute(&s.db).await?;
     crate::workspace::process(s, 100).await?;
     finish_deleted_spaces(s).await?;

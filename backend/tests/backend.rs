@@ -11,6 +11,286 @@ use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+#[sqlx::test(migrations = false)]
+async fn modular_migration_preserves_existing_photo_metadata_and_file_links(pool: PgPool) {
+    let mut connection = pool.acquire().await.unwrap();
+    let migrations = sqlx::migrate!("./migrations");
+    for migration in migrations.iter().filter(|migration| migration.version < 13) {
+        sqlx::raw_sql(migration.sql.clone())
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+    }
+    let (owner, drive, photos, node, object, version) = (
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+    );
+    sqlx::query("INSERT INTO users(id,username,password_hash) VALUES($1,'legacy-photo','hash')")
+        .bind(owner)
+        .execute(&mut *connection)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO spaces(id,owner_id,name,kind,quota,storage_directory,service) VALUES($1,$3,'Drive','personal',100,$4,'drive'),($2,$3,'Fotos','personal',100,$5,'photos')").bind(drive).bind(photos).bind(owner).bind(format!("usuarios/{owner}/drive")).bind(format!("usuarios/{owner}/photos")).execute(&mut *connection).await.unwrap();
+    sqlx::query("INSERT INTO members VALUES($1,$2,3)")
+        .bind(photos)
+        .bind(owner)
+        .execute(&mut *connection)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO nodes(id,space_id,name,kind) VALUES($1,$2,'muestra.jpg','file')")
+        .bind(node)
+        .bind(photos)
+        .execute(&mut *connection)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO objects(id,space_id,size,sha256,original_name) VALUES($1,$2,3,$3,'muestra.jpg')").bind(object).bind(photos).bind("a".repeat(64)).execute(&mut *connection).await.unwrap();
+    sqlx::query("INSERT INTO versions(id,node_id,object_id,created_by) VALUES($1,$2,$3,$4)")
+        .bind(version)
+        .bind(node)
+        .bind(object)
+        .bind(owner)
+        .execute(&mut *connection)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE nodes SET current_version=$1 WHERE id=$2")
+        .bind(version)
+        .bind(node)
+        .execute(&mut *connection)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO photo_metadata VALUES($1,true)")
+        .bind(node)
+        .execute(&mut *connection)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO recent_nodes VALUES($1,$2,100)")
+        .bind(owner)
+        .bind(node)
+        .execute(&mut *connection)
+        .await
+        .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::raw_sql(include_str!("../migrations/0013_modules.sql"))
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let preserved:(Uuid,Uuid,bool,i64)=sqlx::query_as("SELECT n.current_version,v.object_id,m.favorite,r.used_at FROM photos.nodes n JOIN photos.versions v ON v.id=n.current_version JOIN photos.photo_metadata m ON m.node_id=n.id JOIN photos.recent_nodes r ON r.node_id=n.id WHERE n.id=$1").bind(node).fetch_one(&pool).await.unwrap();
+    assert_eq!(preserved, (version, object, true, 100));
+    assert_eq!(
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM public.spaces")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        drive
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM public.nodes")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[sqlx::test]
+async fn concurrent_users_and_hot_service_disable(pool: PgPool) {
+    use santolvdrive::core::manager;
+    let h = Harness::new(pool).await;
+    let (alice, bob) = tokio::join!(h.account("concurrent-alice"), h.account("concurrent-bob"));
+    let (a, b) = tokio::join!(
+        h.start(
+            &alice,
+            "mismo.txt",
+            b"Alice",
+            "same-key",
+            None,
+            None,
+            "\"1\""
+        ),
+        h.start(&bob, "mismo.txt", b"Bob", "same-key", None, None, "\"1\"")
+    );
+    let (ra, rb) = tokio::join!(
+        h.chunk(&alice, a, 0, b"Alice", true),
+        h.chunk(&bob, b, 0, b"Bob", true)
+    );
+    assert_eq!((ra, rb), (StatusCode::OK, StatusCode::OK));
+    let (_, space) = h
+        .json(
+            "POST",
+            "/api/v1/photos/space",
+            Some(&alice.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    let photos = Account {
+        id: alice.id,
+        space: id(&space, "id"),
+        token: alice.token.clone(),
+        username: alice.username.clone(),
+    };
+    let photo = h
+        .start(
+            &photos,
+            "foto.jpg",
+            b"Foto",
+            "photo-pending",
+            None,
+            None,
+            "\"1\"",
+        )
+        .await;
+    assert_eq!(
+        h.chunk(&photos, photo, 0, b"Foto", true).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        h.json(
+            "POST",
+            &format!("/api/v1/uploads/{photo}/complete"),
+            Some(&alice.token),
+            &[],
+            json!({})
+        )
+        .await
+        .0,
+        StatusCode::ACCEPTED
+    );
+    manager::set_enabled(&h.app.db, "photos", false)
+        .await
+        .unwrap();
+    let workers = tokio::spawn(manager::run(h.app.clone()));
+    let result = async {
+        for path in [
+            "/api/v1/photos/library".into(),
+            format!("/api/v1/uploads/{photo}"),
+            format!("/api/v1/spaces/{}/nodes", photos.space),
+        ] {
+            let (status, body) = h
+                .json("GET", &path, Some(&alice.token), &[], json!({}))
+                .await;
+            assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+            assert_eq!(body["error"]["code"], "service_disabled");
+        }
+        let complete = |account: &Account, upload| {
+            let token = account.token.clone();
+            let h = &h;
+            async move {
+                h.json(
+                    "POST",
+                    &format!("/api/v1/uploads/{upload}/complete"),
+                    Some(&token),
+                    &[],
+                    json!({}),
+                )
+                .await
+                .0
+            }
+        };
+        let (ra, rb) = tokio::join!(complete(&alice, a), complete(&bob, b));
+        assert_eq!((ra, rb), (StatusCode::ACCEPTED, StatusCode::ACCEPTED));
+        let ready = |upload| {
+            let db = h.app.db.clone();
+            async move {
+                tokio::time::timeout(std::time::Duration::from_secs(15), async {
+                    loop {
+                        if let Some(node) = sqlx::query_scalar::<_, Uuid>(
+                            "SELECT result_node FROM uploads WHERE id=$1 AND state='ready'",
+                        )
+                        .bind(upload)
+                        .fetch_optional(&db)
+                        .await
+                        .unwrap()
+                        {
+                            break node;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
+                })
+                .await
+                .unwrap()
+            }
+        };
+        let (na, nb) = tokio::join!(ready(a), ready(b));
+        let ap = format!("/api/v1/nodes/{na}/content");
+        let bp = format!("/api/v1/nodes/{nb}/content");
+        let (ar, br) = tokio::join!(
+            h.req("GET", &ap, Some(&alice.token), &[], Body::empty()),
+            h.req("GET", &bp, Some(&bob.token), &[], Body::empty())
+        );
+        assert_eq!(ar.2, b"Alice");
+        assert_eq!(br.2, b"Bob");
+        assert_eq!(
+            h.req("GET", &ap, Some(&bob.token), &[], Body::empty())
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+        let state: String = sqlx::query_scalar("SELECT state FROM photos.uploads WHERE id=$1")
+            .bind(photo)
+            .fetch_one(&h.app.db)
+            .await
+            .unwrap();
+        assert_eq!(state, "pending");
+        manager::set_enabled(&h.app.db, "photos", true)
+            .await
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            loop {
+                let (_, library) = h
+                    .json(
+                        "GET",
+                        "/api/v1/photos/library",
+                        Some(&alice.token),
+                        &[],
+                        json!({}),
+                    )
+                    .await;
+                if library["items"][0]["name"] == "foto.jpg" {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .unwrap();
+        manager::set_enabled(&h.app.db, "drive", false)
+            .await
+            .unwrap();
+        assert_eq!(
+            h.req("GET", &ap, Some(&alice.token), &[], Body::empty())
+                .await
+                .0,
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(
+            h.json(
+                "GET",
+                "/api/v1/photos/library",
+                Some(&alice.token),
+                &[],
+                json!({})
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            h.json("GET", "/api/v1/me", Some(&alice.token), &[], json!({}))
+                .await
+                .0,
+            StatusCode::OK
+        );
+    };
+    result.await;
+    workers.abort();
+}
+
 #[sqlx::test]
 async fn photos_share_sessions_but_isolate_storage_and_persist_favorites(pool: PgPool) {
     let h = Harness::new(pool).await;
@@ -37,11 +317,12 @@ async fn photos_share_sessions_but_isolate_storage_and_persist_favorites(pool: P
         )
         .await;
     assert_eq!(again, created);
-    let directory: String = sqlx::query_scalar("SELECT storage_directory FROM spaces WHERE id=$1")
-        .bind(space)
-        .fetch_one(&h.app.db)
-        .await
-        .unwrap();
+    let directory: String =
+        sqlx::query_scalar("SELECT storage_directory FROM photos.spaces WHERE id=$1")
+            .bind(space)
+            .fetch_one(&h.app.db)
+            .await
+            .unwrap();
     assert_eq!(directory, format!("usuarios/{}/photos", a.id));
     assert!(h.app.root.join(&directory).join("archivos").is_dir());
     let photo_account = Account {
@@ -1451,7 +1732,18 @@ impl Harness {
             )
             .await;
         if result.0 == StatusCode::ACCEPTED {
-            worker::finalize_requested(&self.app).await.unwrap();
+            let in_photos: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM photos.uploads WHERE id=$1)")
+                    .bind(upload)
+                    .fetch_one(&self.app.db)
+                    .await
+                    .unwrap();
+            let app = if in_photos {
+                santolvdrive::modules::photos::SERVICE.app(&self.app)
+            } else {
+                self.app.clone()
+            };
+            worker::finalize_requested(&app).await.unwrap();
             return self
                 .json(
                     "POST",

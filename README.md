@@ -24,6 +24,44 @@ del sistema desde Ajustes; esa elección se aplica a todos los servicios.
 
 ## Almacenamiento
 
+### Monolito modular
+
+- `backend/src/core/` reúne cuentas, autenticación, permisos, seguridad HTTP,
+  conexión a PostgreSQL y el gestor. `backend/src/modules/drive/` contiene
+  espacios, miembros y compartición de Drive. `backend/src/modules/photos/`
+  contiene la biblioteca y favoritos de Fotos. `backend/src/file_store/` es
+  el motor reutilizado de archivos, transferencias y trabajos de disco.
+- Cada servicio tiene sus propias tablas. Drive conserva sus tablas existentes
+  en `public` y Fotos usa `photos`. Comparten identidad, sesiones y configuración.
+- Para añadir un servicio compilado, crea su carpeta, migración si necesita tablas
+  y descriptor `Service`, y añádelo a `modules::REGISTERED`. La propiedad
+  `uses_file_store` habilita el motor y sus rutas compatibles para ese módulo.
+
+Desde la raíz, en PowerShell, con la configuración de la instalación existente:
+
+```powershell
+$server = '.\santolvdrive\backend\dist\santolvdrive-windows-x64.exe'
+$config = '.\santolvdrive\backend\servidor\server.json'
+& $server services list --config $config
+& $server services disable photos --config $config
+& $server services enable photos --config $config
+```
+
+Los comandos requieren acceso local a la configuración del servidor. PostgreSQL
+guarda el estado entre reinicios. Desactivar devuelve `503 service_disabled`
+en nuevas peticiones al módulo, lo oculta al volver a cargar Inicio y espera que
+terminen los lotes internos ya iniciados. Las peticiones admitidas previamente
+pueden concluir. Los trabajos persistentes y los datos quedan disponibles al
+reactivarlo. La API de Inicio sigue operativa con ambos módulos desactivados.
+
+La migración `0013_modules.sql` mueve los metadatos de Fotos en una transacción
+y conserva sus IDs, favoritos y referencias a los originales. Los originales
+siguen en la misma ruta del disco. Detén el ejecutable anterior y guarda una
+copia de PostgreSQL y el almacenamiento antes de instalar esta versión. Para
+volver al ejecutable anterior, restaura esa copia.
+
+### Carpetas del servidor
+
 ```text
 <storage_root>/
   usuarios/<UUID del usuario>/

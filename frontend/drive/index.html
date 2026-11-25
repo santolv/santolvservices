@@ -145,6 +145,7 @@ main{grid-column:2;grid-row:2;position:relative;min-width:0;min-height:0;overflo
 .cloud-toolbar .view-buttons button svg{display:block;width:19.26px;height:19.26px;margin:0}
 .cloud-toolbar .view-buttons button[aria-pressed="true"]{background:var(--surface);box-shadow:0 1.07px 3.21px #0002}
 .cloud-subtitle{display:flex;align-items:center;flex-wrap:wrap;gap:6.42px}.cloud-subtitle button{font:inherit;color:var(--sub);padding:2.14px 0;text-align:left}.cloud-subtitle button:hover{color:var(--blue);text-decoration:underline}.cloud-subtitle button[aria-current="location"]{color:var(--text)}
+.card.drop-target{outline:2px solid var(--blue);outline-offset:-2px;background:var(--fill)!important}
 </style></head>
 <body>
 <svg aria-hidden="true" style="display:none" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -315,7 +316,7 @@ function render(){
  $('list-caption').textContent=rows.length+' elemento'+(rows.length===1?'':'s');
  if(!rows.length){$('items').innerHTML='<p class="empty">'+(q?'No se han encontrado resultados.':state.view==='trash'?'La papelera está vacía.':'Esta carpeta está vacía.')+'</p>';return}
  let index=0;
- const card=n=>{const kind=n.protected?'Carpeta protegida':n.kind==='folder'?'Carpeta':fileType(n),modified=date(n.updated_at||n.created_at||n.last_used_at);return '<div class="card'+(state.selection===n.id?' on':'')+'" data-node="'+n.id+'" data-t="'+esc(kind)+'" style="--i:'+Math.min(index++,12)+'" tabindex="0" role="button" aria-label="'+esc(n.name)+'" aria-pressed="'+(state.selection===n.id)+'">'+preview(n)+'<div class="cap"><div><b>'+esc(n.name)+'</b><small class="file-date">'+esc(modified)+'</small></div><span class="col kind">'+esc(kind)+'</span><span class="col size">'+(n.kind==='folder'||n.size==null?'—':bytes(n.size))+'</span><span class="col modified">'+esc(modified)+'</span><span class="col shared-mark">'+(state.view==='shared'?icon('users'):'')+'</span><button class="row-more" data-action="item-menu" aria-label="Acciones de '+esc(n.name)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg></button></div></div>'};
+ const card=n=>{const kind=n.protected?'Carpeta protegida':n.kind==='folder'?'Carpeta':fileType(n),modified=date(n.updated_at||n.created_at||n.last_used_at);return '<div class="card'+(state.selection===n.id?' on':'')+'" data-node="'+n.id+'" data-t="'+esc(kind)+'" style="--i:'+Math.min(index++,12)+'" draggable="true" tabindex="0" role="button" aria-label="'+esc(n.name)+'" aria-pressed="'+(state.selection===n.id)+'">'+preview(n)+'<div class="cap"><div><b>'+esc(n.name)+'</b><small class="file-date">'+esc(modified)+'</small></div><span class="col kind">'+esc(kind)+'</span><span class="col size">'+(n.kind==='folder'||n.size==null?'—':bytes(n.size))+'</span><span class="col modified">'+esc(modified)+'</span><span class="col shared-mark">'+(state.view==='shared'?icon('users'):'')+'</span><button class="row-more" data-action="item-menu" aria-label="Acciones de '+esc(n.name)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg></button></div></div>'};
  const files=items=>'<div class="files '+(state.grid?'grid':'list')+'">'+items.map(card).join('')+'</div>';
  if(state.grid){$('items').innerHTML=files(rows);return}
  const columns='<div class="cloud-columns" aria-hidden="true"><span>Nombre</span><span class="kind">Clase</span><span class="size">Tamaño</span><span class="modified">Fecha</span><span class="shared-mark">Compartido</span><span></span></div>';
@@ -346,11 +347,71 @@ function readJob(){if(!state.me)return null;try{return JSON.parse(storage.get('d
 function saveJob(job){storage.set('drive.upload.'+state.me.id,JSON.stringify(job))}
 function clearJob(){if(state.me)storage.remove('drive.upload.'+state.me.id)}
 let uploadController;
+async function destinationItems(space,parent){
+ let after=null,items=[];
+ do{
+  const {data}=await api('/spaces/'+space+'/nodes?limit=100'+(parent?'&parent='+encodeURIComponent(parent):'')+(after?'&after='+encodeURIComponent(after):''));
+  items.push(...data.items);if(data.photos_folder)items.push(data.photos_folder);after=data.next_cursor;
+ }while(after);
+ return items;
+}
+function copyName(name,kind,index=1){
+ const dot=kind==='file'?name.lastIndexOf('.'):-1;
+ const suffix=index===1?' (copia)':' (copia '+index+')';
+ return dot>0?name.slice(0,dot)+suffix+name.slice(dot):name+suffix;
+}
+function collisionChoice(name,canReplace=true){
+ return new Promise(resolve=>{
+  const dialog=document.createElement('dialog');
+  dialog.setAttribute('aria-label','Ya existe este nombre');
+  dialog.innerHTML='<div class="dialog-head"><h2>Ya existe este nombre</h2></div><div class="dialog-body"><p>Ya existe «'+esc(name)+'» en esta carpeta. ¿Qué quieres hacer?</p><div class="dialog-actions"><button type="button" class="button" data-choice="cancel">Cancelar</button><button type="button" class="button" data-choice="copy">Guardar como copia</button>'+(canReplace?'<button type="button" class="button primary" data-choice="replace">Sobrescribir</button>':'')+'</div></div>';
+  document.body.appendChild(dialog);
+  const finish=value=>{dialog.close();dialog.remove();resolve(value)};
+  dialog.addEventListener('cancel',event=>{event.preventDefault();finish('cancel')});
+  dialog.addEventListener('click',event=>{const button=event.target.closest('[data-choice]');if(button)finish(button.dataset.choice)});
+  dialog.showModal();
+ });
+}
+async function resolveDestination(space,parent,name,kind,source=null){
+ const items=await destinationItems(space,parent);
+ const existing=items.find(n=>n.id!==source&&n.name.normalize('NFC').toLocaleLowerCase()===name.normalize('NFC').toLocaleLowerCase());
+ if(!existing)return {name};
+ const choice=await collisionChoice(name,!existing.protected&&kind===existing.kind);
+ if(choice==='cancel')return null;
+ if(choice==='replace')return {name,existing,overwrite:{id:existing.id,revision:existing.revision}};
+ let index=1,next=copyName(name,kind,index);
+ while(items.some(n=>n.name.toLocaleLowerCase()===next.toLocaleLowerCase()))next=copyName(name,kind,++index);
+ return {name:next};
+}
+async function moveItem(node,parent){
+ if(!node||protectedItem(node)||node.trashed_at||node.id===parent)return;
+ const space=node.space_id||state.space;
+ const choice=await resolveDestination(space,parent,node.name,node.kind,node.id);
+ if(!choice)return;
+ await mutate('/nodes/'+node.id,'PATCH',{name:choice.name,...(parent?{parent_id:parent}:{move_to_root:true}),overwrite:choice.overwrite},node);
+ await load();toast('Elemento movido.');
+}
+async function createFolderResolved(name){
+ const choice=await resolveDestination(state.space,state.parent,name,'folder');
+ if(!choice)return;
+ await mutate('/spaces/'+state.space+'/nodes','POST',{name:choice.name,parent_id:state.parent,overwrite:choice.overwrite});
+ $('dialog').close();await refresh();toast('Carpeta creada.');
+}
+async function uploadResolved(file){
+ if(!file||state.uploading)return;
+ const pending=readJob();
+ if(pending?.node)state.replacement={id:pending.node,revision:pending.revision};
+ if(state.replacement||pending)return upload(file);
+ const choice=await resolveDestination(state.space,state.parent,file.name,'file');
+ if(!choice)return;
+ state.replacement=choice.existing||null;
+ return upload(file,choice.name);
+}
 async function hash(buffer){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',buffer)),b=>b.toString(16).padStart(2,'0')).join('')}
 function progress(name,text,done,total,completed=false){$('cancel-upload').hidden=completed;$('upload-panel').hidden=false;$('upload-name').textContent=name;$('upload-message').textContent=text;$('upload-bar').style.width=(total?Math.min(100,done/total*100):0)+'%';$('upload-bytes').textContent=`${bytes(done)} de ${bytes(total)}`}
 async function ensureUpload(job,signal){if(!job.id){const headers={'Idempotency-Key':job.start_key};if(job.revision)headers['If-Match']=`"${job.revision}"`;const {data}=await api('/uploads',{method:'POST',signal,headers,body:{space_id:job.space,parent_id:job.parent,node_id:job.node,name:job.name,size:job.size,sha256:job.sha256}});job.id=data.id;saveJob(job)}return job}
 // shortcut: WebCrypto hashes a whole file in memory; keep the 64 MiB demo cap until a streaming worker is added.
-async function upload(file){if(!file||!state.me)return;if(state.uploading){toast('Espera a que termine la subida actual.');return}if(!state.space){toast('Selecciona un espacio.');return}if(file.size>64*1024*1024){toast('Esta prueba admite hasta 64 MiB por archivo.');return}state.uploading=true;state.paused=false;uploadController=new AbortController();const signal=uploadController.signal;let job=readJob(),confirmed=0;try{progress(file.name,'Comprobando la integridad…',0,file.size);const fullHash=await hash(await file.arrayBuffer());if(state.paused)throw new DOMException('Pausado','AbortError');if(job&&(job.sha256!==fullHash||job.space!==state.space||job.parent!==state.parent||(job.node||null)!==(state.replacement?.id||null))){throw new Error('Hay otra subida pendiente. Reanúdala con el mismo archivo o cancélala primero.')}if(!job){job={id:null,start_key:crypto.randomUUID(),name:file.name,size:file.size,sha256:fullHash,space:state.space,parent:state.parent,node:state.replacement?.id||null,revision:state.replacement?.revision};saveJob(job)}await ensureUpload(job,signal);let {data:status}=await api('/uploads/'+job.id,{signal});if(status.state==='ready'){clearJob();toast('El archivo ya estaba guardado.');await refresh();return}if(status.state!=='pending')throw new Error('Esta subida ya no está disponible. Cancélala para iniciar otra.');let offset=status.received;confirmed=offset;while(offset<file.size){if(state.paused)throw new DOMException('Pausado','AbortError');const chunk=file.slice(offset,Math.min(file.size,offset+4*1024*1024));const digest=await hash(await chunk.arrayBuffer());progress(file.name,'Subiendo al servidor…',offset,file.size);try{const {data}=await api(`/uploads/${job.id}/content`,{method:'PATCH',body:chunk,signal,headers:{'Content-Type':'application/octet-stream','Upload-Offset':String(offset),'X-Chunk-SHA256':digest}});offset=data.offset;confirmed=offset}catch(e){if(e.name==='AbortError')throw e;if(e.code==='offset_mismatch_query_upload_status'){const {data}=await api('/uploads/'+job.id,{signal});offset=data.received;confirmed=offset}else throw e}}progress(file.name,'Verificando y guardando el archivo…',file.size,file.size);await api(`/uploads/${job.id}/complete`,{method:'POST',signal});for(let i=0;i<120;i++){if(state.paused)throw new DOMException('Pausado','AbortError');const {data}=await api('/uploads/'+job.id,{signal});if(data.state==='ready'&&data.storage_pending){progress(file.name,'Contenido guardado. Organizando las carpetas del servidor…',file.size,file.size);await new Promise(resolve=>setTimeout(resolve,500));continue}if(data.state==='ready'){clearJob();state.replacement=null;progress(file.name,'Guardado correctamente.',file.size,file.size,true);toast('Archivo guardado.');await refresh();setTimeout(()=>$('upload-panel').hidden=true,2500);return}if(data.completion_error)throw new Error(data.completion_error);if(data.state!=='pending')throw new Error('No se pudo publicar el archivo.');await new Promise(resolve=>setTimeout(resolve,500))}throw new Error('El servidor sigue verificando el archivo. Puedes consultar la subida de nuevo.')}catch(error){progress(file.name,message(error),confirmed,file.size);toast(message(error));if(state.me)chrome()}finally{state.uploading=false;state.paused=false;$('file-input').value=''}}
+async function upload(file,uploadName=file?.name){if(!file||!state.me)return;if(state.uploading){toast('Espera a que termine la subida actual.');return}if(!state.space){toast('Selecciona un espacio.');return}if(file.size>64*1024*1024){toast('Esta prueba admite hasta 64 MiB por archivo.');return}state.uploading=true;state.paused=false;uploadController=new AbortController();const signal=uploadController.signal;let job=readJob(),confirmed=0;try{progress(file.name,'Comprobando la integridad…',0,file.size);const fullHash=await hash(await file.arrayBuffer());if(state.paused)throw new DOMException('Pausado','AbortError');if(job&&(job.sha256!==fullHash||job.space!==state.space||job.parent!==state.parent||(job.node||null)!==(state.replacement?.id||null))){throw new Error('Hay otra subida pendiente. Reanúdala con el mismo archivo o cancélala primero.')}if(!job){job={id:null,start_key:crypto.randomUUID(),name:uploadName,size:file.size,sha256:fullHash,space:state.space,parent:state.parent,node:state.replacement?.id||null,revision:state.replacement?.revision};saveJob(job)}await ensureUpload(job,signal);let {data:status}=await api('/uploads/'+job.id,{signal});if(status.state==='ready'){clearJob();toast('El archivo ya estaba guardado.');await refresh();return}if(status.state!=='pending')throw new Error('Esta subida ya no está disponible. Cancélala para iniciar otra.');let offset=status.received;confirmed=offset;while(offset<file.size){if(state.paused)throw new DOMException('Pausado','AbortError');const chunk=file.slice(offset,Math.min(file.size,offset+4*1024*1024));const digest=await hash(await chunk.arrayBuffer());progress(file.name,'Subiendo al servidor…',offset,file.size);try{const {data}=await api(`/uploads/${job.id}/content`,{method:'PATCH',body:chunk,signal,headers:{'Content-Type':'application/octet-stream','Upload-Offset':String(offset),'X-Chunk-SHA256':digest}});offset=data.offset;confirmed=offset}catch(e){if(e.name==='AbortError')throw e;if(e.code==='offset_mismatch_query_upload_status'){const {data}=await api('/uploads/'+job.id,{signal});offset=data.received;confirmed=offset}else throw e}}progress(file.name,'Verificando y guardando el archivo…',file.size,file.size);await api(`/uploads/${job.id}/complete`,{method:'POST',signal});for(let i=0;i<120;i++){if(state.paused)throw new DOMException('Pausado','AbortError');const {data}=await api('/uploads/'+job.id,{signal});if(data.state==='ready'&&data.storage_pending){progress(file.name,'Contenido guardado. Organizando las carpetas del servidor…',file.size,file.size);await new Promise(resolve=>setTimeout(resolve,500));continue}if(data.state==='ready'){clearJob();state.replacement=null;progress(file.name,'Guardado correctamente.',file.size,file.size,true);toast('Archivo guardado.');await refresh();setTimeout(()=>$('upload-panel').hidden=true,2500);return}if(data.completion_error)throw new Error(data.completion_error);if(data.state!=='pending')throw new Error('No se pudo publicar el archivo.');await new Promise(resolve=>setTimeout(resolve,500))}throw new Error('El servidor sigue verificando el archivo. Puedes consultar la subida de nuevo.')}catch(error){if(error.code==='name_already_exists'&&job&&!job.id){clearJob();state.replacement=null}progress(file.name,message(error),confirmed,file.size);toast(message(error));if(state.me)chrome()}finally{state.uploading=false;state.paused=false;$('file-input').value=''}}
 function setTheme(theme){window.SantolvShell.setTheme(theme)}
 
 const actions={
@@ -368,7 +429,7 @@ const actions={
  'menu':()=>{$('sidebar').classList.toggle('open')},'close-dialog':()=>{if(modalBusy)return;$('dialog').close();$('dialog').querySelector('[data-action="close-dialog"]').disabled=false},'close-detail':()=>{const id=state.selected?.id;state.selected=null;detail();render();document.querySelector(`[data-node="${id}"]`)?.focus()},
  'logout':async()=>{if(state.uploading)throw new Error('Pausa o termina la subida antes de cerrar sesión.');await api('/auth/logout',{method:'POST'});window.SantolvShell?.sessionEnded();signedOut()},
  'copy-node':async()=>{await navigator.clipboard.writeText(state.selected.id);toast('Identificador copiado.')},
- 'new-folder':()=>{if(!state.space||state.me?.must_change_password)throw new Error('Selecciona un espacio antes de crear una carpeta.');if(!['files','recent'].includes(state.view))throw new Error('Abre Mi unidad o Recientes para crear una carpeta.');return form('Nueva carpeta',field('Nombre de la carpeta','name'),'Crear carpeta',async v=>{await mutate(`/spaces/${state.space}/nodes`,'POST',{name:v.name,parent_id:state.parent});$('dialog').close();await refresh();toast('Carpeta creada.')})},
+ 'new-folder':()=>{if(!state.space||state.me?.must_change_password)throw new Error('Selecciona un espacio antes de crear una carpeta.');if(!['files','recent'].includes(state.view))throw new Error('Abre Mi unidad o Recientes para crear una carpeta.');return form('Nueva carpeta',field('Nombre de la carpeta','name'),'Crear carpeta',async v=>{await createFolderResolved(v.name)})},
  'new-space':()=>form('Nuevo espacio compartido',field('Nombre del espacio','name'),'Crear espacio',async v=>{const {data}=await mutate('/spaces','POST',{name:v.name});await loadSpaces();state.space=data.id;state.parent=null;state.crumbs=[];state.view='files';$('dialog').close();await load()}),
 
 
@@ -418,9 +479,34 @@ document.addEventListener('click',event=>{if(event.target.closest('#items')&&!ev
 document.addEventListener('dblclick',event=>{const node=event.target.closest('[data-node]');if(node){state.selected=state.rows.find(n=>n.id===node.dataset.node);if(state.selected?.kind==='folder')openFolder(state.selected);else detail()}});
 
 document.addEventListener('keydown',event=>{const node=event.target.closest('[data-node]');if(node&&event.target.closest('.chk'))return;if(node&&(event.key==='Enter'||event.key===' ')){event.preventDefault();state.selected=state.rows.find(n=>n.id===node.dataset.node);if(event.key==='Enter'&&state.selected.kind==='folder')openFolder(state.selected);else{detail();$('detail').querySelector('button')?.focus()}}});
-$('type-filter').addEventListener('change',render);$('sort-order').addEventListener('change',render);$('search').addEventListener('input',render);$('file-input').addEventListener('change',()=>upload($('file-input').files[0]));
-for(const name of ['dragenter','dragover'])$('dashboard').addEventListener(name,event=>{event.preventDefault();$('dashboard').classList.add('over')});
-for(const name of ['dragleave','drop'])$('dashboard').addEventListener(name,event=>{event.preventDefault();$('dashboard').classList.remove('over');if(name==='drop'){if(!['files','recent'].includes(state.view)||!state.space){toast('Abre Mi unidad para subir archivos.');return}state.replacement=null;if(event.dataTransfer.files.length>1){toast('En esta prueba se sube un archivo a la vez.');return}upload(event.dataTransfer.files[0])}});
+$('type-filter').addEventListener('change',render);$('sort-order').addEventListener('change',render);$('search').addEventListener('input',render);$('file-input').addEventListener('change',()=>uploadResolved($('file-input').files[0]).catch(error=>toast(message(error))));
+let draggedNode=null;
+$('items').addEventListener('dragstart',event=>{
+ const card=event.target.closest('[data-node]');
+ const node=state.rows.find(n=>n.id===card?.dataset.node);
+ if(!node||protectedItem(node)||node.trashed_at){event.preventDefault();return}
+ draggedNode={...node};event.dataTransfer.setData('application/x-santolv-node',node.id);event.dataTransfer.effectAllowed='move';
+});
+$('items').addEventListener('dragend',()=>{draggedNode=null;document.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'))});
+$('items').addEventListener('dragover',event=>{
+ if(!draggedNode)return;
+ event.stopPropagation();
+ const card=event.target.closest('[data-node]');
+ const folder=state.rows.find(n=>n.id===card?.dataset.node);
+ document.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'));
+ if(folder?.kind==='folder'&&!folder.trashed_at&&!protectedItem(folder)&&folder.id!==draggedNode.id){
+  event.preventDefault();event.dataTransfer.dropEffect='move';card.classList.add('drop-target');
+ }
+});
+$('items').addEventListener('drop',event=>{
+ if(!draggedNode)return;
+ event.preventDefault();event.stopPropagation();
+ const card=event.target.closest('[data-node]'),folder=state.rows.find(n=>n.id===card?.dataset.node),source=draggedNode;
+ draggedNode=null;document.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'));
+ if(folder?.kind==='folder'&&!protectedItem(folder)&&!folder.trashed_at)moveItem(source,folder.id).catch(error=>toast(message(error)));
+});
+for(const name of ['dragenter','dragover'])$('dashboard').addEventListener(name,event=>{if(draggedNode)return;event.preventDefault();$('dashboard').classList.add('over')});
+for(const name of ['dragleave','drop'])$('dashboard').addEventListener(name,event=>{event.preventDefault();$('dashboard').classList.remove('over');if(name==='drop'){if(draggedNode){draggedNode=null;return}if(!['files','recent'].includes(state.view)||!state.space){toast('Abre Mi unidad para subir archivos.');return}state.replacement=null;if(event.dataTransfer.files.length>1){toast('En esta prueba se sube un archivo a la vez.');return}uploadResolved(event.dataTransfer.files[0]).catch(error=>toast(message(error)))}});
 $('dialog').addEventListener('close',()=>{$('dialog').querySelector('[data-action="close-dialog"]').disabled=false});
 $('dialog').addEventListener('cancel',event=>{if(state.me?.must_change_password||modalBusy)event.preventDefault()});
 document.addEventListener('click',event=>{if(!event.target.closest('#new-menu')&&!event.target.closest('#newBtn')){$('new-menu').classList.remove('show');$('newBtn').setAttribute('aria-expanded','false')}});
@@ -430,7 +516,7 @@ window.addEventListener('beforeunload',event=>{if(state.uploading){event.prevent
 async function moveDialog(){
  const n={...state.selected},space=n.space_id||state.space;let parent=null,trail=[],cursor=null,folders=[];const title='Mover «'+n.name+'»';
  async function draw(append=false){const {data}=await api(`/spaces/${space}/nodes?${parent?'parent='+encodeURIComponent(parent)+'&':''}${append&&cursor?'after='+encodeURIComponent(cursor):''}`);cursor=data.next_cursor;folders=(append?folders:[]).concat(data.items.filter(f=>f.kind==='folder'&&f.id!==n.id));
- form(title,`<p>Destino: <strong>${esc(trail.length?trail.map(f=>f.name).join(' / '):'Mi unidad')}</strong></p><div class="stack"><button type="button" class="button" id="move-up" ${trail.length?'':'disabled'}>Subir un nivel</button>${folders.map(f=>`<button type="button" class="button" data-destination="${f.id}">${icon('folder')}${esc(f.name)}</button>`).join('')}${cursor?'<button type="button" class="button" id="move-more">Cargar más</button>':''}</div>`,'Mover aquí',async()=>{await mutate('/nodes/'+n.id,'PATCH',parent?{parent_id:parent}:{move_to_root:true},n);$('dialog').close();await load();toast('Elemento movido.')});
+ form(title,`<p>Destino: <strong>${esc(trail.length?trail.map(f=>f.name).join(' / '):'Mi unidad')}</strong></p><div class="stack"><button type="button" class="button" id="move-up" ${trail.length?'':'disabled'}>Subir un nivel</button>${folders.map(f=>`<button type="button" class="button" data-destination="${f.id}">${icon('folder')}${esc(f.name)}</button>`).join('')}${cursor?'<button type="button" class="button" id="move-more">Cargar más</button>':''}</div>`,'Mover aquí',async()=>{await moveItem(n,parent);$('dialog').close()});
  $('move-up').addEventListener('click',()=>{trail.pop();parent=trail.at(-1)?.id||null;draw().catch(e=>toast(message(e)))});
  $('dialog-body').querySelectorAll('[data-destination]').forEach(b=>b.addEventListener('click',()=>{const f=folders.find(f=>f.id===b.dataset.destination);trail.push(f);parent=f.id;draw().catch(e=>toast(message(e)))}));
  if(cursor)$('move-more').addEventListener('click',()=>draw(true).catch(e=>toast(message(e))));

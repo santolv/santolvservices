@@ -2153,6 +2153,78 @@ async fn photo_derivatives_are_persistent_private_and_versioned(pool: PgPool) {
     );
 }
 
+#[sqlx::test]
+async fn overwriting_folders_is_atomic_revision_checked_and_recoverable(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let a = h.account("overwrite-alice").await;
+    let b = h.account("overwrite-bob").await;
+    let original = h.folder(&a, None, "Trabajo", "original-folder").await;
+    let child = h
+        .folder(&a, Some(original), "Conservar", "original-child")
+        .await;
+    let source = h.folder(&a, None, "Nueva", "source-folder").await;
+    let path = format!("/api/v1/nodes/{source}");
+    let replacement = json!({"name":"Trabajo","overwrite":{"id":original,"revision":99}});
+    assert_eq!(
+        h.json(
+            "PATCH",
+            &path,
+            Some(&a.token),
+            &[("if-match", "\"1\""), ("idempotency-key", "stale-folder")],
+            replacement
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let replacement = json!({"name":"Trabajo","overwrite":{"id":original,"revision":1}});
+    assert_eq!(
+        h.json(
+            "PATCH",
+            &path,
+            Some(&b.token),
+            &[("if-match", "\"1\""), ("idempotency-key", "foreign-folder")],
+            replacement.clone()
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let result = h
+        .json(
+            "PATCH",
+            &path,
+            Some(&a.token),
+            &[("if-match", "\"1\""), ("idempotency-key", "replace-folder")],
+            replacement,
+        )
+        .await;
+    assert!(
+        matches!(result.0, StatusCode::OK | StatusCode::ACCEPTED),
+        "{result:?}"
+    );
+    let removed: bool = sqlx::query_scalar("SELECT trashed_at IS NOT NULL FROM nodes WHERE id=$1")
+        .bind(original)
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap();
+    assert!(removed);
+    assert_eq!(
+        sqlx::query_scalar::<_, Uuid>("SELECT parent_id FROM nodes WHERE id=$1")
+            .bind(child)
+            .fetch_one(&h.app.db)
+            .await
+            .unwrap(),
+        original
+    );
+    let source_name: String = sqlx::query_scalar("SELECT name FROM nodes WHERE id=$1")
+        .bind(source)
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(source_name, "Trabajo");
+}
+
 struct Harness {
     app: App,
     api: Router,

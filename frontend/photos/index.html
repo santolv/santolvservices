@@ -124,7 +124,7 @@ main{grid-row:2;padding:79.18px 23.54px 0;background:var(--bg);scroll-padding-to
 .app .top,.app.non-library .top,.app.is-scrolled:not(.non-library) .top{
   position:sticky;inset:0 auto auto;z-index:10;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
   align-items:center;min-height:49.22px;height:49.22px;padding:0 17.12px;gap:8.56px;pointer-events:auto;color:var(--blue);
-  background:var(--bg);border-bottom:1.07px solid var(--line);backdrop-filter:none;
+  background:var(--bg);border-bottom:0;backdrop-filter:none;
 }
 .toolbar-leading,.photo-tools-middle,.top .toolbar-actions{display:flex;align-items:center;gap:4.28px;min-width:0}
 .top .toolbar-actions{justify-self:end;margin:0}
@@ -134,7 +134,7 @@ main{grid-row:2;padding:79.18px 23.54px 0;background:var(--bg);scroll-padding-to
 .top .icon-btn:hover,.top .icon-btn[aria-expanded="true"]{background:var(--fill)}
 .top .search,.app.non-library .top .search{min-height:29.96px;padding:4.28px 8.56px;border:0;border-radius:7.49px;background:var(--card);box-shadow:none;backdrop-filter:none}
 .top .search input{width:clamp(48.15px,8vw,107px);font-size:12.84px}
-.app .library-heading{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:end;gap:12.84px;padding:21.4px 25.68px 14.98px;margin:0;min-height:0}
+.app .library-heading{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:end;gap:12.84px;padding:5px 25.68px 10px;margin:0;min-height:0}
 .app .window-title{min-width:0;margin:0}
 .window-title h1{font-size:29.96px;font-weight:700;line-height:1.16;letter-spacing:-.025em;overflow-wrap:anywhere}
 .window-title p{margin-top:4.28px;color:var(--sub);font-size:13.91px}
@@ -186,7 +186,7 @@ main{grid-row:2;padding:79.18px 23.54px 0;background:var(--bg);scroll-padding-to
  .app.mobile-sidebar main{grid-column:2}
  .app.mobile-sidebar .side{inset:var(--shell-height) auto 0 0;width:240.429px}
  .app .top,.app.non-library .top,.app.is-scrolled:not(.non-library) .top{padding-inline:10.7px;gap:4.28px}
- .app .library-heading{padding:17.12px 14.98px 9.63px;align-items:center}
+ .app .library-heading{padding:5px 14.98px 9.63px;align-items:center}
  .app.is-selecting .window-title,.app.is-selecting .periods{display:block}
  .app.is-selecting .periods:not([hidden]){display:flex}
  .app .heading-actions{gap:3.21px}

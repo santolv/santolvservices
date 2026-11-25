@@ -146,6 +146,14 @@ Consulta la [guía para Windows y Linux](backend/README.md#instalación-local).
 
 ## Fotos conectado
 
+Drive consulta los nombres del destino antes de subir, crear una carpeta o mover.
+Un conflicto ofrece cancelar, conservar una copia con sufijo (copia) o sobrescribir.
+Las copias sucesivas usan (copia 2), (copia 3), conservando la extensión.
+La sobrescritura de carpetas envía la anterior a la papelera dentro de la misma
+transacción que crea o mueve el reemplazo. Las revisiones y los permisos se verifican
+en el servidor. Los archivos y las carpetas de Drive pueden arrastrarse a una
+carpeta del mismo espacio. Las carpetas protegidas conservan sus restricciones.
+
 La galería usa recuadros 4:3. Rust genera WebP de 1280 px sobre el lado
 mayor, conservando la proporción y sin ampliar fotos pequeñas. Los originales
 se mantienen intactos. Una cola PostgreSQL persistente genera cada versión una

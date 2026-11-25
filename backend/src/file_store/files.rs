@@ -376,6 +376,46 @@ pub(crate) async fn list_children(
 pub struct FolderInput {
     pub name: String,
     pub parent_id: Option<Uuid>,
+    pub overwrite: Option<Overwrite>,
+}
+#[derive(Serialize, Deserialize)]
+pub struct Overwrite {
+    id: Uuid,
+    revision: i64,
+}
+async fn overwrite_target(
+    tx: &mut Transaction<'_, Postgres>,
+    user: Uuid,
+    space: Uuid,
+    parent: Option<Uuid>,
+    name: &str,
+    replacement: &Overwrite,
+    source: Option<Uuid>,
+) -> Result<()> {
+    let target = access(tx, replacement.id, user, 2, false).await?;
+    if target.space_id != space
+        || target.parent_id != parent
+        || target.name.to_lowercase() != name.to_lowercase()
+        || Some(target.id) == source
+    {
+        return Err(Error::bad("invalid_target"));
+    }
+    if target.revision != replacement.revision {
+        return Err(Error::conflict("revision_changed"));
+    }
+    if let Some(source) = source {
+        let ancestor:bool=sqlx::query_scalar("WITH RECURSIVE a AS (SELECT id,parent_id FROM nodes WHERE id=$1 UNION ALL SELECT n.id,n.parent_id FROM nodes n JOIN a ON n.id=a.parent_id) SELECT EXISTS(SELECT 1 FROM a WHERE id=$2)").bind(source).bind(target.id).fetch_one(&mut **tx).await?;
+        if ancestor {
+            return Err(Error::conflict("folder_cycle"));
+        }
+    }
+    sqlx::query("UPDATE nodes SET trashed_at=now(),revision=revision+1 WHERE id=$1")
+        .bind(target.id)
+        .execute(&mut **tx)
+        .await?;
+    audit(tx, user, space, "trashed", target.id).await?;
+    crate::workspace::schedule(tx, target.id, space).await?;
+    Ok(())
 }
 pub async fn create_folder(
     State(s): State<App>,
@@ -394,6 +434,9 @@ pub async fn create_folder(
     lock(&mut tx, space).await?;
     folder(&mut tx, space, c.parent_id, u.id, 2).await?;
     workspace_ready(&mut tx, space).await?;
+    if let Some(replacement) = &c.overwrite {
+        overwrite_target(&mut tx, u.id, space, c.parent_id, &name, replacement, None).await?;
+    }
     name_available(&mut tx, space, c.parent_id, &name, None, None).await?;
     let id = Uuid::new_v4();
     sqlx::query("INSERT INTO nodes(id,space_id,parent_id,name,kind) VALUES($1,$2,$3,$4,'folder')")
@@ -428,6 +471,7 @@ pub struct Edit {
     parent_id: Option<Uuid>,
     #[serde(default)]
     move_to_root: bool,
+    overwrite: Option<Overwrite>,
 }
 pub async fn edit_node(
     State(s): State<App>,
@@ -467,6 +511,18 @@ pub async fn edit_node(
         Some(n) => name(&n)?,
         None => n.name,
     };
+    if let Some(replacement) = &c.overwrite {
+        overwrite_target(
+            &mut tx,
+            u.id,
+            n.space_id,
+            target,
+            &name,
+            replacement,
+            Some(id),
+        )
+        .await?;
+    }
     name_available(&mut tx, n.space_id, target, &name, Some(id), None).await?;
     sqlx::query("UPDATE nodes SET name=$1,parent_id=$2,revision=revision+1 WHERE id=$3")
         .bind(name)

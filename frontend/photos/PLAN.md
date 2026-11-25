@@ -16,6 +16,7 @@ referencia; sus restricciones de demo y repositorio independiente están superad
 - [x] Contenido de las páginas ampliado un 7 %, conservando las medidas de la barra superior global.
 - [x] Tamaño de miniaturas guardado en el navegador, acceso Papelera y barra de herramientas con el fondo de la fototeca.
 - [x] Fondo oscuro gris compartido visualmente con Drive.
+- [x] Barra de herramientas unida visualmente a la cabecera, con menor separación y sin línea divisoria.
 - [x] Cuadrícula uniforme 4:3 con tamaño ajustable y guardado en el navegador.
 - [x] Página de cuenta compartida para editar el nombre visible y el avatar de cada usuario.
 - [x] Botón de subida compartido con Drive y carpeta protegida en Mi unidad.

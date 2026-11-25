@@ -66,3 +66,26 @@
 @media(max-width:620px){.shell-header{padding-inline:12px}.shell-controls{gap:5px}.shell-home{padding:0 10px}}
 @media(max-width:360px){.shell-home span{display:none}.shell-home{width:34px;padding:0}}
 @media(pointer:coarse){.shell-home{min-width:44px;height:44px}.shell-top-edge .shell-button{min-height:44px}}
+.shell-calendar-mark{background:#b63f54}
+#shell-calendar-trigger{position:relative}
+#shell-calendar-count{position:absolute;top:0;right:0;padding:1px 4px;border-radius:10px;background:#b22547;color:#fff;font-size:10px;line-height:1.3}
+.calendar-popup{width:min(340px,calc(100vw - 28px));max-height:min(75vh,620px);overflow:auto}
+.calendar-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.calendar-list li{min-width:0;padding:6px 8px;overflow-wrap:anywhere}
+.calendar-list li a{display:inline;padding:0;font-weight:600;text-decoration:underline;text-underline-offset:2px}
+.calendar-list li small{display:block;margin-top:4px}
+.calendar-list li button{display:inline-block;width:auto;margin-inline-start:8px;font-size:.85em}
+.calendar-dialog{width:min(520px,calc(100vw - 24px));max-height:calc(100dvh - 32px);padding:22px;border:1px solid var(--line,#d4d4da);border-radius:16px;background:#fff;color:#171719;box-sizing:border-box}
+:root[data-theme="dark"] .calendar-dialog{background:#25252b;color:#f4f4f5}
+.calendar-dialog::backdrop{background:#0007}
+.calendar-form{display:grid;gap:12px;max-width:none;border:0;padding:0;margin:0;background:none;box-shadow:none}
+.calendar-form h2,.calendar-form p{margin:0}
+.calendar-form [role=status]:empty,#shell-calendar-status:empty{display:none}
+.calendar-form label{display:grid;gap:4px}
+.calendar-form label:has([type=checkbox]){display:flex;align-items:center}
+.calendar-form input:not([type=checkbox]),.calendar-form select,.calendar-form textarea{box-sizing:border-box;width:100%;min-height:36px;padding:6px 8px;border:1px solid #929299;border-radius:7px;background:transparent;color:inherit;font:inherit}
+.calendar-form input[type=checkbox]{width:auto}
+.calendar-form select option{background:Canvas;color:CanvasText}
+.calendar-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+.calendar-actions button,.calendar-form button{padding:7px 11px;border:1px solid #929299;border-radius:7px;background:transparent;color:inherit;cursor:pointer;font:inherit}
+.calendar-actions button[type=submit]{background:#0060c0;border-color:#0060c0;color:#fff}

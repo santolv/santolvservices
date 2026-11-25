@@ -52,10 +52,12 @@
       sessionTimer = setTimeout(returnHome, Math.max(0, expiresAt * 1000 - Date.now()));
     },
     sessionEnded() {
+      window.SantolvCalendar?.session(null);
       try { localStorage.setItem(sessionKey, String(Date.now())); } catch {}
     },
     account(profile, handlers) {
       account = handlers;
+      window.SantolvCalendar?.session(profile);
       const trigger = document.querySelector('.shell-profile');
       if (!trigger) return;
       trigger.hidden = !profile;

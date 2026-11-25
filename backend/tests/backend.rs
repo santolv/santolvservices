@@ -2236,7 +2236,7 @@ async fn photo_derivatives_are_persistent_private_and_versioned(pool: PgPool) {
         "photos",
     ));
     let path = format!("/api/v1/photos/{node}/image/1280");
-    let result = async {
+    async {
         let mut ready = None;
         for _ in 0..40 {
             let response = h
@@ -2313,7 +2313,6 @@ async fn photo_derivatives_are_persistent_private_and_versioned(pool: PgPool) {
     }
     .await;
     worker.abort();
-    let _ = result;
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM photos.derivatives WHERE node_id=$1")
             .bind(node)

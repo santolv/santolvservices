@@ -1,0 +1,3 @@
+Reservar el siguiente número de migración cuando el contrato de Calendario esté
+aprobado. No convertir este archivo en una migración aplicada antes de definir
+tablas, índices, zonas horarias y permisos.

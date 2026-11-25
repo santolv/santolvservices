@@ -146,6 +146,24 @@ Consulta la [guía para Windows y Linux](backend/README.md#instalación-local).
 
 ## Fotos conectado
 
+La galería usa recuadros 4:3. Rust genera WebP de 256 y 1280 px sobre el lado
+mayor, conservando la proporción y sin ampliar fotos pequeñas. Los originales
+se mantienen intactos. Una cola PostgreSQL persistente genera cada versión una
+vez y conserva los derivados en photos.derivatives. Cambiar el contenido,
+enviar a la papelera o eliminar invalida esas versiones. La restauración las regenera.
+El navegador solicita miniaturas visibles y previsualizaciones al abrir el visor.
+La ampliación solicita el original. Las respuestas usan caché privada con
+revalidación de permisos y ETag.
+
+El procesamiento admite JPEG, PNG, GIF y WebP con image e image-webp,
+sin ejecutables externos. Usa un solo decodificador, un archivo de hasta 30 MiB,
+16 millones de píxeles, dimensiones máximas de 12000 px y un límite de asignación
+del decodificador de 128 MiB. El consumo total incluye el archivo y las versiones
+reducidas. GIF genera una imagen estática. AVIF conserva su original pero queda
+fuera de la generación de derivados con estos codecs habilitados. Los errores de
+formato se registran para evitar reprocesamiento continuo. WebP se codifica sin
+metadatos EXIF/XMP/GPS.
+
 - En Drive, **Mi unidad → Photos** abre una carpeta protegida con tus álbumes y
   **Cámara**, donde aparecen las fotos sin álbum. Drive permite navegar y
   descargar. Las subidas y los cambios de biblioteca se hacen desde Fotos.

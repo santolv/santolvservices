@@ -13,18 +13,7 @@ pendingImage.listeners.load();
 assert.deepEqual([...pendingImage.classes],['is-loaded','is-arriving']);
 assert.deepEqual([...cachedImage.classes],['is-loaded']);
 const thumbnailCode=html.slice(html.indexOf('function restoreThumbnailSize'),html.indexOf("document.addEventListener('click',async event=>",html.indexOf('function restoreThumbnailSize')));
-const gridCards=['landscape','portrait'].map(id=>({style:{},querySelector:()=>({dataset:{media:id}})}));
-const gridContext=vm.createContext({
- $:()=>({querySelectorAll:()=>[{clientWidth:400,children:gridCards}]}),
- document:{documentElement:{}},getComputedStyle:()=>({getPropertyValue:()=>160})
-});
-vm.runInContext(html.slice(html.indexOf('const photoRatios='),html.indexOf('function prepareImages'))+
- ";photoRatios.set('landscape',2);photoRatios.set('portrait',.5);layoutPhotoGrid()",gridContext);
-const widths=gridCards.map(card=>parseFloat(card.style.width));
-const heights=gridCards.map(card=>parseFloat(card.style.height));
-assert(Math.abs(widths[0]/heights[0]-2)<.001);
-assert(Math.abs(widths[1]/heights[1]-.5)<.001);
-assert.equal(heights[0],heights[1]);
+assert(html.includes('aspect-ratio:4/3'));
 let savedThumbnail='240',renderedThumbnail;
 const thumbnailInput={value:'150'};
 const thumbnailContext=vm.createContext({

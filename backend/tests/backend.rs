@@ -981,7 +981,15 @@ async fn photos_share_sessions_but_isolate_storage_and_persist_favorites(pool: P
             json!({}),
         )
         .await;
-    assert_eq!(trash["items"][0]["deleted"], true);
+    assert_eq!(
+        trash["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["id"] == node.to_string())
+            .unwrap()["deleted"],
+        true
+    );
     assert_eq!(
         h.json(
             "POST",
@@ -1972,6 +1980,177 @@ async fn sharing_and_memberships_accept_separate_usernames_and_ids(pool: PgPool)
         .json("GET", &path, Some(&owner.token), &[], json!(null))
         .await;
     assert!(grants["items"].as_array().unwrap().is_empty());
+}
+
+#[sqlx::test]
+async fn photo_derivatives_are_persistent_private_and_versioned(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let alice = h.account("derived-alice").await;
+    let bob = h.account("derived-bob").await;
+    let (_, space) = h
+        .json(
+            "POST",
+            "/api/v1/photos/space",
+            Some(&alice.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    let a = Account {
+        space: id(&space, "id"),
+        ..alice
+    };
+    let mut encoded = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::new_rgb8(1600, 800)
+        .write_to(&mut encoded, image::ImageFormat::Png)
+        .unwrap();
+    let source = encoded.into_inner();
+    let upload = h
+        .start(
+            &a,
+            "test.png",
+            &source,
+            "derivative-upload",
+            None,
+            None,
+            "\"1\"",
+        )
+        .await;
+    assert_eq!(h.chunk(&a, upload, 0, &source, true).await, StatusCode::OK);
+    let (status, done) = h.complete(&a, upload).await;
+    assert_eq!(status, StatusCode::OK);
+    let node = id(&done, "id");
+    let app = santolvdrive::modules::photos::SERVICE.app(&h.app);
+    let worker = tokio::spawn((santolvdrive::modules::photos::SERVICE.worker)(
+        app.clone(),
+        "photos",
+    ));
+    let path = format!("/api/v1/photos/{node}/image/256");
+    let result = async {
+        let mut ready = None;
+        for _ in 0..40 {
+            let response = h
+                .req("GET", &path, Some(&a.token), &[], Body::empty())
+                .await;
+            if response.0 == StatusCode::OK {
+                ready = Some(response);
+                break;
+            }
+            assert_eq!(response.0, StatusCode::ACCEPTED);
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+        let (_, headers, bytes) = ready.expect("thumbnail generated");
+        assert_eq!(headers["content-type"], "image/webp");
+        assert_eq!(headers["cache-control"], "private, no-cache");
+        assert_eq!(image::load_from_memory(&bytes).unwrap().width(), 256);
+        assert_eq!(
+            h.req("GET", &path, Some(&bob.token), &[], Body::empty())
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            h.req(
+                "GET",
+                &path,
+                Some(&a.token),
+                &[("if-none-match", headers["etag"].to_str().unwrap())],
+                Body::empty()
+            )
+            .await
+            .0,
+            StatusCode::NOT_MODIFIED
+        );
+        let preview = h
+            .req(
+                "GET",
+                &format!("/api/v1/photos/{node}/image/1280"),
+                Some(&a.token),
+                &[],
+                Body::empty(),
+            )
+            .await;
+        assert_eq!(image::load_from_memory(&preview.2).unwrap().width(), 1280);
+        let original = h
+            .req(
+                "GET",
+                &format!("/api/v1/nodes/{node}/content"),
+                Some(&a.token),
+                &[],
+                Body::empty(),
+            )
+            .await;
+        assert_eq!(original.2, source);
+        let trashed = h
+            .json(
+                "POST",
+                &format!("/api/v1/nodes/{node}/trash"),
+                Some(&a.token),
+                &[("if-match", "\"1\""), ("idempotency-key", "derived-trash")],
+                json!({}),
+            )
+            .await;
+        assert!(
+            matches!(trashed.0, StatusCode::OK | StatusCode::ACCEPTED),
+            "{trashed:?}"
+        );
+        assert_eq!(
+            h.req("GET", &path, Some(&a.token), &[], Body::empty())
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+    }
+    .await;
+    worker.abort();
+    let _ = result;
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM photos.derivatives WHERE node_id=$1")
+            .bind(node)
+            .fetch_one(&h.app.db)
+            .await
+            .unwrap(),
+        0
+    );
+    sqlx::query("UPDATE photos.nodes SET trashed_at=NULL WHERE id=$1")
+        .bind(node)
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM photos.derivative_jobs WHERE node_id=$1"
+        )
+        .bind(node)
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap(),
+        1
+    );
+    let version: Uuid = sqlx::query_scalar("SELECT current_version FROM photos.nodes WHERE id=$1")
+        .bind(node)
+        .fetch_one(&h.app.db)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO photos.derivatives(node_id,version_id) VALUES($1,$2)")
+        .bind(node)
+        .bind(version)
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE photos.nodes SET current_version=NULL WHERE id=$1")
+        .bind(node)
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM photos.derivatives WHERE node_id=$1")
+            .bind(node)
+            .fetch_one(&h.app.db)
+            .await
+            .unwrap(),
+        0
+    );
 }
 
 struct Harness {

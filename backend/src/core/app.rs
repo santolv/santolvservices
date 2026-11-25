@@ -143,6 +143,7 @@ pub fn router(s: App) -> Router {
                 "x-chunk-sha256",
                 "range",
                 "if-range",
+                "if-none-match",
             ]
             .map(HeaderName::from_static),
         )

@@ -197,6 +197,7 @@ main{grid-row:2;padding:79.18px 23.54px 0;background:var(--bg);scroll-padding-to
  .app .photo-card{min-width:0}
 }
 @media(max-width:360px){.top .icon-btn{width:25.68px}.top .search{padding-inline:5.35px}.top .search input{width:38.52px;font-size:11.77px}}
+.app .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,calc(var(--thumb) * 4 / 3)),1fr))}.app .photo-card{width:auto!important;height:auto!important;aspect-ratio:4/3;content-visibility:auto;contain-intrinsic-size:auto 160px}
 </style>
 </head>
 <body>
@@ -314,36 +315,11 @@ function showImageFailure(image){
   fallback.innerHTML=icon('photos')+'<span>No se pudo cargar la imagen</span>';
   button.append(fallback);
 }
-const photoRatios=new Map();
-function layoutPhotoGrid(){
- const target=Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--thumb'))||160;
- for(const grid of $('library').querySelectorAll('.photo-grid')){
-  const width=grid.clientWidth-4.28,gap=2.14;
-  if(width<=0)continue;
-  let row=[],sum=0;
-  const placeRow=last=>{
-   const height=Math.min(last?target:Infinity,(width-gap*(row.length-1))/sum);
-   for(const card of row){
-    card.style.width=(height*(photoRatios.get(card.querySelector('img').dataset.media)||1))+'px';
-    card.style.height=height+'px';
-   }
-   row=[];sum=0;
-  };
-  for(const card of grid.children){
-   const ratio=photoRatios.get(card.querySelector('img').dataset.media)||1;
-   row.push(card);sum+=ratio;
-   if(sum*target+gap*(row.length-1)>=width)placeRow(false);
-  }
-  if(row.length)placeRow(true);
- }
-}
+
 function prepareImages(){
   for(const image of $('library').querySelectorAll('img[data-media]')){
     const loaded=arriving=>{
-      if(image.naturalWidth&&image.naturalHeight){
-        photoRatios.set(image.dataset.media,image.naturalWidth/image.naturalHeight);
-        layoutPhotoGrid();
-      }
+
       image.classList.add('is-loaded');
       if(arriving)image.classList.add('is-arriving');
     };
@@ -354,7 +330,7 @@ function prepareImages(){
       image.addEventListener('error',()=>showImageFailure(image),{once:true});
     }
   }
-  layoutPhotoGrid();
+
 }
 
 
@@ -373,7 +349,7 @@ function renderSelection(){
  $('selection-count').textContent=state.selected.size?state.selected.size+' seleccionada'+(state.selected.size===1?'':'s'):state.selecting?'Selecciona fotos':'';
  $('bulk-actions').hidden=!state.selected.size;
  updateInspector();
- for(const card of $('library').querySelectorAll('.photo-card')){const id=card.querySelector('[data-photo]').dataset.photo;card.classList.toggle('is-selected',state.selected.has(id));let button=card.querySelector('.select-photo');if(!button){button=document.createElement('button');button.className='select-photo';button.dataset.select=id;button.innerHTML=icon('check');card.append(button)}const photo=photos.find(item=>item.id===id);button.setAttribute('aria-pressed',String(state.selected.has(id)));button.setAttribute('aria-label',(state.selected.has(id)?'Deseleccionar ':'Seleccionar ')+photo.name);button.hidden=!available}
+ for(const card of $('library').querySelectorAll('.photo-card:has([data-photo])')){const id=card.querySelector('[data-photo]').dataset.photo;card.classList.toggle('is-selected',state.selected.has(id));let button=card.querySelector('.select-photo');if(!button){button=document.createElement('button');button.className='select-photo';button.dataset.select=id;button.innerHTML=icon('check');card.append(button)}const photo=photos.find(item=>item.id===id);button.setAttribute('aria-pressed',String(state.selected.has(id)));button.setAttribute('aria-label',(state.selected.has(id)?'Deseleccionar ':'Seleccionar ')+photo.name);button.hidden=!available}
  for(const image of $('sidebar-albums').querySelectorAll('img')){const holder=document.createElement('span');holder.innerHTML=icon('albums');image.replaceWith(holder.firstElementChild)}
 }
 function updateInspector(){
@@ -397,7 +373,7 @@ function setInspector(open){
 function toggleSelection(id){state.selecting=true;if(state.selected.has(id))state.selected.delete(id);else state.selected.add(id);renderSelection();const target=document.querySelector('[data-select="'+id+'"]');if(target&&state.selected.has(id))animateElement(target,[{transform:'scale(.7)'},{transform:'scale(1.12)',offset:.65},{transform:'scale(1)'}],{duration:230})}
 
 function renderContext(){const chips=[];if(state.datePrefix)chips.push(['clear-date',monthText(state.datePrefix)]);else if(state.year)chips.push(['clear-date',state.year]);if(state.filter!=='all')chips.push(['clear-filter','Solo favoritas']);if($('search').value.trim())chips.push(['clear-search','Buscar: '+$('search').value.trim()]);$('active-context').hidden=!chips.length||state.route==='settings';$('app').classList.toggle('has-context',!$('active-context').hidden);$('active-context').innerHTML=chips.map(([action,label])=>'<button class="context-chip" data-action="'+action+'" aria-label="Quitar filtro: '+escapeText(label)+'"><span>'+escapeText(label)+'</span>'+icon('close')+'</button>').join('');const filterButton=document.querySelector('[data-action="filter"]');filterButton.classList.toggle('is-active',state.filter!=='all'||state.sort!=='newest')}
-function render({motion=false}={}){const focused=document.activeElement;const key=['photo','favorite','album'].find(name=>focused?.dataset?.[name]);const value=key?focused.dataset[key]:null;hideGlassTooltip();renderContent();prepareImages();prepareServerImages();prepareHoverDetails();renderContext();renderSelection();if(focused&&!focused.isConnected){const replacement=key?document.querySelector('[data-'+key+'="'+CSS.escape(value)+'"]'):null;(replacement||$('content')).focus({preventScroll:true})}if(motion)animateLibrary()}
+function render({motion=false}={}){const focused=document.activeElement;const key=['photo','favorite','album'].find(name=>focused?.dataset?.[name]);const value=key?focused.dataset[key]:null;hideGlassTooltip();renderContent();prepareImages();prepareServerImages();prepareHoverDetails();prepareVirtualCards();renderContext();renderSelection();if(focused&&!focused.isConnected){const replacement=key?document.querySelector('[data-'+key+'="'+CSS.escape(value)+'"]'):null;(replacement||$('content')).focus({preventScroll:true})}if(motion)animateLibrary()}
 async function closeDialog(dialog){if(!dialog.open||dialog.classList.contains('closing'))return;dialog.classList.add('closing');const animation=animateElement(dialog.classList.contains('viewer')?dialog.querySelector('.viewer-layout'):dialog,[{opacity:1,transform:'none'},{opacity:0,transform:dialog.classList.contains('viewer')?'scale(.975)':'translateY(7px) scale(.985)'}],{duration:160,easing:'ease-in'});if(animation)await animation.finished.catch(()=>{});dialog.close();dialog.classList.remove('closing')}
 function showShortcuts(){showInfo('Atajos de teclado','<div class="shortcut-row"><span>Buscar en la fototeca</span><kbd class="keyboard-key">/</kbd></div><div class="shortcut-row"><span>Foto anterior / siguiente</span><span><kbd class="keyboard-key">←</kbd> <kbd class="keyboard-key">→</kbd></span></div><div class="shortcut-row"><span>Marcar como favorita en el visor</span><kbd class="keyboard-key">F</kbd></div><div class="shortcut-row"><span>Cerrar ventana o limpiar búsqueda</span><kbd class="keyboard-key">Esc</kbd></div>')}
 function notify(text,undo=null){$('toast').replaceChildren(document.createTextNode(text));pendingUndo=undo;if(undo){const button=document.createElement('button');button.textContent='Deshacer';button.dataset.action='undo';$('toast').append(button)}$('toast').hidden=false;animateElement($('toast'),[{opacity:0,translate:'0 12px'},{opacity:1,translate:'0 0'}],{duration:260});clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$('toast').hidden=true;pendingUndo=null},undo?7000:4200)}
@@ -452,7 +428,7 @@ function renderContent(){
 }
 function route(){const [requested,albumId]=location.hash.replace(/^#\/?/,'').split('/');state.route=['photos','albums','favorites','trash','settings'].includes(requested)?requested:'photos';state.infoId=null;state.album=state.route==='albums'&&albums.some(a=>a.id===albumId)?albumId:null;state.filter='all';state.datePrefix='';state.year='';state.selecting=false;state.selected.clear();$('search').value='';$('content').scrollTop=0;$('app').classList.remove('mobile-sidebar');render({motion:true})}
 function openViewer(id){state.viewerIds=matches().map(p=>p.id);state.viewerId=id;state.infoId=id;if(photoSpace)photoApi('/nodes/'+id+'/touch',{method:'POST'}).catch(()=>{});pendingFocus=document.activeElement;updateViewer();$('viewer').showModal();animateElement($('viewer').querySelector('.viewer-layout'),[{opacity:0},{opacity:1}],{duration:260});animateElement($('viewer-image'),[{opacity:0,transform:'scale(.94)'},{opacity:1,transform:'none'}],{duration:420})}
-function updateViewer(direction=0){const photo=photos.find(p=>p.id===state.viewerId);if(!photo)return;const image=$('viewer-image');const changed=image.getAttribute('src')!==photo.src;if(changed){state.zoom=false;$('viewer-stage').classList.remove('zoomed');const zoom=document.querySelector('[data-action="zoom"]');zoom.setAttribute('aria-pressed','false');zoom.setAttribute('aria-label','Ampliar imagen');if(photo.src)image.src=photo.src;else{image.removeAttribute('src');imageUrl(photo).then(url=>{if(state.viewerId===photo.id)image.src=url}).catch(showPhotoError)}image.alt=photo.alt;if($('viewer').open)animateElement(image,[{opacity:0,transform:'translateX('+(direction*24)+'px) scale(.99)'},{opacity:1,transform:'none'}],{duration:300})}$('viewer-name').textContent=photo.name;$('viewer-meta').textContent=dateText(photo.date)+' · '+'Fecha de subida · Servidor';$('viewer-position').textContent=(state.viewerIds.indexOf(photo.id)+1)+' de '+state.viewerIds.length+' · ← → Navegar · F Favorito · Esc Cerrar';const favorite=document.querySelector('[data-action="viewer-favorite"]');favorite.classList.toggle('is-favorite',photo.favorite);favorite.setAttribute('aria-pressed',String(photo.favorite));favorite.setAttribute('aria-label',photo.favorite?'Quitar de favoritos':'Añadir a favoritos');document.querySelector('[data-action="viewer-trash"]').hidden=photo.deleted}
+function updateViewer(direction=0){const photo=photos.find(p=>p.id===state.viewerId);if(!photo)return;const image=$('viewer-image');const viewerKey=photo.id+':'+photo.version;const changed=image.dataset.source!==viewerKey;if(changed){image.dataset.source=viewerKey;state.zoom=false;$('viewer-stage').classList.remove('zoomed');const zoom=document.querySelector('[data-action="zoom"]');zoom.setAttribute('aria-pressed','false');zoom.setAttribute('aria-label','Ampliar imagen');if(photo.src)image.src=photo.src;else image.removeAttribute('src');{imageUrl(photo,1280).then(url=>{if(state.viewerId===photo.id)image.src=url}).catch(showPhotoError)}image.alt=photo.alt;if($('viewer').open)animateElement(image,[{opacity:0,transform:'translateX('+(direction*24)+'px) scale(.99)'},{opacity:1,transform:'none'}],{duration:300})}$('viewer-name').textContent=photo.name;$('viewer-meta').textContent=dateText(photo.date)+' · '+'Fecha de subida · Servidor';$('viewer-position').textContent=(state.viewerIds.indexOf(photo.id)+1)+' de '+state.viewerIds.length+' · ← → Navegar · F Favorito · Esc Cerrar';const favorite=document.querySelector('[data-action="viewer-favorite"]');favorite.classList.toggle('is-favorite',photo.favorite);favorite.setAttribute('aria-pressed',String(photo.favorite));favorite.setAttribute('aria-label',photo.favorite?'Quitar de favoritos':'Añadir a favoritos');document.querySelector('[data-action="viewer-trash"]').hidden=photo.deleted}
 function stepViewer(direction){const index=state.viewerIds.indexOf(state.viewerId);state.viewerId=state.viewerIds[(index+direction+state.viewerIds.length)%state.viewerIds.length];state.infoId=state.viewerId;updateViewer(direction)}
 function showInfo(title,body){$('info-title').textContent=title;$('info-body').innerHTML=body;if(!$('info-dialog').open)$('info-dialog').showModal();animateElement($('info-dialog'),[{opacity:0,transform:'translateY(10px) scale(.975)'},{opacity:1,transform:'none'}],{duration:250})}
 function openFilters(){showInfo('Filtrar y ordenar','<label>Mostrar<select id="filter-kind"><option value="all">Todas las fotos</option><option value="favorites">Solo favoritas</option></select></label><label>Orden<select id="sort-kind"><option value="newest">Más recientes primero</option><option value="oldest">Más antiguas primero</option><option value="name">Por nombre</option></select></label><button class="button primary" data-action="close-info">Listo</button>');$('filter-kind').value=state.filter;$('sort-kind').value=state.sort;$('filter-kind').addEventListener('change',event=>{state.filter=event.target.value;render()});$('sort-kind').addEventListener('change',event=>{state.sort=event.target.value;render()})}
@@ -470,7 +446,7 @@ function thumbnailSize(value){
  $('thumbnail-size').value=String(Math.min(300,Math.max(120,value)));
  document.documentElement.style.setProperty('--thumb',$('thumbnail-size').value+'px');
  try{localStorage.setItem('santolv.photos.thumbnail-size',$('thumbnail-size').value)}catch{}
- layoutPhotoGrid();
+
  if(reducedMotion.matches)return;
  const after=cards.map(card=>card.getBoundingClientRect());
  const viewport=$('content').getBoundingClientRect();
@@ -509,7 +485,7 @@ document.addEventListener('click',async event=>{
  if(action==='clear-search'){$('search').value='';render({motion:true});$('search').focus()}
  if(action==='undo'&&pendingUndo){const undo=pendingUndo;pendingUndo=null;undo();notify('Acción deshecha.')}
  if(action==='next')stepViewer(1);if(action==='previous')stepViewer(-1);if(action==='viewer-favorite')toggleFavorite(state.viewerId);
- if(action==='zoom'){state.zoom=!state.zoom;$('viewer-stage').classList.toggle('zoomed',state.zoom);target.setAttribute('aria-pressed',String(state.zoom));target.setAttribute('aria-label',state.zoom?'Ajustar imagen a la ventana':'Ampliar imagen')}
+ if(action==='zoom'){state.zoom=!state.zoom;if(state.zoom){const id=state.viewerId;imageUrl(photos.find(p=>p.id===id),'original').then(url=>{if(state.viewerId===id&&state.zoom)document.getElementById('viewer-image').src=url}).catch(showPhotoError)}$('viewer-stage').classList.toggle('zoomed',state.zoom);target.setAttribute('aria-pressed',String(state.zoom));target.setAttribute('aria-label',state.zoom?'Ajustar imagen a la ventana':'Ampliar imagen')}
  if(action==='viewer-trash')await trashPhoto();
 });
 $('viewer').addEventListener('close',()=>{const photoId=pendingFocus?.dataset.photo;render();const origin=photoId?document.querySelector('[data-photo="'+photoId+'"]'):null;if(origin)origin.focus({preventScroll:true});else $('content').focus({preventScroll:true})});
@@ -550,7 +526,7 @@ function clearMedia(){mediaGeneration++;for(const url of mediaUrls.values())URL.
 async function loadLibrary(append=false){
  const data=await photoApi('/photos/library'+(append&&libraryCursor?'?after='+encodeURIComponent(libraryCursor):''));
  if(!append){photos.length=0;albums.length=0}
- for(const item of data.items){if(item.kind==='folder'){if(!item.deleted)albums.push({...item,eyebrow:'Álbum',cover:''});continue}photos.push({...item,src:mediaUrls.get(item.id)||'',alt:item.name,place:'Fecha de subida'})}
+ for(const item of data.items){if(item.kind==='folder'){if(!item.deleted)albums.push({...item,eyebrow:'Álbum',cover:''});continue}photos.push({...item,src:mediaUrls.get(item.id+':256:'+item.version)||'',alt:item.name,place:'Fecha de subida'})}
  libraryLoading=false;libraryCursor=data.next_cursor;const albumId=location.hash.replace(/^#\/?/,'').split('/')[1];if(state.route==='albums'&&albums.some(a=>a.id===albumId))state.album=albumId;render();$('load-more').hidden=!libraryCursor;
 }
 function showPhotoError(error){notify(error.message||'No se pudo completar la operación.')}
@@ -559,10 +535,59 @@ async function beginPhotos(){try{const me=await photoApi('/me');csrf=me.csrf_tok
  }catch(error){libraryLoading=false;$('library').textContent='No se pudo conectar con tu biblioteca.';$('library-count').textContent='';showPhotoError(error)}}
 
 async function endPhotosSession(){if(photoBusy)throw new Error('Espera a que termine la operación de Fotos.');await photoApi('/auth/logout',{method:'POST'});window.SantolvShell?.sessionEnded();leavePhotos()}
-function imageUrl(photo){if(mediaUrls.has(photo.id))return Promise.resolve(mediaUrls.get(photo.id));if(mediaRequests.has(photo.id))return mediaRequests.get(photo.id);
- const generation=mediaGeneration;const request=mediaTail.then(async()=>{if(generation!==mediaGeneration)throw new Error('Carga cancelada.');const r=await fetch(API_ORIGIN+'/api/v1/nodes/'+photo.id+'/content',{credentials:'include'});if(r.status===401){leavePhotos();throw new Error('Sesión caducada.')}if(!r.ok)throw new Error('No se pudo cargar '+photo.name);if(Number(r.headers.get('content-length'))>30*1024*1024){await r.body.cancel();throw new Error('La previsualización admite originales de hasta 30 MiB.')}const mime=({'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','gif':'image/gif','avif':'image/avif'})[photo.name.split('.').at(-1).toLowerCase()];const url=URL.createObjectURL(new Blob([await r.arrayBuffer()],{type:mime}));if(generation!==mediaGeneration){URL.revokeObjectURL(url);throw new Error('Carga cancelada.')}mediaUrls.set(photo.id,url);photo.src=url;while(mediaUrls.size>8){const [oldId,oldUrl]=mediaUrls.entries().next().value;mediaUrls.delete(oldId);URL.revokeObjectURL(oldUrl);const old=photos.find(p=>p.id===oldId);if(old)old.src=''}return url}).finally(()=>mediaRequests.delete(photo.id));mediaTail=request.catch(()=>{});mediaRequests.set(photo.id,request);return request;
+function imageUrl(photo,size=256){
+ const key=photo.id+':'+size+':'+photo.version;
+ if(mediaUrls.has(key))return Promise.resolve(mediaUrls.get(key));
+ if(mediaRequests.has(key))return mediaRequests.get(key);
+ const generation=mediaGeneration;
+ const request=(size===256?mediaTail:Promise.resolve()).then(async()=>{
+  for(let attempt=0;attempt<30;attempt++){
+   if(generation!==mediaGeneration)throw new Error('Carga cancelada.');
+   const url=size==='original'?'/nodes/'+photo.id+'/content':'/photos/'+photo.id+'/image/'+size+'?version='+encodeURIComponent(photo.version||'');
+   const r=await fetch(API_ORIGIN+'/api/v1'+url,{credentials:'include'});
+   if(r.status===401){leavePhotos();throw new Error('Sesión caducada.')}
+   if(r.status===202){await new Promise(resolve=>setTimeout(resolve,2000));continue}
+   if(!r.ok)throw new Error('No se pudo cargar '+photo.name);
+   if(Number(r.headers.get('content-length'))>30*1024*1024){await r.body.cancel();throw new Error('Imagen demasiado grande para el visor.')}
+   const blob=await r.blob();
+   const blobUrl=URL.createObjectURL(size==='original'?new Blob([blob],{type:({jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',avif:'image/avif'})[photo.name.split('.').at(-1).toLowerCase()]||'application/octet-stream'}):blob);
+   if(generation!==mediaGeneration){URL.revokeObjectURL(blobUrl);throw new Error('Carga cancelada.')}
+   mediaUrls.set(key,blobUrl);
+   if(size===256)photo.src=blobUrl;
+   while(mediaUrls.size>80){
+    const [oldKey,oldUrl]=mediaUrls.entries().next().value;
+    mediaUrls.delete(oldKey);URL.revokeObjectURL(oldUrl);
+    const old=photos.find(p=>oldKey.startsWith(p.id+':256:'));
+    if(old)old.src='';
+   }
+   return blobUrl;
+  }
+  throw new Error('La foto sigue procesándose. Vuelve a intentarlo.');
+ }).finally(()=>mediaRequests.delete(key));
+ if(size===256)mediaTail=request.catch(()=>{});mediaRequests.set(key,request);return request;
 }
-const imageObserver=new IntersectionObserver(entries=>{for(const entry of entries){if(!entry.isIntersecting)continue;const image=entry.target;imageObserver.unobserve(image);const photo=photos.find(p=>p.id===image.dataset.media);if(photo&&!photo.deleted)imageUrl(photo).then(url=>{if(image.isConnected)image.src=url}).catch(()=>{if(image.isConnected)showImageFailure(image)})}},{root:$('content'),rootMargin:'200px'});
+const imageObserver=new IntersectionObserver(entries=>{for(const entry of entries){if(!entry.isIntersecting)continue;const image=entry.target;imageObserver.unobserve(image);const photo=photos.find(p=>p.id===image.dataset.media);if(photo&&!photo.deleted)imageUrl(photo).then(url=>{if(image.isConnected)image.src=url}).catch(()=>{if(image.isConnected)showImageFailure(image)})}},{root:$('content'),rootMargin:'0px'});
+const virtualMarkup=new WeakMap();
+const virtualCards=new IntersectionObserver(entries=>{
+ for(const entry of entries){
+  const card=entry.target;
+  if(entry.isIntersecting){
+   if(!card.firstElementChild){
+    card.innerHTML=virtualMarkup.get(card)||'';
+    for(const image of card.querySelectorAll('img[data-media]')){
+     image.removeAttribute('src');image.classList.remove('is-loaded','is-arriving');delete image.dataset.prepared;
+    }
+    prepareImages();prepareServerImages();prepareHoverDetails();renderSelection();
+   }
+  }else if(!card.contains(document.activeElement)){
+   if(card.firstElementChild){virtualMarkup.set(card,card.innerHTML);card.replaceChildren()}
+  }
+ }
+},{root:$('content'),rootMargin:'200px'});
+function prepareVirtualCards(){
+ virtualCards.disconnect();
+ for(const card of $('library').querySelectorAll('.photo-card'))virtualCards.observe(card);
+}
 function prepareServerImages(){imageObserver.disconnect();for(const image of $('library').querySelectorAll('img[data-media]:not([src])'))imageObserver.observe(image)}
 async function persistPhoto(photo,action,value){if(!photo||photoBusy)return false;photoBusy=true;try{const result=await photoApi(action==='favorite'?'/photos/'+photo.id+'/favorite':'/nodes/'+photo.id+'/'+action,{method:action==='favorite'?'PUT':'POST',body:action==='favorite'?{favorite:value}:undefined,headers:{'If-Match':'"'+photo.revision+'"'}});photo.revision=result.revision;if(action==='favorite')photo.favorite=value;else photo.deleted=action==='trash';render();if($('viewer').open)updateViewer();return true}catch(error){showPhotoError(error);await loadLibrary().catch(showPhotoError);return false}finally{photoBusy=false}}
 async function toggleFavorite(id){const photo=photos.find(p=>p.id===id);if(photo)await persistPhoto(photo,'favorite',!photo.favorite)}
@@ -581,12 +606,12 @@ async function uploadPhoto(file){
 }
 async function importFiles(files){if(photoBusy||!photoSpace)return;photoBusy=true;let added=0;try{for(const file of files){if(!/^image\/(jpeg|png|webp|gif|avif)$/.test(file.type)||!file.size||file.size>30*1024*1024){notify(file.name+': admite JPEG, PNG, WebP, GIF o AVIF de hasta 30 MiB.');continue}await uploadPhoto(file);added++}if(added)notify(added+' '+(added===1?'foto guardada':'fotos guardadas')+' en el servidor.')}catch(error){showPhotoError(error)}finally{photoBusy=false;$('file-input').value='';await loadLibrary().catch(showPhotoError)}}
 async function createAlbum(){if(!photoSpace)return notify('Espera a que se conecte la biblioteca.');showInfo('Nuevo álbum','<form id="album-form"><label>Nombre<input id="album-name" required maxlength="255" autocomplete="off"></label><button class="button primary">Crear álbum</button></form>');$('album-form').addEventListener('submit',async event=>{event.preventDefault();const button=event.target.querySelector('button');button.disabled=true;try{await photoApi('/spaces/'+photoSpace+'/nodes',{method:'POST',body:{name:$('album-name').value,parent_id:null}});await closeDialog($('info-dialog'));await loadLibrary()}catch(error){showPhotoError(error)}finally{button.disabled=false}})}
-function renderSettings(){const theme=window.SantolvShell.preference();$('library').innerHTML='<div class="page-content settings">'+pageHeading('Ajustes','Tu fototeca, a tu manera.')+'<h2>Apariencia</h2><div class="group"><label class="setting-row">Tema<select id="theme-select" data-shell-theme-select><option value="system">Según el sistema</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></label></div><h2>Biblioteca</h2><p>Conectada al servidor Santolv. Favoritos, álbumes, fotos y papelera se guardan en tu cuenta.</p><p>Las fechas corresponden a la subida. La búsqueda abarca las fotos cargadas; usa Cargar más para continuar.</p><p>Esta versión muestra originales JPEG, PNG, WebP, GIF y AVIF de hasta 30 MiB. Las miniaturas derivadas, EXIF y vídeo quedan pendientes.</p></div>';$('theme-select').value=theme;$('theme-select').addEventListener('change',event=>setTheme(event.target.value))}
+function renderSettings(){const theme=window.SantolvShell.preference();$('library').innerHTML='<div class="page-content settings">'+pageHeading('Ajustes','Tu fototeca, a tu manera.')+'<h2>Apariencia</h2><div class="group"><label class="setting-row">Tema<select id="theme-select" data-shell-theme-select><option value="system">Según el sistema</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></label></div><h2>Biblioteca</h2><p>Conectada al servidor Santolv. Favoritos, álbumes, fotos y papelera se guardan en tu cuenta.</p><p>Las fechas corresponden a la subida. La búsqueda abarca las fotos cargadas; usa Cargar más para continuar.</p><p>Esta versión muestra originales JPEG, PNG, WebP, GIF y AVIF de hasta 30 MiB. Se generan versiones WebP de 256 y 1280 px. La reproducción de vídeo queda pendiente.</p></div>';$('theme-select').value=theme;$('theme-select').addEventListener('change',event=>setTheme(event.target.value))}
 $('load-more').addEventListener('click',async()=>{const button=$('load-more');button.disabled=true;try{await loadLibrary(true)}catch(error){showPhotoError(error)}finally{button.disabled=false}});
 window.addEventListener('pagehide',clearMedia);
 window.addEventListener('pageshow',()=>beginPhotos());
 
-new ResizeObserver(layoutPhotoGrid).observe($('content'));
+
 restoreThumbnailSize();
 route();
 

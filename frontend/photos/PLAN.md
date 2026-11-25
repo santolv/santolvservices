@@ -16,7 +16,7 @@ referencia; sus restricciones de demo y repositorio independiente están superad
 - [x] Contenido de las páginas ampliado un 7 %, conservando las medidas de la barra superior global.
 - [x] Tamaño de miniaturas guardado en el navegador, acceso Papelera y barra de herramientas con el fondo de la fototeca.
 - [x] Fondo oscuro gris compartido visualmente con Drive.
-- [x] Filas justificadas con proporciones originales, altura ajustable y última fila alineada a la izquierda.
+- [x] Cuadrícula uniforme 4:3 con tamaño ajustable y guardado en el navegador.
 - [x] Página de cuenta compartida para editar el nombre visible y el avatar de cada usuario.
 - [x] Botón de subida compartido con Drive y carpeta protegida en Mi unidad.
 - [x] Dependencia de Drive para abrir Fotos y ejecutar sus tareas internas.
@@ -29,7 +29,8 @@ referencia; sus restricciones de demo y repositorio independiente están superad
 - [x] Biblioteca paginada, originales autenticados, favoritos y álbumes persistentes.
 - [x] Papelera y restauración mediante el motor de Drive.
 - [x] Fechas de subida explícitas y búsqueda sobre elementos cargados.
-- [ ] Miniaturas derivadas, EXIF, vídeo y clientes móviles.
+- [x] Derivados WebP persistentes de 256/1280 px, cola Rust, permisos, caché privada y carga visible virtualizada.
+- [ ] Vídeo, clientes móviles y decodificación AVIF.
 - [ ] Reanudación de la cola de Fotos tras cerrar la pestaña.
 - [ ] Renombrar álbumes y organizar fotos ya subidas desde la interfaz de Fotos.
 

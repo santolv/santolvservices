@@ -223,10 +223,13 @@ pub async fn security(State(s): State<App>, req: axum::extract::Request, next: N
     for (k, v) in [
         ("x-content-type-options", "nosniff"),
         ("referrer-policy", "no-referrer"),
-        ("cache-control", "no-store"),
     ] {
         response.headers_mut().insert(k, v.parse().unwrap());
     }
+    response
+        .headers_mut()
+        .entry("cache-control")
+        .or_insert("no-store".parse().unwrap());
     response
         .headers_mut()
         .entry("content-security-policy")

@@ -12,6 +12,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
+mod derivatives;
 
 pub const SERVICE: crate::core::manager::Service = crate::core::manager::Service {
     id: "photos",
@@ -20,7 +21,11 @@ pub const SERVICE: crate::core::manager::Service = crate::core::manager::Service
     html: include_str!("../../../../frontend/photos/index.html"),
     uses_file_store: true,
     requires: Some("drive"),
-    worker: |app, id| Box::pin(crate::worker::run(app, id)),
+    worker: |app, id| {
+        Box::pin(async move {
+            tokio::join!(crate::worker::run(app.clone(), id), derivatives::run(app));
+        })
+    },
     routes,
 };
 
@@ -31,6 +36,7 @@ fn routes() -> axum::Router<App> {
         .route("/api/v1/photos/space", post(space))
         .route("/api/v1/photos/drive-folder", get(drive_folder))
         .route("/api/v1/photos/{id}/favorite", put(favorite))
+        .route("/api/v1/photos/{id}/image/{size}", get(derivatives::get))
 }
 
 #[derive(Deserialize)]
@@ -135,7 +141,7 @@ pub async fn library(
         "WITH RECURSIVE library AS (
           SELECT n.* FROM nodes n JOIN spaces s ON s.id=n.space_id WHERE s.owner_id=$1 AND s.service='photos' AND s.kind='personal' AND s.deleted_at IS NULL AND n.parent_id IS NULL
           UNION ALL SELECT n.* FROM nodes n JOIN library p ON n.parent_id=p.id AND n.space_id=p.space_id WHERE p.trashed_at IS NULL
-        ) SELECT jsonb_build_object('id',n.id,'name',n.name,'kind',n.kind,'album',n.parent_id,'revision',n.revision,'deleted',n.trashed_at IS NOT NULL,'date',to_char(n.created_at AT TIME ZONE 'UTC','YYYY-MM-DD'),'favorite',COALESCE(m.favorite,false))
+        ) SELECT jsonb_build_object('id',n.id,'name',n.name,'kind',n.kind,'album',n.parent_id,'revision',n.revision,'version',n.current_version,'deleted',n.trashed_at IS NOT NULL,'date',to_char(n.created_at AT TIME ZONE 'UTC','YYYY-MM-DD'),'favorite',COALESCE(m.favorite,false))
         FROM library n LEFT JOIN photo_metadata m ON m.node_id=n.id
         WHERE ($2::uuid IS NULL OR n.id>$2) AND ($3::uuid IS NULL OR n.id=$3) AND NOT EXISTS(SELECT 1 FROM purge_jobs p WHERE p.node_id=n.id)
           AND (n.kind='folder' OR n.name ~* '\\.(jpe?g|png|webp|gif|avif)$') ORDER BY n.id LIMIT 101")

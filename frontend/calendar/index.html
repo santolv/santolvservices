@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calendario · Santolv</title>
+<style>
+:root{color-scheme:light;--cal-text:#211f26;--cal-muted:#625b69;--cal-bg:#f8f7fa;--cal-panel:#fff;--cal-line:#ded9e3;--cal-accent:#8f3048;--cal-tint:#f8e6eb}
+:root[data-theme="dark"]{color-scheme:dark;--cal-text:#f4edf5;--cal-muted:#c0b5c3;--cal-bg:#19171d;--cal-panel:#242128;--cal-line:#45404a;--cal-accent:#ff9bb4;--cal-tint:#4c2835}
+*{box-sizing:border-box}body{margin:0;font:15px/1.45 system-ui,sans-serif;background:var(--cal-bg);color:var(--cal-text)}[hidden]{display:none!important}
+.calendar-page{max-width:1320px;margin:auto;padding:clamp(16px,4vw,48px)}
+.calendar-page h1{font-size:clamp(29px,5vw,46px);margin:0;letter-spacing:-.045em}.calendar-page h2{margin:0;font-size:1.3rem}
+.cal-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.cal-row.spread{justify-content:space-between}.cal-heading{margin-bottom:22px}.cal-controls{margin-bottom:12px}
+.calendar-page button,.calendar-page select{min-height:38px;padding:6px 12px;border:1px solid var(--cal-line);border-radius:8px;background:var(--cal-panel);color:inherit;font:inherit}
+.calendar-page button{cursor:pointer}.calendar-page button.primary,.calendar-page button[aria-pressed="true"]{background:var(--cal-tint);color:var(--cal-accent);border-color:var(--cal-accent)}
+.calendar-page [role=status]:empty{display:none}.calendar-page [role=status]{color:var(--cal-muted)}
+.cal-scroll{overflow:auto;border:1px solid var(--cal-line);border-radius:12px;background:var(--cal-panel)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(100px,1fr));min-width:700px}.cal-weekday{padding:9px 10px;border-bottom:1px solid var(--cal-line);color:var(--cal-muted)}
+.cal-day{min-height:96px;padding:6px;border-bottom:1px solid var(--cal-line);border-inline-end:1px solid var(--cal-line);overflow-wrap:anywhere}
+.cal-grid.week .cal-day{min-height:220px}.cal-day.outside{color:var(--cal-muted);background:var(--cal-bg)}
+.cal-day button.day-number{min-height:30px;padding:1px 6px;border:0;background:transparent}
+.cal-day [aria-current="date"]{border-radius:6px;background:var(--cal-tint)!important;color:var(--cal-accent);font-weight:700}
+.cal-event{display:block;margin:4px 0;padding:4px 6px;border-radius:6px;color:var(--cal-text);background:var(--cal-tint);text-decoration:none}
+.cal-event:hover{text-decoration:underline}.cal-agenda{padding:12px 16px}.cal-agenda li{list-style:none}.cal-agenda li+li{margin-top:8px}
+.calendar-form fieldset{display:grid;gap:12px;min-width:0;border:0;margin:0;padding:0}.calendar-form fieldset:disabled{opacity:.9}
+.cal-members{list-style:none;margin:0;padding:0}.cal-members li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0}
+.calendar-form .cal-member-form{display:grid;grid-template-columns:2fr 1fr;gap:6px}.cal-member-form button{grid-column:1/-1;justify-self:start}
+@media(max-width:600px){
+  .cal-grid.month{min-width:0;grid-template-columns:repeat(7,minmax(0,1fr))}
+  .cal-grid.week{min-width:620px;grid-template-columns:repeat(7,minmax(88px,1fr))}
+  .cal-grid.month .cal-weekday{padding:6px 2px;text-align:center}
+  .cal-grid.month .cal-day{min-height:64px;padding:2px}
+  .cal-grid.month .cal-event{padding:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.8rem}
+  .cal-controls{align-items:flex-start}
+}
+</style>
+</head>
+<body>
+<!-- SANTOLV_SHELL -->
+<main class="calendar-page">
+  <div class="cal-row spread cal-heading"><h1>Calendario</h1><div class="cal-row"><button type="button" id="manage">Gestionar calendarios</button><button type="button" class="primary" id="new-event">Nuevo evento</button></div></div>
+  <div class="cal-row spread cal-controls">
+    <div class="cal-row">
+      <button type="button" id="previous" aria-label="Período anterior">‹</button>
+      <button type="button" id="today">Hoy</button>
+      <button type="button" id="next" aria-label="Período siguiente">›</button>
+      <h2 id="period" aria-live="polite"></h2>
+    </div>
+    <div class="cal-row" aria-label="Vista y calendarios">
+      <button type="button" data-view="month" aria-pressed="true">Mes</button>
+      <button type="button" data-view="week" aria-pressed="false">Semana</button>
+      <button type="button" data-view="agenda" aria-pressed="false">Agenda</button>
+      <select id="calendar-filter" aria-label="Filtrar por calendario"><option value="">Todos los calendarios</option></select>
+    </div>
+  </div>
+  <p id="page-status" role="status"></p>
+  <div id="display" class="cal-scroll" aria-labelledby="period"></div>
+</main>
+<dialog id="event-dialog" class="calendar-dialog" aria-labelledby="event-heading">
+  <form id="event-form" class="calendar-form">
+    <h2 id="event-heading"></h2>
+    <p id="event-detail"></p>
+    <fieldset id="event-fields">
+      <label>Calendario <select name="calendar_id"></select></label>
+      <label>Título <input name="title" maxlength="200" required></label>
+      <label>Descripción <textarea name="description" maxlength="4000" rows="3"></textarea></label>
+      <label><input name="all_day" type="checkbox"> Todo el día</label>
+      <label>Inicio <input name="local_start" type="datetime-local" step="1" required></label>
+      <label><span id="end-label">Fin</span> <input name="local_end" type="datetime-local" step="1" required></label>
+      <label>Zona horaria <input name="zone" maxlength="100" required></label>
+      <label>Disponibilidad <select name="busy"><option value="true">Ocupado</option><option value="false">Libre</option></select></label>
+      <fieldset id="repeat-fields">
+        <label>Repetir <select name="repeat_kind"><option value="">Nunca</option><option value="daily">Cada día</option><option value="weekly">Cada semana</option><option value="monthly">Cada mes</option><option value="yearly">Cada año</option></select></label>
+        <label id="repeat-choice" hidden>Finaliza <select name="repeat_end"><option value="">Sin fecha de fin</option><option value="until">En una fecha</option><option value="count">Tras varias ocasiones</option></select></label>
+        <label id="repeat-until" hidden>Último día <input name="repeat_until" type="date"></label>
+        <label id="repeat-count" hidden>Número de ocasiones <input name="repeat_count" type="number" min="1" max="10000"></label>
+      </fieldset>
+    </fieldset>
+    <div class="cal-row" id="event-reminder">
+      <label>Recordatorio personal <select name="reminder_minutes">
+        <option value="">Sin recordatorio</option><option value="0">A la hora del evento</option><option value="5">5 minutos antes</option><option value="15">15 minutos antes</option><option value="30">30 minutos antes</option><option value="60">1 hora antes</option><option value="1440">1 día antes</option><option value="10080">1 semana antes</option>
+      </select></label>
+      <button type="button" id="save-reminder">Guardar recordatorio</button>
+    </div>
+    <p id="event-status" role="status"></p>
+    <div class="calendar-actions">
+      <button type="button" id="edit-single">Editar esta ocurrencia</button><button type="button" id="edit-series">Editar</button>
+      <button type="button" id="delete-event">Eliminar</button>
+      <button type="button" id="close-event">Cerrar</button><button type="submit" id="save-event">Guardar</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="manage-dialog" class="calendar-dialog" aria-labelledby="manage-heading">
+  <div class="calendar-form">
+    <h2 id="manage-heading">Gestionar calendarios</h2>
+    <label>Mis calendarios <select id="manage-select"></select></label>
+    <form id="calendar-name-form" class="calendar-form">
+      <label>Nombre <input name="name" maxlength="100" required></label>
+      <div class="calendar-actions"><button type="submit" id="save-calendar">Crear calendario</button><button type="button" id="delete-calendar" hidden>Eliminar calendario</button></div>
+    </form>
+    <section id="sharing" hidden aria-labelledby="sharing-heading">
+      <h3 id="sharing-heading">Acceso compartido</h3>
+      <ul id="members" class="cal-members"></ul>
+      <form id="share-form" class="cal-member-form">
+        <label>Usuario <input name="username" maxlength="64" required></label>
+        <label>Permiso <select name="role"><option value="reader">Lectura</option><option value="editor">Edición</option></select></label>
+        <button type="submit">Dar acceso</button>
+      </form>
+    </section>
+    <p id="manage-status" role="status"></p>
+    <div class="calendar-actions"><button type="button" id="close-manage">Cerrar</button></div>
+  </div>
+</dialog>
+<script>
+(() => {
+  'use strict';
+  const calendar = window.SantolvCalendar;
+  const {api, request, zone, localTime, describe, eventLabel, occurrenceUrl} = calendar;
+  const $ = id => document.getElementById(id);
+  const eventDialog = $('event-dialog');
+  const eventForm = $('event-form');
+  const eventFields = eventForm.elements;
+  const manageDialog = $('manage-dialog');
+  const nameForm = $('calendar-name-form');
+  let view = 'month', anchor = new Date(), calendars = [], loadNumber = 0, detailsNumber = 0, membersNumber = 0;
+  let detail, mode;
+
+  function day(date, shift = 0) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate() + shift);
+  }
+  function monday(date) { return day(date, -((date.getDay() + 6) % 7)); }
+  function key(date) { return localTime(date).slice(0, 10); }
+  function dateFromKey(value) { return new Date(value + 'T12:00:00'); }
+  function range() {
+    if (view === 'month') {
+      const start = monday(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
+      return [start, day(start, 42)];
+    }
+    const start = view === 'week' ? monday(anchor) : day(anchor);
+    return [start, day(start, view === 'week' ? 7 : 14)];
+  }
+  function containsDay(event, date) {
+    const value = key(date);
+    if (event.all_day) return event.local_start.slice(0, 10) <= value && event.local_end.slice(0, 10) > value;
+    return new Date(event.starts_at) < day(date, 1) && new Date(event.ends_at) > date;
+  }
+  function link(event, agenda = false) {
+    const a = document.createElement('a');
+    a.className = 'cal-event';
+    a.href = occurrenceUrl(event);
+    a.title = event.title;
+    a.textContent = agenda ? eventLabel(event) + ' · ' + event.title + ' · ' + event.calendar_name : event.title;
+    a.addEventListener('click', click => {
+      if (click.button || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
+      click.preventDefault();
+      history.replaceState(null, '', a.href);
+      void openDetail(event.event_id, event.original_start);
+    });
+    return a;
+  }
+  function render(items, start, end) {
+    if (view === 'agenda') {
+      const list = document.createElement('ul');
+      list.className = 'cal-agenda';
+      for (const event of items) {
+        const row = document.createElement('li');
+        row.append(link(event, true));
+        list.append(row);
+      }
+      if (!items.length) {
+        const row = document.createElement('li');
+        row.textContent = 'No hay eventos en este período.';
+        list.append(row);
+      }
+      $('display').replaceChildren(list);
+      return;
+    }
+    const grid = document.createElement('div');
+    grid.className = 'cal-grid ' + view;
+    for (const label of ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']) {
+      const cell = document.createElement('div');
+      cell.textContent = label;
+      cell.className = 'cal-weekday';
+      grid.append(cell);
+    }
+    for (let date = start; date < end; date = day(date, 1)) {
+      const cell = document.createElement('div');
+      cell.className = 'cal-day' + (view === 'month' && anchor.getMonth() !== date.getMonth() ? ' outside' : '');
+      const button = document.createElement('button');
+      const dateKey = key(date);
+      button.type = 'button';
+      button.className = 'day-number';
+      button.textContent = date.getDate();
+      button.setAttribute('aria-label', 'Crear evento el ' + date.toLocaleDateString('es-ES', {dateStyle: 'full'}));
+      if (dateKey === key(new Date())) button.setAttribute('aria-current', 'date');
+      button.addEventListener('click', () => openCreate(dateFromKey(dateKey)));
+      cell.append(button);
+      for (const event of items) if (containsDay(event, date)) cell.append(link(event));
+      grid.append(cell);
+    }
+    $('display').replaceChildren(grid);
+  }
+  async function load() {
+    const version = ++loadNumber;
+    const [start, end] = range();
+    const status = $('page-status');
+    const dateLabel = date => date.toLocaleDateString('es-ES', {day: 'numeric', month: 'short', year: 'numeric'});
+    $('period').textContent = view === 'month'
+      ? anchor.toLocaleDateString('es-ES', {month: 'long', year: 'numeric'})
+      : dateLabel(start) + ' – ' + dateLabel(day(end, -1));
+    $('display').replaceChildren();
+    status.textContent = 'Cargando eventos…';
+    const filter = $('calendar-filter').value;
+    const query = new URLSearchParams({from: day(start, -2).toISOString(), to: day(end, 2).toISOString(), limit: '200'});
+    if (filter) query.set('calendar_id', filter);
+    try {
+      const items = [];
+      let offset = 0;
+      do {
+        query.set('offset', offset);
+        const page = await api('/events?' + query);
+        if (version !== loadNumber) return;
+        items.push(...page.items);
+        offset = page.next_offset;
+      } while (offset !== null);
+      const visible = items.filter(event => event.all_day
+        ? event.local_start.slice(0, 10) < key(end) && event.local_end.slice(0, 10) > key(start)
+        : new Date(event.starts_at) < end && new Date(event.ends_at) > start);
+      render(visible, start, end);
+      status.textContent = '';
+    } catch (error) { if (version === loadNumber) status.textContent = describe(error); }
+  }
+  async function loadCalendars() {
+    calendars = (await api('/calendars')).items;
+    const select = $('calendar-filter');
+    const selected = select.value;
+    select.replaceChildren(new Option('Todos los calendarios', ''), ...calendars.map(item => new Option(item.name, item.id)));
+    if (calendars.some(item => item.id === selected)) select.value = selected;
+  }
+
+  function scheduleInputs() {
+    const allDay = eventFields.all_day.checked;
+    for (const control of [eventFields.local_start, eventFields.local_end]) {
+      const value = control.value;
+      control.type = allDay ? 'date' : 'datetime-local';
+      if (value) control.value = allDay ? value.slice(0, 10) : value.length === 10 ? value + 'T09:00' : value;
+    }
+    $('end-label').textContent = allDay ? 'Fin (fecha excluida)' : 'Fin';
+    const repeat = Boolean(eventFields.repeat_kind.value) && mode !== 'occurrence';
+    $('repeat-choice').hidden = !repeat;
+    $('repeat-until').hidden = !repeat || eventFields.repeat_end.value !== 'until';
+    $('repeat-count').hidden = !repeat || eventFields.repeat_end.value !== 'count';
+    eventFields.repeat_until.required = !$('repeat-until').hidden;
+    eventFields.repeat_count.required = !$('repeat-count').hidden;
+  }
+  function formMode(next, item) {
+    mode = next;
+    const viewing = next === 'view';
+    const creating = next === 'create';
+    const recurring = Boolean(item?.repeat_kind);
+    eventForm.reset();
+    $('event-status').textContent = '';
+    $('event-heading').textContent = viewing ? item.title : ({create: 'Nuevo evento', series: 'Editar evento', occurrence: 'Editar ocurrencia'})[next];
+    $('event-detail').textContent = viewing ? eventLabel(item) + ' · ' + item.calendar_name : '';
+    $('event-fields').disabled = viewing;
+    $('repeat-fields').hidden = next === 'occurrence' || (viewing && !recurring);
+    $('repeat-fields').disabled = next === 'occurrence';
+    $('event-reminder').hidden = next === 'occurrence';
+    $('save-reminder').hidden = !viewing;
+    $('save-event').hidden = viewing;
+    $('edit-single').hidden = !viewing || !recurring || item?.role === 'reader';
+    $('edit-series').hidden = !viewing || item?.role === 'reader';
+    $('edit-series').textContent = recurring ? 'Editar serie' : 'Editar';
+    $('delete-event').hidden = creating || viewing;
+    $('delete-event').textContent = next === 'occurrence' ? 'Cancelar ocurrencia' : recurring ? 'Eliminar serie' : 'Eliminar evento';
+    const options = creating ? calendars.filter(calendar => calendar.role !== 'reader') : [calendars.find(calendar => calendar.id === item.calendar_id) || {id: item.calendar_id, name: item.calendar_name}];
+    eventFields.calendar_id.replaceChildren(...options.map(calendar => new Option(calendar.name, calendar.id)));
+    if (creating && !options.some(calendar => calendar.is_default)) eventFields.calendar_id.prepend(new Option('Personal', ''));
+    if (creating && options.some(calendar => calendar.id === $('calendar-filter').value)) eventFields.calendar_id.value = $('calendar-filter').value;
+    eventFields.calendar_id.disabled = !creating;
+    eventFields.title.value = item?.title || '';
+    eventFields.description.value = item?.description || '';
+    eventFields.zone.value = item?.zone || zone;
+    eventFields.busy.value = String(item?.busy ?? true);
+    eventFields.all_day.checked = item?.all_day || false;
+    eventFields.repeat_kind.value = item?.repeat_kind || '';
+    eventFields.repeat_end.value = item?.repeat_until ? 'until' : item?.repeat_count ? 'count' : '';
+    eventFields.repeat_until.value = item?.repeat_until || '';
+    eventFields.repeat_count.value = item?.repeat_count ?? '';
+    const reminder = item?.reminder_minutes;
+    for (const option of eventFields.reminder_minutes.querySelectorAll('[data-custom]')) option.remove();
+    if (reminder != null && ![...eventFields.reminder_minutes.options].some(option => option.value === String(reminder))) {
+      const option = new Option(reminder + ' minutos antes', reminder);
+      option.dataset.custom = '';
+      eventFields.reminder_minutes.add(option);
+    }
+    eventFields.reminder_minutes.value = reminder ?? '';
+    scheduleInputs();
+    for (const field of ['local_start', 'local_end']) {
+      if (item?.[field]) eventFields[field].value = item[field].slice(0, item.all_day ? 10 : 19);
+    }
+    if (!eventDialog.open) eventDialog.showModal();
+  }
+  function openCreate(date) {
+    detailsNumber++;
+    detail = null;
+    formMode('create');
+    const now = new Date();
+    const start = key(date) === key(now) ? new Date(now.getTime() + 1800000) : new Date(date.setHours(9, 0, 0, 0));
+    eventFields.local_start.value = localTime(start);
+    eventFields.local_end.value = localTime(new Date(start.getTime() + 3600000));
+  }
+  const occurrencePath = (id, original) => '/events/' + encodeURIComponent(id) + '/occurrences/' + encodeURIComponent(original);
+  async function openDetail(id, original) {
+    const version = ++detailsNumber;
+    try {
+      const [event, occurrence] = await Promise.all([api('/events/' + encodeURIComponent(id)), api(occurrencePath(id, original))]);
+      if (version !== detailsNumber) return;
+      detail = {event, occurrence};
+      formMode('view', {...occurrence, repeat_until: event.repeat_until, repeat_count: event.repeat_count});
+    } catch (error) { if (version === detailsNumber) $('page-status').textContent = describe(error); }
+  }
+  const reminderValue = () => eventFields.reminder_minutes.value === '' ? null : Number(eventFields.reminder_minutes.value);
+  function formData() {
+    const value = name => eventFields[name].value;
+    const allDay = eventFields.all_day.checked;
+    const local = name => value(name) + (allDay ? 'T00:00' : '');
+    return {
+      title: value('title'), description: value('description'), zone: value('zone').trim(),
+      local_start: local('local_start'), local_end: local('local_end'), all_day: allDay, busy: value('busy') === 'true'
+    };
+  }
+  async function updated() {
+    eventDialog.close();
+    await loadCalendars();
+    await Promise.all([load(), calendar.refresh()]);
+  }
+  eventForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (mode === 'view') return;
+    const button = $('save-event');
+    button.disabled = true;
+    $('event-status').textContent = '';
+    try {
+      if (mode === 'occurrence') {
+        await api(occurrencePath(detail.event.id, detail.occurrence.original_start), 'PUT', {revision: detail.event.revision, event: formData()});
+      } else {
+        const kind = eventFields.repeat_kind.value;
+        const endMode = eventFields.repeat_end.value;
+        const input = {
+          ...formData(), calendar_id: eventFields.calendar_id.value || null, repeat_kind: kind || null,
+          repeat_until: kind && endMode === 'until' ? eventFields.repeat_until.value : null,
+          repeat_count: kind && endMode === 'count' ? Number(eventFields.repeat_count.value) : null,
+          reminder_minutes: reminderValue(), revision: detail?.event.revision
+        };
+        if (mode === 'create') await api('/events', 'POST', input);
+        else {
+          const path = '/events/' + detail.event.id;
+          try { await api(path, 'PUT', input); }
+          catch (error) {
+            if (error.message !== 'confirm_clear_exceptions') throw error;
+            if (!window.confirm('Este cambio quitará los cambios y cancelaciones de ocurrencias individuales. ¿Guardar la serie?')) return;
+            await api(path, 'PUT', {...input, clear_exceptions: true});
+          }
+        }
+      }
+      await updated();
+    } catch (error) { $(eventDialog.open ? 'event-status' : 'page-status').textContent = describe(error); }
+    finally { button.disabled = false; }
+  });
+  $('save-reminder').addEventListener('click', async () => {
+    const button = $('save-reminder');
+    button.disabled = true;
+    try {
+      const minutes = reminderValue();
+      await api('/events/' + detail.event.id + '/reminder', 'PUT', {minutes_before: minutes});
+      detail.event.reminder_minutes = minutes;
+      detail.occurrence.reminder_minutes = minutes;
+      $('event-status').textContent = 'Recordatorio guardado.';
+      void calendar.refresh();
+    } catch (error) { $('event-status').textContent = describe(error); }
+    finally { button.disabled = false; }
+  });
+  $('delete-event').addEventListener('click', async () => {
+    const one = mode === 'occurrence';
+    if (!window.confirm(one ? '¿Cancelar esta ocurrencia?' : '¿Eliminar este evento y todas sus ocurrencias?')) return;
+    const button = $('delete-event');
+    button.disabled = true;
+    try {
+      if (one) await api(occurrencePath(detail.event.id, detail.occurrence.original_start), 'PUT', {revision: detail.event.revision, cancelled: true});
+      else await api('/events/' + detail.event.id + '?revision=' + detail.event.revision, 'DELETE');
+      await updated();
+    } catch (error) { $(eventDialog.open ? 'event-status' : 'page-status').textContent = describe(error); }
+    finally { button.disabled = false; }
+  });
+  $('edit-single').addEventListener('click', () => formMode('occurrence', detail.occurrence));
+  $('edit-series').addEventListener('click', () => formMode('series', detail.event));
+  $('close-event').addEventListener('click', () => eventDialog.close());
+  eventDialog.addEventListener('close', () => {
+    detailsNumber++;
+    if (location.search) history.replaceState(null, '', '/calendar/');
+  });
+  for (const field of ['repeat_kind', 'repeat_end']) eventFields[field].addEventListener('change', scheduleInputs);
+  eventFields.all_day.addEventListener('change', () => {
+    scheduleInputs();
+    const start = eventFields.local_start.value;
+    if (eventFields.all_day.checked && start && eventFields.local_end.value <= start) {
+      eventFields.local_end.value = key(day(dateFromKey(start), 1));
+    }
+  });
+
+  async function manageSelection() {
+    const version = ++membersNumber;
+    const id = $('manage-select').value;
+    const current = calendars.find(calendar => calendar.id === id);
+    nameForm.elements.name.value = current?.name || '';
+    $('save-calendar').textContent = current ? 'Guardar nombre' : 'Crear calendario';
+    $('delete-calendar').hidden = !current;
+    $('sharing').hidden = !current;
+    $('members').replaceChildren();
+    const form = $('share-form');
+    form.reset();
+    if (!current) return;
+    try {
+      const {items} = await api('/calendars/' + id + '/members');
+      if (version !== membersNumber) return;
+      for (const member of items) {
+        const row = document.createElement('li');
+        const text = document.createElement('span');
+        text.textContent = member.username + ' · ' + (member.role === 'editor' ? 'Edición' : 'Lectura');
+        const revoke = document.createElement('button');
+        revoke.type = 'button';
+        revoke.textContent = 'Quitar acceso';
+        revoke.setAttribute('aria-label', 'Quitar acceso a ' + member.username);
+        revoke.addEventListener('click', () => void manageAction(revoke, async () => {
+          await api('/calendars/' + id + '/members/' + member.user_id, 'DELETE');
+          await manageSelection();
+        }));
+        row.append(text, revoke);
+        $('members').append(row);
+      }
+    } catch (error) { if (version === membersNumber) $('manage-status').textContent = describe(error); }
+  }
+  async function manageAction(button, action) {
+    button.disabled = true;
+    $('manage-status').textContent = '';
+    try { await action(); }
+    catch (error) { $('manage-status').textContent = describe(error); }
+    finally { button.disabled = false; }
+  }
+  async function manageOptions(selected = '') {
+    await loadCalendars();
+    $('manage-select').replaceChildren(new Option('Nuevo calendario', ''),
+      ...calendars.filter(calendar => calendar.role === 'owner').map(calendar => new Option(calendar.name, calendar.id)));
+    $('manage-select').value = selected;
+    await manageSelection();
+  }
+  $('manage').addEventListener('click', () => void manageAction($('manage'), async () => {
+    manageDialog.showModal();
+    await manageOptions();
+  }));
+  $('close-manage').addEventListener('click', () => manageDialog.close());
+  $('manage-select').addEventListener('change', () => void manageSelection());
+  nameForm.addEventListener('submit', event => {
+    event.preventDefault();
+    void manageAction($('save-calendar'), async () => {
+      const id = $('manage-select').value;
+      const result = await api('/calendars' + (id ? '/' + id : ''), id ? 'PUT' : 'POST', {name: nameForm.elements.name.value});
+      await manageOptions(id || result.id);
+      await Promise.all([load(), calendar.refresh()]);
+    });
+  });
+  $('delete-calendar').addEventListener('click', () => {
+    const id = $('manage-select').value;
+    if (!id || !window.confirm('¿Eliminar este calendario y todos sus eventos?')) return;
+    void manageAction($('delete-calendar'), async () => {
+      await api('/calendars/' + id, 'DELETE');
+      await manageOptions();
+      await Promise.all([load(), calendar.refresh()]);
+    });
+  });
+  $('share-form').addEventListener('submit', event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    void manageAction(form.querySelector('button'), async () => {
+      await api('/calendars/' + $('manage-select').value + '/members', 'PUT', {
+        username: form.elements.username.value, role: form.elements.role.value
+      });
+      await manageSelection();
+    });
+  });
+
+  function shift(direction) {
+    anchor = view === 'month' ? new Date(anchor.getFullYear(), anchor.getMonth() + direction, 1) : day(anchor, direction * (view === 'week' ? 7 : 14));
+    void load();
+  }
+  $('today').addEventListener('click', () => { anchor = new Date(); void load(); });
+  $('previous').addEventListener('click', () => shift(-1));
+  $('next').addEventListener('click', () => shift(1));
+  $('calendar-filter').addEventListener('change', () => void load());
+  $('new-event').addEventListener('click', () => openCreate(day(anchor)));
+  for (const button of document.querySelectorAll('[data-view]')) button.addEventListener('click', () => {
+    view = button.dataset.view;
+    for (const item of document.querySelectorAll('[data-view]')) item.setAttribute('aria-pressed', String(item === button));
+    void load();
+  });
+  document.addEventListener('calendar-updated', () => void loadCalendars().then(load).catch(error => {
+    $('page-status').textContent = describe(error);
+  }));
+  async function endSession() {
+    await request('/auth/logout', 'POST');
+    window.SantolvShell.sessionEnded();
+    document.body.hidden = true;
+    location.replace('/');
+  }
+  async function begin() {
+    const profile = await request('/me');
+    if (profile.must_change_password) { location.replace('/account/'); return; }
+    window.SantolvShell.session(profile.expires_at);
+    window.SantolvShell.account(profile, {switch: endSession, logout: endSession});
+    await loadCalendars();
+    const params = new URLSearchParams(location.search);
+    let linkStatus = '';
+    if (params.has('event') && params.has('original')) {
+      await openDetail(params.get('event'), params.get('original'));
+      if (detail) anchor = dateFromKey(detail.occurrence.local_start.slice(0, 10));
+      else linkStatus = $('page-status').textContent;
+    }
+    await load();
+    if (linkStatus) $('page-status').textContent = linkStatus;
+  }
+  void begin().catch(error => { $('page-status').textContent = describe(error); });
+})();
+</script>
+</body>
+</html>

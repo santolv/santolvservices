@@ -190,14 +190,12 @@ mod tests {
             let bytes = source.into_inner();
             let retained = bytes.clone();
             let preview = encode(Cursor::new(bytes)).unwrap();
-            for (size, bytes) in [(1280, preview)] {
-                assert_eq!(&bytes[0..4], b"RIFF");
-                assert!(!bytes.windows(4).any(|w| matches!(w, b"EXIF" | b"XMP ")));
-                let result = image::load_from_memory(&bytes).unwrap();
-                assert!(result.width() <= width && result.height() <= height);
-                assert!(result.width().max(result.height()) <= size);
-                assert_eq!(result.width() * height, result.height() * width);
-            }
+            assert_eq!(&preview[0..4], b"RIFF");
+            assert!(!preview.windows(4).any(|w| matches!(w, b"EXIF" | b"XMP ")));
+            let result = image::load_from_memory(&preview).unwrap();
+            assert!(result.width() <= width && result.height() <= height);
+            assert!(result.width().max(result.height()) <= 1280);
+            assert_eq!(result.width() * height, result.height() * width);
             assert_eq!(image::load_from_memory(&retained).unwrap().width(), width);
         }
         assert!(encode(Cursor::new(b"not an image")).is_err());

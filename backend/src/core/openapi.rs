@@ -2,12 +2,116 @@ use serde_json::{Value, json};
 
 pub fn document() -> Value {
     let mut paths = serde_json::Map::new();
+    const EVENT_FIELDS: &str = "title,local_start,local_end,zone,calendar_id?,description?,all_day?,busy?,repeat_kind?,repeat_until?,repeat_count?,reminder_minutes?";
+    const UPDATE_EVENT_FIELDS: &str = "title,local_start,local_end,zone,revision,calendar_id?,description?,all_day?,busy?,repeat_kind?,repeat_until?,repeat_count?,reminder_minutes?,clear_exceptions?";
     let definitions = [
         (
             "/api/v1/services",
             "get",
             "Active, installed services available to the authenticated user",
             "",
+        ),
+        (
+            "/api/v1/calendar/calendars",
+            "get",
+            "List visible calendars with the viewer's role",
+            "",
+        ),
+        (
+            "/api/v1/calendar/calendars",
+            "post",
+            "Create a private calendar",
+            "name",
+        ),
+        (
+            "/api/v1/calendar/calendars/{id}",
+            "put",
+            "Rename a calendar as owner",
+            "name",
+        ),
+        (
+            "/api/v1/calendar/calendars/{id}",
+            "delete",
+            "Delete a calendar and its events as owner",
+            "",
+        ),
+        (
+            "/api/v1/calendar/calendars/{id}/members",
+            "get",
+            "List members as owner",
+            "",
+        ),
+        (
+            "/api/v1/calendar/calendars/{id}/members",
+            "put",
+            "Grant or change a user's calendar access as owner",
+            "username,role",
+        ),
+        (
+            "/api/v1/calendar/calendars/{id}/members/{user}",
+            "delete",
+            "Revoke a user's calendar access as owner",
+            "",
+        ),
+        (
+            "/api/v1/calendar/events",
+            "get",
+            "List occurrences overlapping the given interval, ordered by start; next_offset is null on the last page",
+            "",
+        ),
+        (
+            "/api/v1/calendar/events",
+            "post",
+            "Create an event in a writable calendar; an omitted calendar selects the personal default",
+            EVENT_FIELDS,
+        ),
+        (
+            "/api/v1/calendar/events/{id}",
+            "get",
+            "Get the event or series definition and the viewer's reminder settings",
+            "",
+        ),
+        (
+            "/api/v1/calendar/events/{id}",
+            "put",
+            "Replace the event or series if its revision matches",
+            UPDATE_EVENT_FIELDS,
+        ),
+        (
+            "/api/v1/calendar/events/{id}",
+            "delete",
+            "Delete the event or series if its revision matches",
+            "",
+        ),
+        (
+            "/api/v1/calendar/events/{id}/occurrences/{original}",
+            "get",
+            "Get the effective occurrence by its original local start",
+            "",
+        ),
+        (
+            "/api/v1/calendar/events/{id}/occurrences/{original}",
+            "put",
+            "Replace one occurrence, or cancel it by sending cancelled=true without event",
+            "revision,cancelled?,event?",
+        ),
+        (
+            "/api/v1/calendar/events/{id}/reminder",
+            "put",
+            "Set or remove the current user's reminder for an event or series",
+            "minutes_before?",
+        ),
+        (
+            "/api/v1/calendar/reminders",
+            "get",
+            "List up to 100 pending personal reminders from the last seven days",
+            "",
+        ),
+        (
+            "/api/v1/calendar/reminders",
+            "post",
+            "Dismiss one due reminder for the current user",
+            "event_id,original_start,due_at",
         ),
         (
             "/api/v1/activity/recent",
@@ -205,10 +309,19 @@ pub fn document() -> Value {
             "428":{"description":"If-Match required"},"429":{"description":"Rate or concurrency limit"},
             "503":{"description":"Dependency unavailable"},"507":{"description":"Insufficient physical storage"}
         },"security":if public{json!([])}else{json!([{"cookieAuth":[]},{"bearerAuth":[]}])},"parameters":[]});
+        let calendar = path.starts_with("/api/v1/calendar/");
+        if calendar && method == "post" && path != "/api/v1/calendar/reminders" {
+            op["responses"]["201"]["description"] = json!("Calendar or event created");
+        }
         let p = op["parameters"].as_array_mut().unwrap();
         for part in path.split('/') {
             if let Some(key) = part.strip_prefix('{').and_then(|s| s.strip_suffix('}')) {
-                p.push(json!({"name":key,"in":"path","required":true,"schema":{"type":"string","format":"uuid"}}));
+                let schema = if key == "original" {
+                    json!({"type":"string","example":"2026-12-03T09:00:00"})
+                } else {
+                    json!({"type":"string","format":"uuid"})
+                };
+                p.push(json!({"name":key,"in":"path","required":true,"schema":schema}));
             }
         }
         if !public && method != "get" {
@@ -235,7 +348,38 @@ pub fn document() -> Value {
         if path == "/api/v1/uploads" {
             p.push(json!({"name":"If-Match","in":"header","description":"Required for node_id (replace file)","schema":{"type":"string"}}));
         }
-        if method == "get"
+        if calendar && method == "get" && path == "/api/v1/calendar/events" {
+            for (name, required, schema) in [
+                ("from", true, json!({"type":"string","format":"date-time"})),
+                (
+                    "to",
+                    true,
+                    json!({"type":"string","format":"date-time","description":"Exclusive bound, up to 62 days after from"}),
+                ),
+                (
+                    "calendar_id",
+                    false,
+                    json!({"type":"string","format":"uuid"}),
+                ),
+                (
+                    "limit",
+                    false,
+                    json!({"type":"integer","minimum":1,"maximum":200,"default":100}),
+                ),
+                (
+                    "offset",
+                    false,
+                    json!({"type":"integer","minimum":0,"default":0}),
+                ),
+            ] {
+                p.push(json!({"name":name,"in":"query","required":required,"schema":schema}));
+            }
+        }
+        if method == "delete" && path == "/api/v1/calendar/events/{id}" {
+            p.push(json!({"name":"revision","in":"query","required":true,"schema":{"type":"integer","format":"int64"}}));
+        }
+        if !calendar
+            && method == "get"
             && (path.ends_with("/nodes")
                 || path.ends_with("/shared")
                 || path.ends_with("/members")
@@ -278,7 +422,9 @@ pub fn document() -> Value {
             for field in fields.split(',') {
                 let optional = field.ends_with('?');
                 let f = field.trim_end_matches('?');
-                let schema = if f == "size" {
+                let schema = if calendar {
+                    calendar_schema(f)
+                } else if f == "size" {
                     json!({"type":"integer","format":"int64","minimum":0})
                 } else if f == "role" {
                     json!({"type":"integer","enum":[1,2,3]})
@@ -304,6 +450,45 @@ pub fn document() -> Value {
         paths.entry(path.to_owned()).or_insert_with(|| json!({}))[method] = op;
     }
     json!({"openapi":"3.0.3","info":{"title":"Santolv Services","version":"0.1.0","description":"Local storage backend listening only on loopback. Drive sessions are required for protected operations. Cookies require CSRF for writes. Role 1 reader, 2 editor, 3 manager. Members see all space contents; external grants are additive and inherited. See README for deployment guarantees."},"paths":paths,"components":{"securitySchemes":{"cookieAuth":{"type":"apiKey","in":"cookie","name":"drive_session"},"bearerAuth":{"type":"http","scheme":"bearer"}}}})
+}
+
+fn calendar_schema(field: &str) -> Value {
+    match field {
+        "role" => json!({"type":"string","enum":["reader","editor"]}),
+        "calendar_id" => json!({"type":"string","format":"uuid","nullable":true}),
+        "event_id" => json!({"type":"string","format":"uuid"}),
+        "local_start" | "local_end" | "original_start" => {
+            json!({"type":"string","example":"2026-12-03T09:00:00"})
+        }
+        "due_at" => json!({"type":"string","format":"date-time"}),
+        "repeat_kind" => {
+            json!({"type":"string","enum":["daily","weekly","monthly","yearly"],"nullable":true})
+        }
+        "repeat_until" => json!({"type":"string","format":"date","nullable":true}),
+        "repeat_count" => json!({"type":"integer","minimum":1,"maximum":10000,"nullable":true}),
+        "reminder_minutes" | "minutes_before" => {
+            json!({"type":"integer","minimum":0,"maximum":10080,"nullable":true})
+        }
+        "revision" => json!({"type":"integer","format":"int64"}),
+        "all_day" | "busy" | "clear_exceptions" | "cancelled" => json!({"type":"boolean"}),
+        "event" => {
+            let props: serde_json::Map<_, _> = [
+                "title",
+                "description",
+                "local_start",
+                "local_end",
+                "zone",
+                "all_day",
+                "busy",
+            ]
+            .into_iter()
+            .map(|key| (key.into(), calendar_schema(key)))
+            .collect();
+            json!({"type":"object","properties":props,"required":["title","local_start","local_end","zone"]})
+        }
+        "zone" => json!({"type":"string","example":"Europe/Madrid"}),
+        _ => json!({"type":"string"}),
+    }
 }
 #[cfg(test)]
 mod tests {

@@ -10,9 +10,12 @@
 :root[data-theme="dark"] .shell-sun{display:none}:root[data-theme="dark"] .shell-moon{display:block}
 :root[data-theme="dark"] .shell-button{background:#29292f;color:#d4d4de;border-color:#42424b}
 :root[data-theme="dark"] .shell-button:hover{background:#383842}
-.shell-home{width:auto;height:36px;gap:7px;padding:0 13px;font:600 13px system-ui,sans-serif;background:#eaf3ff;color:#135caa;border-color:#d4e7ff}
-.shell-home:hover{background:#dcecff}
-:root[data-theme="dark"] .shell-home{background:#263a53;color:#b9d9ff;border-color:#395674}
+.shell-home{width:auto;height:34px;gap:7px;padding:0 13px;border:0;border-radius:999px;background:color-mix(in srgb,currentColor 7%,transparent);box-shadow:inset 0 1px 0 #ffffff80;color:#292a2e;font:560 13px/1 system-ui,sans-serif}
+.shell-home svg{width:17px;height:17px;stroke-width:1.65}
+.shell-home:hover{background:color-mix(in srgb,currentColor 11%,transparent)}
+:root[data-theme="dark"] .shell-home{background:color-mix(in srgb,currentColor 9%,transparent);box-shadow:inset 0 1px 0 #ffffff15;color:#f0f0f3}
+:root[data-theme="dark"] .shell-home:hover{background:color-mix(in srgb,currentColor 14%,transparent)}
+.shell-button.shell-home:active{opacity:.72}
 .shell-profile{border-radius:50%;font:650 11px system-ui,sans-serif}
 .shell-controls [hidden]{display:none!important}
 .shell-menu{position:fixed;inset:58px 14px auto auto;margin:0;width:min(230px,calc(100vw - 28px));padding:8px;border:1px solid #dedee5;border-radius:12px;background:#fff;color:#22232b;box-shadow:0 10px 32px #17192424;font:13px system-ui,sans-serif}
@@ -32,5 +35,6 @@
 .app .shell-sidebar-toggle[data-shell-sidebar="show"]{display:none}
 .app.sidebar-hidden .shell-sidebar-toggle[data-shell-sidebar="show"]{display:grid}
 @media(max-width:620px){.sidebar-top{margin-bottom:5px}.app:not(.mobile-sidebar) .shell-sidebar-toggle[data-shell-sidebar="show"]{display:grid}.app.mobile-sidebar .shell-sidebar-toggle[data-shell-sidebar="show"]{display:none}}
-@media(max-width:620px){.shell-header{padding-inline:12px}.shell-controls{gap:5px}.shell-home{padding:0 8px}}
-@media(max-width:390px){.shell-home span{display:none}.shell-home{width:34px;padding:0}}
+@media(max-width:620px){.shell-header{padding-inline:12px}.shell-controls{gap:5px}.shell-home{padding:0 10px}}
+@media(max-width:360px){.shell-home span{display:none}.shell-home{width:34px;padding:0}}
+@media(pointer:coarse){.shell-home{min-width:44px;height:44px}}

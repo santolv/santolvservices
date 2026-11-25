@@ -7,6 +7,8 @@ referencia; sus restricciones de demo y repositorio independiente están superad
 - [x] Backend compartido Rust en ../../backend; interfaces separadas.
 - [x] Inicio sin barra lateral, actividad reciente común y sesión HttpOnly/CSRF.
 - [x] Backend compartido desplegado en la instalación local, con copia previa.
+- [x] Barra superior con cuenta, acceso a Inicio mediante cuatro puntos y tema
+  global sincronizado con Drive e Inicio, también entre pestañas.
 - [x] Almacenamiento usuarios/<UUID>/photos separado de Drive.
 - [x] Subida real por bloques con integridad y confirmación durable.
 - [x] Biblioteca paginada, originales autenticados, favoritos y álbumes persistentes.

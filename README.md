@@ -17,6 +17,11 @@ correspondiente con CSP y las tres interfaces se incluyen en el ejecutable al
 compilar. Comparten cookies HttpOnly, sesiones y protección CSRF; no guardan
 tokens en localStorage ni en enlaces. Cerrar sesión revoca el acceso común.
 
+La barra superior reúne tema global, aplicaciones (cuatro puntos para volver a
+Inicio) y cuenta. Claro/oscuro se guarda con una única preferencia del navegador
+y se sincroniza entre servicios y pestañas. Fotos permite también elegir el tema
+del sistema desde Ajustes; esa elección se aplica a todos los servicios.
+
 ## Almacenamiento
 
 ```text

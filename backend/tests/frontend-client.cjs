@@ -23,6 +23,9 @@ const context = vm.createContext({ console, Headers, Blob, ArrayBuffer, Uint8Arr
   window:{addEventListener(){}}, sessionStorage:{getItem(){return null},setItem(){},removeItem(){}},
   fetch:async (url, options={}) => { requests.push({url, options}); return {ok:true,status:200,json:async()=>({items:[],next_cursor:null})}; }
 });
+context.window.matchMedia=()=>({matches:false,addEventListener(){}});
+context.localStorage={getItem(){return null},setItem(){}};
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../../frontend/shell.js'),'utf8'),context);
 vm.runInContext(script, context);
 assert(!/demoNodes|demoUser|Vista previa sin conexión|Opcional en esta demo/.test(html));
 const markup=html.slice(0,html.indexOf('<script>'));

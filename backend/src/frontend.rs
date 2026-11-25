@@ -67,13 +67,29 @@ impl Frontend {
     }
     pub fn bundled(origin: &str, api_origin: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let mut s = Self::from_html(
-            include_str!("../../frontend/index.html").into(),
+            Self::with_shell(include_str!("../../frontend/index.html")),
             origin,
             api_origin,
         )?;
-        s.drive = Some(include_str!("../../santolvdrive/frontend/pruebahtml/index.html").into());
-        s.photos = Some(include_str!("../../santolvphotos/frontend/index.html").into());
+        s.drive = Some(Self::with_shell(include_str!(
+            "../../santolvdrive/frontend/pruebahtml/index.html"
+        )));
+        s.photos = Some(Self::with_shell(include_str!(
+            "../../santolvphotos/frontend/index.html"
+        )));
         Ok(s)
+    }
+    fn with_shell(html: &str) -> Arc<str> {
+        html.replacen(
+            "<head>",
+            &format!(
+                "<head><style>{}</style><script>{}</script>",
+                include_str!("../../frontend/shell.css"),
+                include_str!("../../frontend/shell.js")
+            ),
+            1,
+        )
+        .into()
     }
     async fn read(path: &Path) -> Result<String, std::io::Error> {
         let file = tokio::fs::File::open(path).await?;
@@ -202,6 +218,8 @@ mod tests {
             .unwrap();
             assert!(body.contains(expected), "{path}");
             assert!(!body.contains(absent), "{path}");
+            assert!(body.contains("window.SantolvShell"), "{path}");
+            assert!(!body.contains("<script>"), "{path}: unprotected script");
         }
         for path in [
             "/server.json",

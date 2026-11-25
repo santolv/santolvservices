@@ -1,0 +1,12 @@
+.shell-controls{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.shell-button{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;padding:6px;border:1px solid #dedee5;border-radius:8px;background:#fff;color:#62626e;text-decoration:none;cursor:pointer}
+.shell-button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.shell-button:hover{background:#eeeef3}.shell-button:focus-visible{outline:3px solid #1687ff;outline-offset:3px}
+.shell-apps svg{fill:currentColor;stroke:none}.shell-moon{display:none}
+:root[data-theme="dark"] .shell-sun{display:none}:root[data-theme="dark"] .shell-moon{display:block}
+:root[data-theme="dark"] .shell-button{background:#29292f;color:#d4d4de;border-color:#42424b}
+:root[data-theme="dark"] .shell-button:hover{background:#383842}
+.shell-account{display:inline-flex;align-items:center;gap:7px;max-width:160px;border:0;border-radius:8px;padding:4px 7px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.shell-account:hover{background:var(--fill,#ededf2)}.shell-account svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.5}
+.shell-account-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px;font-size:12px}
+@media(max-width:620px){.shell-controls{gap:6px}.shell-account-name{display:none}.shell-account{padding:2px}.shell-button{width:32px;height:32px}}

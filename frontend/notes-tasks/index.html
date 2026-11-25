@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Notas y Tareas · Santolv</title>
+<style>
+:root {
+  color-scheme: light;
+  --background: #f6f6f8;
+  --surface: #fff;
+  --text: #1d1d1f;
+  --muted: #646469;
+  --line: #d9d9df;
+  --accent: #075fb6;
+  --accent-text: #fff;
+  --danger: #a81930;
+  font: 16px/1.5 system-ui, sans-serif;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #18181b;
+  --surface: #222225;
+  --text: #f5f5f7;
+  --muted: #b1b1b8;
+  --line: #434349;
+  --accent: #85bdff;
+  --accent-text: #10223a;
+  --danger: #ff9baa;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--background); color: var(--text); }
+[hidden] { display: none !important; }
+main { max-width: 68rem; margin-inline: auto; padding: clamp(1rem, 4vw, 3rem); }
+h1, h2, p { margin: 0; }
+h1 { font-size: clamp(1.6rem, 5vw, 2.45rem); line-height: 1.15; letter-spacing: -.035em; }
+h2 { font-size: 1.25rem; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button, input, select, textarea {
+  min-height: 2.75rem; padding: .5rem .75rem; border: 1px solid var(--line);
+  border-radius: .55rem; background: var(--surface); min-width: 0;
+}
+button { cursor: pointer; }
+button:disabled { opacity: .65; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.primary, .view button[aria-pressed="true"] {
+  background: var(--accent); color: var(--accent-text); border-color: var(--accent);
+}
+.heading, .filters, .view, .actions, .fields, .linked { display: flex; flex-wrap: wrap; gap: .65rem; }
+.heading { justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+.filters { margin-top: 1rem; align-items: end; }
+.filters > label:first-child { flex: 1 1 13rem; }
+label { display: grid; gap: .25rem; min-width: 0; }
+label span, .meta { font-size: .875rem; color: var(--muted); }
+label.inline { display: flex; align-items: center; gap: .5rem; }
+label.inline input { min-height: auto; }
+#message { margin-block: 1rem; color: var(--muted); }
+[data-error="true"], #editor-error, .danger { color: var(--danger) !important; }
+#items { list-style: none; margin: 1rem 0; padding: 0; display: grid; gap: .55rem; }
+#items button {
+  width: 100%; min-width: 0; display: grid; gap: .25rem; padding: .8rem 1rem;
+  text-align: left; overflow-wrap: anywhere;
+}
+#items button:hover { border-color: var(--accent); }
+.preview { color: var(--muted); white-space: pre-wrap; }
+dialog {
+  width: min(36rem, calc(100% - 1.5rem)); max-height: calc(100dvh - 1.5rem);
+  border: 1px solid var(--line); border-radius: .9rem; padding: 1rem;
+  background: var(--surface); color: var(--text);
+}
+dialog::backdrop { background: #0007; }
+dialog form, fieldset { display: grid; gap: .85rem; }
+fieldset { border: 0; margin: 0; padding: 0; min-inline-size: 0; }
+.fields > label { flex: 1 1 9rem; }
+.linked { align-items: end; }
+.linked > label { flex: 1 1 12rem; }
+textarea { resize: vertical; }
+.actions { justify-content: space-between; }
+.actions > div { display: flex; flex-wrap: wrap; gap: .5rem; }
+#note-filter { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .75rem; }
+</style>
+</head>
+<body>
+<!-- SANTOLV_SHELL -->
+<main>
+  <div class="heading">
+    <h1>Notas y tareas</h1>
+    <button type="button" class="primary" id="new" disabled>Nueva nota</button>
+  </div>
+  <div class="view" role="group" aria-label="Vista">
+    <button type="button" id="notes" aria-pressed="true">Notas</button>
+    <button type="button" id="tasks" aria-pressed="false">Tareas</button>
+  </div>
+  <form class="filters" id="filters" role="search">
+    <label><span>Buscar</span><input type="search" name="q"></label>
+    <label id="archived-filter"><span>Archivo</span><select name="archived">
+      <option value="false">Activas</option><option value="true">Archivadas</option>
+    </select></label>
+    <label class="task-filter" hidden><span>Estado</span><select name="status">
+      <option value="">Todos</option><option value="pending">Pendiente</option>
+      <option value="in_progress">En curso</option><option value="done">Hecha</option>
+    </select></label>
+    <label class="task-filter" hidden><span>Prioridad</span><select name="priority">
+      <option value="">Todas</option><option value="low">Baja</option>
+      <option value="normal">Normal</option><option value="high">Alta</option>
+    </select></label>
+    <button type="submit">Buscar</button>
+  </form>
+  <div id="note-filter" hidden>
+    <span id="note-filter-label"></span>
+    <button type="button" id="clear-note-filter">Quitar filtro</button>
+  </div>
+  <p id="message" role="status"></p>
+  <ul id="items" aria-label="Resultados"></ul>
+  <button type="button" id="more" hidden>Cargar más</button>
+</main>
+<dialog id="editor" aria-labelledby="editor-title">
+  <form id="edit-form">
+    <h2 id="editor-title"></h2>
+    <fieldset id="edit-fields">
+      <label><span>Título</span><input name="title" required></label>
+      <fieldset id="note-fields">
+        <label><span>Contenido</span><textarea name="content" rows="8"></textarea></label>
+        <label class="inline" id="archive-field"><input name="archived" type="checkbox"><span>Archivada</span></label>
+      </fieldset>
+      <fieldset id="task-fields" hidden disabled>
+        <div class="fields">
+          <label><span>Estado</span><select name="status">
+            <option value="pending">Pendiente</option><option value="in_progress">En curso</option><option value="done">Hecha</option>
+          </select></label>
+          <label><span>Prioridad</span><select name="priority">
+            <option value="low">Baja</option><option value="normal">Normal</option><option value="high">Alta</option>
+          </select></label>
+        </div>
+        <label><span>Vencimiento</span><input type="datetime-local" name="due_at"></label>
+        <div class="linked">
+          <label><span>Nota vinculada</span><select name="note_id"><option value="">Ninguna</option></select></label>
+          <button type="button" id="load-notes">Buscar notas</button>
+        </div>
+        <div class="linked" id="picker-filters" hidden>
+          <label><span>Buscar nota por título o contenido</span><input type="search" id="picker-query"></label>
+          <label class="inline"><input type="checkbox" id="picker-archived"><span>Archivadas</span></label>
+          <button type="button" id="search-notes">Buscar</button>
+        </div>
+        <p id="picker-message" class="meta" role="status"></p>
+      </fieldset>
+    </fieldset>
+    <p id="editor-error" role="alert" hidden></p>
+    <div class="actions">
+      <div>
+        <button type="button" id="linked-tasks" hidden>Ver tareas vinculadas</button>
+        <button type="button" class="danger" id="delete" hidden>Eliminar tarea</button>
+      </div>
+      <div>
+        <button type="button" id="cancel">Cancelar</button>
+        <button type="submit" class="primary" id="save">Guardar</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+<script>
+(() => {
+  'use strict';
+
+  const API_ORIGIN=location.protocol==='https:'?location.origin:'http://localhost:8443';
+  const base = '/notes-tasks';
+  const shell = window.SantolvShell;
+  const element = id => document.getElementById(id);
+  const filters = element('filters');
+  const form = element('edit-form');
+  const editor = element('editor');
+  const noteSelect = form.elements.note_id;
+  const states = {pending: 'Pendiente', in_progress: 'En curso', done: 'Hecha'};
+  const priorities = {low: 'Baja', normal: 'Normal', high: 'Alta'};
+  const dateFormat = new Intl.DateTimeFormat('es', {dateStyle: 'medium', timeStyle: 'short'});
+  const errors = {
+    invalid_title: 'Introduce un título de 1 a 200 caracteres.',
+    invalid_content: 'El contenido admite hasta 50 000 caracteres.',
+    invalid_search: 'La búsqueda admite hasta 200 caracteres.',
+    invalid_due_at: 'Introduce una fecha de vencimiento válida.',
+    not_found: 'El registro o la nota vinculada ya no está disponible.',
+    service_disabled: 'Notas y Tareas está desactivado.',
+    service_forbidden: 'No tienes permiso para acceder a Notas y Tareas.'
+  };
+
+  let me, resource = 'notes', noteFilter, listCursor, listRequest, activeParams;
+  let editing, initialDue, pickerCursor, pickerRequest, pickerParams, saving = false;
+
+  function returnHome() {
+    document.body.hidden = true;
+    location.replace('/');
+  }
+
+  async function api(path, {method = 'GET', body, signal} = {}) {
+    const headers = {};
+    if (method !== 'GET') headers['X-CSRF-Token'] = me.csrf_token;
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const response = await fetch(API_ORIGIN + '/api/v1' + path, {
+      method, headers, credentials: 'include', signal,
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    if (response.ok) return response.status === 204 ? null : response.json();
+    if (response.status === 401) returnHome();
+    const data = await response.json().catch(() => null);
+    throw new Error(errors[data?.error?.code] || 'No se pudo completar la operación.');
+  }
+
+  function message(text, error = false) {
+    element('message').textContent = text;
+    element('message').dataset.error = String(error);
+  }
+
+  function resourcePath(id) {
+    return base + '/' + resource + (id ? '/' + encodeURIComponent(id) : '');
+  }
+
+  function row(item) {
+    const li = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    const title = document.createElement('strong');
+    title.textContent = item.title;
+    button.append(title);
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    if (resource === 'notes') {
+      if (item.content) {
+        const preview = document.createElement('span');
+        preview.className = 'preview';
+        const excerpt = Array.from(item.content.slice(0, 320)).slice(0, 140).join('');
+        preview.textContent = excerpt + (excerpt.length < item.content.length ? '…' : '');
+        button.append(preview);
+      }
+      meta.textContent = 'Editada ' + dateFormat.format(new Date(item.updated_at));
+    } else {
+      const details = [states[item.status], priorities[item.priority]];
+      if (item.due_at) details.push('Vence ' + dateFormat.format(new Date(item.due_at)));
+      if (item.note_id) details.push('Nota vinculada');
+      meta.textContent = details.join(' · ');
+    }
+    button.append(meta);
+    button.addEventListener('click', () => openEditor(item));
+    li.append(button);
+    return li;
+  }
+
+  async function loadList(append = false) {
+    if (!me || (append && !listCursor)) return;
+    listRequest?.abort();
+    const request = new AbortController();
+    listRequest = request;
+    const items = element('items');
+    if (!append) {
+      items.replaceChildren();
+      listCursor = null;
+      const {q, archived, status, priority} = filters.elements;
+      activeParams = new URLSearchParams();
+      if (q.value.trim()) activeParams.set('q', q.value.trim());
+      if (resource === 'notes') activeParams.set('archived', archived.value);
+      else {
+        if (status.value) activeParams.set('status', status.value);
+        if (priority.value) activeParams.set('priority', priority.value);
+        if (noteFilter) activeParams.set('note_id', noteFilter.id);
+      }
+    }
+    const params = new URLSearchParams(activeParams);
+    if (append) params.set('cursor', listCursor);
+    element('more').disabled = true;
+    element('more').hidden = !append;
+    items.setAttribute('aria-busy', 'true');
+    message('Cargando…');
+    try {
+      const data = await api(resourcePath() + '?' + params, {signal: request.signal});
+      if (listRequest !== request) return;
+      items.append(...data.items.map(row));
+      listCursor = data.next_cursor;
+      message(items.childElementCount ? '' : 'No hay resultados.');
+    } catch (error) {
+      if (listRequest === request) message(error.message, true);
+    } finally {
+      if (listRequest === request) {
+        items.setAttribute('aria-busy', 'false');
+        element('more').hidden = !listCursor;
+        element('more').disabled = false;
+      }
+    }
+  }
+
+  function switchTo(next, linkedNote) {
+    if (next !== resource || linkedNote) filters.reset();
+    resource = next;
+    noteFilter = linkedNote;
+    const notes = resource === 'notes';
+    element('notes').setAttribute('aria-pressed', String(notes));
+    element('tasks').setAttribute('aria-pressed', String(!notes));
+    element('new').textContent = notes ? 'Nueva nota' : 'Nueva tarea';
+    element('archived-filter').hidden = !notes;
+    document.querySelectorAll('.task-filter').forEach(label => { label.hidden = notes; });
+    element('note-filter').hidden = !noteFilter;
+    if (noteFilter) element('note-filter-label').textContent = 'Nota: ' + noteFilter.title;
+    void loadList();
+  }
+
+  function editorError(text = '') {
+    element('editor-error').textContent = text;
+    element('editor-error').hidden = !text;
+  }
+
+  function localMinute(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    const pad = value => String(value).padStart(2, '0');
+    return String(date.getFullYear()).padStart(4, '0') + '-' + pad(date.getMonth() + 1)
+      + '-' + pad(date.getDate()) + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+  }
+
+  function addNoteOption(id, title) {
+    const existing = Array.from(noteSelect.options).find(option => option.value === id);
+    if (existing) existing.textContent = title;
+    else noteSelect.add(new Option(title, id));
+  }
+
+  async function loadNotes(append = false) {
+    pickerRequest?.abort();
+    const request = new AbortController();
+    pickerRequest = request;
+    const button = element('load-notes');
+    const pickerMessage = element('picker-message');
+    if (!append) {
+      pickerCursor = null;
+      pickerParams = new URLSearchParams({archived: String(element('picker-archived').checked)});
+      const q = element('picker-query').value.trim();
+      if (q) pickerParams.set('q', q);
+      for (const option of Array.from(noteSelect.options)) {
+        if (option.value && !option.selected) option.remove();
+      }
+    }
+    const params = new URLSearchParams(pickerParams);
+    if (append) params.set('cursor', pickerCursor);
+    element('picker-filters').hidden = false;
+    button.disabled = true;
+    pickerMessage.textContent = 'Buscando notas…';
+    try {
+      const data = await api(base + '/notes?' + params, {signal: request.signal});
+      if (pickerRequest !== request) return;
+      for (const note of data.items) addNoteOption(note.id, note.title);
+      pickerCursor = data.next_cursor;
+      pickerMessage.textContent = data.items.length ? '' : 'No hay notas que coincidan.';
+    } catch (error) {
+      if (pickerRequest === request) pickerMessage.textContent = error.message;
+    } finally {
+      if (pickerRequest === request) {
+        button.textContent = pickerCursor ? 'Cargar más notas' : 'Buscar notas';
+        button.disabled = false;
+      }
+    }
+  }
+
+  function openEditor(item = null) {
+    if (!me || editor.open) return;
+    editing = item;
+    const notes = resource === 'notes';
+    form.reset();
+    element('editor-title').textContent = notes
+      ? (item ? 'Editar nota' : 'Nueva nota')
+      : (item ? 'Editar tarea' : 'Nueva tarea');
+    for (const [id, visible] of [['note-fields', notes], ['task-fields', !notes]]) {
+      element(id).hidden = !visible;
+      element(id).disabled = !visible;
+    }
+    element('archive-field').hidden = !item;
+    element('linked-tasks').hidden = !(notes && item);
+    element('delete').hidden = notes || !item;
+    form.elements.title.value = item?.title ?? '';
+    if (notes) {
+      form.elements.content.value = item?.content ?? '';
+      form.elements.archived.checked = Boolean(item?.archived_at);
+    } else {
+      form.elements.status.value = item?.status ?? 'pending';
+      form.elements.priority.value = item?.priority ?? 'normal';
+      initialDue = localMinute(item?.due_at);
+      form.elements.due_at.value = initialDue;
+      noteSelect.replaceChildren(new Option('Ninguna', ''));
+      const noteId = item ? item.note_id : noteFilter?.id;
+      if (noteId) {
+        addNoteOption(noteId, noteFilter?.id === noteId ? noteFilter.title : 'Nota vinculada');
+        noteSelect.value = noteId;
+      }
+      pickerCursor = null;
+      element('picker-query').value = '';
+      element('picker-archived').checked = false;
+      element('picker-filters').hidden = true;
+      element('picker-message').textContent = '';
+      element('load-notes').textContent = 'Buscar notas';
+      element('load-notes').disabled = false;
+      if (noteId && noteFilter?.id !== noteId) {
+        const request = new AbortController();
+        pickerRequest = request;
+        api(base + '/notes/' + encodeURIComponent(noteId), {signal: request.signal})
+          .then(note => { if (pickerRequest === request) addNoteOption(note.id, note.title); })
+          .catch(() => {});
+      }
+    }
+    editorError();
+    editor.showModal();
+    form.elements.title.focus();
+  }
+
+  async function change(method, body) {
+    if (saving) return;
+    saving = true;
+    for (const id of ['edit-fields', 'cancel', 'save', 'delete', 'linked-tasks']) element(id).disabled = true;
+    editorError();
+    try {
+      await api(resourcePath(editing?.id), {method, body});
+      editor.close();
+      await loadList();
+    } catch (error) {
+      editorError(error.message);
+    } finally {
+      for (const id of ['edit-fields', 'cancel', 'save', 'delete', 'linked-tasks']) element(id).disabled = false;
+      saving = false;
+    }
+  }
+
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    const fields = form.elements;
+    const body = {title: fields.title.value};
+    if (resource === 'notes') {
+      body.content = fields.content.value;
+      if (editing) body.archived = fields.archived.checked;
+    } else {
+      body.status = fields.status.value;
+      body.priority = fields.priority.value;
+      body.note_id = fields.note_id.value || null;
+      const due = fields.due_at.value;
+      if (editing && due === initialDue) body.due_at = editing.due_at;
+      else if (due) {
+        const date = new Date(due);
+        if (Number.isNaN(date.valueOf())) {
+          editorError(errors.invalid_due_at);
+          return;
+        }
+        body.due_at = date.toISOString();
+      } else body.due_at = null;
+    }
+    void change(editing ? 'PUT' : 'POST', body);
+  });
+
+  editor.addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+  editor.addEventListener('close', () => { pickerRequest?.abort(); pickerRequest = null; });
+  element('cancel').addEventListener('click', () => editor.close());
+  element('delete').addEventListener('click', () => {
+    if (window.confirm('¿Eliminar esta tarea?')) void change('DELETE');
+  });
+  element('linked-tasks').addEventListener('click', () => {
+    const note = editing;
+    editor.close();
+    switchTo('tasks', note);
+    element('tasks').focus();
+  });
+  element('load-notes').addEventListener('click', () => void loadNotes(Boolean(pickerCursor)));
+  element('search-notes').addEventListener('click', () => void loadNotes());
+  element('picker-query').addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); void loadNotes(); }
+  });
+  element('picker-archived').addEventListener('change', () => void loadNotes());
+  element('new').addEventListener('click', () => openEditor());
+  element('notes').addEventListener('click', () => switchTo('notes'));
+  element('tasks').addEventListener('click', () => switchTo('tasks', noteFilter));
+  element('clear-note-filter').addEventListener('click', () => switchTo('tasks'));
+  element('more').addEventListener('click', () => void loadList(true));
+  filters.addEventListener('submit', event => { event.preventDefault(); void loadList(); });
+  filters.addEventListener('change', event => { if (event.target.matches('select')) void loadList(); });
+
+  async function endSession() {
+    await api('/auth/logout', {method: 'POST'});
+    shell.sessionEnded();
+    returnHome();
+  }
+
+  message('Cargando…');
+  api('/me').then(user => {
+    me = user;
+    shell?.account(me, {logout: endSession, switch: endSession});
+    shell?.session(me.expires_at);
+    element('new').disabled = false;
+    return loadList();
+  }).catch(error => message(error.message, true));
+})();
+</script>
+</body>
+</html>

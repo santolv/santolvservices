@@ -11,6 +11,216 @@ use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+#[sqlx::test]
+async fn calendar_obeys_access_and_preserves_occurrence_identity(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let owner = h.account("calendar-owner").await;
+    let reader = h.account("calendar-reader").await;
+    let outsider = h.account("calendar-outsider").await;
+    let owner_token = Some(owner.token.as_str());
+    let reader_token = Some(reader.token.as_str());
+    let outsider_token = Some(outsider.token.as_str());
+    let calendars = "/api/v1/calendar/calendars";
+    let events = "/api/v1/calendar/events";
+    let reminders = "/api/v1/calendar/reminders";
+    let call = |method, path, token, body| h.json(method, path, token, &[], body);
+    assert_eq!(
+        call("GET", calendars, owner_token, Value::Null).await.0,
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    santolvdrive::core::manager::set_enabled(&h.app.db, "calendar", true)
+        .await
+        .unwrap();
+    assert_eq!(
+        call("GET", calendars, None, Value::Null).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+
+    let base = json!({
+        "title":"Reunión","local_start":"2026-03-22T09:00","local_end":"2026-03-22T10:00",
+        "zone":"Europe/Madrid","repeat_kind":"weekly","repeat_count":3
+    });
+    let (status, created) = call("POST", events, owner_token, base.clone()).await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    let id = created["id"].as_str().unwrap();
+    let calendar_id = created["calendar_id"].as_str().unwrap();
+    let event_path = format!("{events}/{id}");
+    let member_path = format!("{calendars}/{calendar_id}/members");
+    let range = "/api/v1/calendar/events?from=2026-03-22T00:00:00Z&to=2026-04-06T00:00:00Z";
+    let (status, listed) = call("GET", range, owner_token, Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{listed}");
+    let occurrences = listed["items"].as_array().unwrap();
+    assert_eq!(occurrences.len(), 3);
+    let start = |row: &Value| {
+        time::OffsetDateTime::parse(
+            row["starts_at"].as_str().unwrap(),
+            &time::format_description::well_known::Rfc3339,
+        )
+        .unwrap()
+        .to_offset(time::UtcOffset::UTC)
+        .hour()
+    };
+    assert_eq!((start(&occurrences[0]), start(&occurrences[1])), (8, 7));
+    let (status, monthly) = call(
+        "POST",
+        events,
+        owner_token,
+        json!({
+            "calendar_id":calendar_id,"title":"Fin de mes","local_start":"2026-01-31T00:00",
+            "local_end":"2026-02-01T00:00","zone":"Europe/Madrid","all_day":true,
+            "repeat_kind":"monthly","repeat_count":3
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{monthly}");
+    let month_range = "/api/v1/calendar/events?from=2026-02-28T00:00:00Z&to=2026-03-01T00:00:00Z";
+    let february = call("GET", month_range, owner_token, Value::Null).await.1;
+    assert_eq!(february["items"][0]["local_start"], "2026-02-28T00:00:00");
+    assert_eq!(february["items"][0]["local_end"], "2026-03-01T00:00:00");
+    let invalid_hour = call(
+        "POST",
+        events,
+        owner_token,
+        json!({
+            "title":"Hora inexistente","local_start":"2026-03-29T02:30",
+            "local_end":"2026-03-29T03:30","zone":"Europe/Madrid"
+        }),
+    )
+    .await;
+    assert_eq!(invalid_hour.1["error"]["code"], "invalid_zoned_time");
+    assert_eq!(
+        call("GET", &event_path, outsider_token, Value::Null)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call("GET", range, outsider_token, Value::Null).await.1["items"],
+        json!([])
+    );
+    let grant = |role| json!({"username":"calendar-reader","role":role});
+    assert_eq!(
+        call("PUT", &member_path, owner_token, grant("reader"))
+            .await
+            .0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        call("GET", &event_path, reader_token, Value::Null).await.1["role"],
+        "reader"
+    );
+    let original = "2026-03-29T09:00:00";
+    let occurrence_path = format!("{event_path}/occurrences/{original}");
+    let moved = json!({
+        "revision":1,"event":{"title":"Movida","local_start":"2026-04-10T11:00",
+        "local_end":"2026-04-10T12:00","zone":"Europe/Madrid"}
+    });
+    assert_eq!(
+        call("PUT", &occurrence_path, reader_token, moved.clone())
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call("PUT", &member_path, owner_token, grant("editor"))
+            .await
+            .0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        call("PUT", &occurrence_path, reader_token, moved).await.0,
+        StatusCode::NO_CONTENT
+    );
+    let (status, moved) = call("GET", &occurrence_path, reader_token, Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{moved}");
+    assert_eq!(moved["original_start"], original);
+    assert_eq!(moved["local_start"], "2026-04-10T11:00:00");
+    assert_eq!(
+        call("GET", range, owner_token, Value::Null).await.1["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["event_id"] == id)
+            .count(),
+        2
+    );
+    let mut changed = base.clone();
+    changed["revision"] = json!(2);
+    changed["repeat_kind"] = json!("daily");
+    assert_eq!(
+        call("PUT", &event_path, owner_token, changed).await.1["error"]["code"],
+        "confirm_clear_exceptions"
+    );
+    assert_eq!(
+        call(
+            "PUT",
+            &occurrence_path,
+            owner_token,
+            json!({"revision":2,"cancelled":true})
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        call("GET", &occurrence_path, owner_token, Value::Null)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+
+    let (past_start, past_end): (String, String) = sqlx::query_as(
+        "SELECT to_char(now() AT TIME ZONE 'UTC'-interval '1 hour','YYYY-MM-DD\"T\"HH24:MI:SS'),
+                to_char(now() AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS')",
+    )
+    .fetch_one(&h.app.db)
+    .await
+    .unwrap();
+    let (status, due) = call("POST", events, owner_token, json!({
+        "calendar_id":calendar_id,"title":"Alerta","local_start":past_start,"local_end":past_end,"zone":"UTC","reminder_minutes":0
+    })).await;
+    assert_eq!(status, StatusCode::CREATED, "{due}");
+    let due_event = format!("{events}/{}", due["id"].as_str().unwrap());
+    let due_rule = format!("{due_event}/reminder");
+    assert_eq!(
+        call("GET", reminders, reader_token, Value::Null).await.1["items"],
+        json!([])
+    );
+    assert_eq!(
+        call("PUT", &due_rule, reader_token, json!({"minutes_before":0}))
+            .await
+            .0,
+        StatusCode::NO_CONTENT
+    );
+    let pending = call("GET", reminders, owner_token, Value::Null).await.1["items"][0].clone();
+    assert_eq!(pending["event_id"], due["id"]);
+    assert_eq!(
+        call("POST", reminders, owner_token, pending).await.0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        call("GET", reminders, owner_token, Value::Null).await.1["items"],
+        json!([])
+    );
+    assert_eq!(
+        call("GET", reminders, reader_token, Value::Null).await.1["items"][0]["event_id"],
+        due["id"]
+    );
+    let revoke = format!("{member_path}/{}", reader.id);
+    assert_eq!(
+        call("DELETE", &revoke, owner_token, Value::Null).await.0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        call("GET", &due_event, reader_token, Value::Null).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call("GET", reminders, reader_token, Value::Null).await.1["items"],
+        json!([])
+    );
+}
+
 #[sqlx::test(migrations = false)]
 async fn modular_migration_preserves_existing_photo_metadata_and_file_links(pool: PgPool) {
     let mut connection = pool.acquire().await.unwrap();

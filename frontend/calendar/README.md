@@ -1,4 +1,6 @@
 # Interfaz de Calendario
 
-La página del servicio vivirá en `index.html` cuando se apruebe el diseño. Usará
-el shell global, la sesión y el tema compartido; no tendrá login ni barra propia.
+La página `index.html` contiene las vistas de mes, semana y agenda y la gestión
+de eventos y calendarios. Usa el shell, la sesión y el tema compartidos.
+`../shared/calendar.js` contiene el cliente API y las acciones de Calendario
+disponibles en Inicio y en la barra global.

@@ -10,6 +10,9 @@
   <button class="shell-button" type="button" data-shell-theme aria-label="Cambiar todo a modo oscuro" aria-pressed="false">
     <svg viewBox="0 0 24 24" aria-hidden="true"><g class="shell-sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19m-14 0 1.5-1.5m11-11L19 5"/></g><path class="shell-moon" d="M20.8 13A9 9 0 0 1 11 3.2 9 9 0 1 0 20.8 13Z"/></svg>
   </button>
+  <button class="shell-button" id="shell-calendar-trigger" type="button" popovertarget="shell-calendar" aria-label="Agenda y recordatorios" title="Calendario" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="16" height="14" rx="2"/><path d="M8 4v4m8-4v4M4 11h16"/></svg><span id="shell-calendar-count" hidden></span>
+  </button>
   <button class="shell-button shell-profile account-avatar" type="button" popovertarget="shell-account-menu" aria-label="Mi cuenta" title="Mi cuenta" hidden></button>
   <button class="shell-button" type="button" id="shell-hide-topbar" aria-controls="santolv-topbar" aria-label="Ocultar barra superior" title="Ocultar barra superior">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14m-12 9 5-5 5 5m-5-5v11"/></svg>
@@ -18,8 +21,30 @@
     <strong>Aplicaciones</strong>
     <a href="/drive/" data-shell-service="drive" hidden><span aria-hidden="true" class="shell-app-mark shell-drive-mark"></span>Drive</a>
     <a href="/photos/" data-shell-service="photos" hidden><span aria-hidden="true" class="shell-app-mark shell-photos-mark"></span>Fotos</a>
+    <a href="/calendar/" data-shell-service="calendar" hidden><span aria-hidden="true" class="shell-app-mark shell-calendar-mark"></span>Calendario</a>
     <p id="shell-apps-status" role="status" hidden></p>
   </nav>
+  <section id="shell-calendar" class="shell-menu calendar-popup" popover aria-label="Agenda y recordatorios">
+    <strong>Recordatorios</strong>
+    <ul id="shell-calendar-reminders" class="calendar-list"></ul>
+    <strong>Próximos eventos</strong>
+    <ul id="shell-calendar-agenda" class="calendar-list"></ul>
+    <button type="button" id="shell-calendar-create">Crear evento</button>
+    <a href="/calendar/">Abrir Calendario</a>
+    <p id="shell-calendar-status" role="status"></p>
+  </section>
+  <dialog id="shell-calendar-dialog" class="calendar-dialog" aria-labelledby="shell-calendar-title">
+    <form id="shell-calendar-form" class="calendar-form">
+      <h2 id="shell-calendar-title">Crear evento</h2>
+      <label>Título <input name="title" maxlength="200" required></label>
+      <label>Calendario <select name="calendar_id"></select></label>
+      <label>Inicio <input name="local_start" type="datetime-local" required></label>
+      <label>Fin <input name="local_end" type="datetime-local" required></label>
+      <p id="shell-calendar-zone"></p>
+      <p id="shell-calendar-form-status" role="status"></p>
+      <div class="calendar-actions"><button type="button" id="shell-calendar-cancel">Cancelar</button><button type="submit">Guardar</button></div>
+    </form>
+  </dialog>
   <section id="shell-account-menu" class="shell-menu" popover aria-label="Mi cuenta">
     <strong id="shell-username"></strong>
     <a href="/account/">Gestionar mi cuenta</a>

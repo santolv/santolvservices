@@ -9,9 +9,7 @@ compartidos.
 - Chat: `SantolvDrive · Calendario`
 - Rama inicial: `codex/scaffold-calendario`
 
-## Alcance inicial
-
-Antes de registrarlo en el backend, definir:
+## Primera versión
 
 - calendarios personales y compartidos;
 - eventos con título, descripción, inicio, fin y zona horaria;
@@ -19,7 +17,8 @@ Antes de registrarlo en el backend, definir:
 - recordatorios y estados de disponibilidad;
 - permisos de lectura y edición;
 - filtros por calendario y rango temporal;
-- relación opcional con Notas y Tareas, sin acoplar tablas entre servicios.
+- agenda, creación rápida y recordatorios desde la barra global, con agenda de
+  siete días en Inicio.
 
 Core controla autenticación, permisos globales, configuración y activación. Los
 usuarios comunes no pueden instalar ni activar el módulo. Si requiere adjuntos,
@@ -27,12 +26,14 @@ debe usar `file_store` mediante coordinación con Compartido.
 
 ## Integración
 
-Cuando el contrato esté aprobado, crear el descriptor `Service`, añadirlo a
-`backend/src/modules/mod.rs`, crear una migración nueva y añadir la página al
-frontend. Elegir explícitamente `requires: None` o documentar una dependencia;
-no asumir dependencia de Drive o Notas y Tareas.
+El descriptor usa `requires: None`. La migración instala el esquema y el
+registro deshabilitado. La activación se hace con `services enable calendar`
+desde la consola local del servidor. El contrato está documentado en
+[la ficha de la API](../../../backend/src/modules/calendar/README.md).
 
-No modificar migraciones aplicadas ni contratos comunes desde este módulo.
+La acción para crear un evento enlazado desde una tarea requiere la API estable
+de Notas y Tareas. Se integrará mediante un identificador opaco y mantendrá los
+permisos de origen de la tarea.
 
 ## Verificación
 

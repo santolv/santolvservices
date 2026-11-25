@@ -107,9 +107,95 @@ main{grid-row:2;padding:74px 22px 0;background:var(--bg);scroll-padding-top:18px
 @media(prefers-reduced-motion:reduce){.periods:before,.periods:after,.photo-details,.icon-btn,.nav,.album-link{transition:none!important}.photo-card:hover .photo-open img,.icon-btn:hover svg,.nav:hover,.album-link:hover,.select-mode-button:hover,.album-link:hover svg,.periods[data-hovering]:after{transform:none}.periods[data-glass-ready]:before{transform:translateX(var(--lens-x))}.periods[data-hovering]:after{transform:translateX(var(--hover-x))}.photo-card.is-selected:hover .photo-open img{transform:scale(.955)}}
 
 .app{grid-template-rows:48px minmax(0,1fr)}@media(max-width:620px){.app.mobile-sidebar .side{top:48px}}
-.photo-tools-middle{display:flex;align-items:center;justify-content:center;gap:5px;margin-inline:auto}
-.top,.app.non-library .top,.app.is-scrolled:not(.non-library) .top{top:48px;min-height:46px}
-@media(max-width:420px){.photo-tools-middle{gap:2px}.top .search input{width:40px}}
+/* Fototeca layout adapted from the supplied design. */
+:root{--bg:#fff;--surface:#fff;--card:#f5f5f7;--side:#f6f6f8;--text:#1d1d1f;--sub:#6e6e73;--line:#00000014;--fill:#7676801f;--hover:#0000000c;--blue:#0a76e1;--photo-bar:#ffffffd9;--segment:#fff;--nav-selected:#00000017;--sidebar:230px;--thumb:150px}
+:root[data-theme="dark"]{--bg:#000;--surface:#1c1c1e;--card:#1c1c1e;--side:#1c1c1e;--text:#f5f5f7;--sub:#a4a4aa;--line:#ffffff1a;--fill:#76768052;--hover:#ffffff12;--blue:#69afff;--photo-bar:#19191be8;--segment:#636366;--nav-selected:#ffffff24}
+.app{grid-template-columns:var(--sidebar) minmax(0,1fr) var(--inspector-size,0px);grid-template-rows:48px minmax(0,1fr)}
+.app.inspector-open{--inspector-size:260px}
+.app .side{width:230px;padding:0 10px 14px;background:var(--side)}
+.side nav{gap:2px}
+.side .nav,.side .album-link{min-height:29px;padding:5px 10px;border-radius:6px;color:var(--text);font-size:13px}
+.side .nav:hover,.side .album-link:hover{background:var(--hover);transform:none}
+.side .nav[aria-current="page"],.side .album-link[aria-current="page"]{background:var(--nav-selected);box-shadow:none;font-weight:600}
+.side .nav>svg,.side .album-link>svg{width:18px;height:18px;color:var(--blue)}
+.side .count,.side-note{font-size:12px}
+.side .nav-label{margin:15px 10px 5px}
+.app main,.app.has-context main{grid-column:2;grid-row:2;padding:0 0 24px;scroll-padding-top:54px}
+.app .top,.app.non-library .top,.app.is-scrolled:not(.non-library) .top{
+  position:sticky;inset:0 auto auto;z-index:10;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  align-items:center;min-height:46px;height:46px;padding:0 16px;gap:8px;pointer-events:auto;color:var(--blue);
+  background:var(--photo-bar);border-bottom:1px solid var(--line);backdrop-filter:blur(24px) saturate(160%);
+}
+.toolbar-leading,.photo-tools-middle,.top .toolbar-actions{display:flex;align-items:center;gap:4px;min-width:0}
+.top .toolbar-actions{justify-self:end;margin:0}
+.top .zoom-control{align-items:center;gap:4px;margin:0;padding:0}
+.top .zoom-control input{width:clamp(45px,7vw,90px)}
+.top .icon-btn{width:30px;height:28px;border-radius:6px}
+.top .icon-btn:hover,.top .icon-btn[aria-expanded="true"]{background:var(--fill)}
+.top .search,.app.non-library .top .search{min-height:28px;padding:4px 8px;border:0;border-radius:7px;background:var(--card);box-shadow:none;backdrop-filter:none}
+.top .search input{width:clamp(45px,8vw,100px);font-size:12px}
+.app .library-heading{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:end;gap:12px;padding:20px 24px 14px;margin:0;min-height:0}
+.app .window-title{min-width:0;margin:0}
+.window-title h1{font-size:28px;font-weight:700;line-height:1.16;letter-spacing:-.025em;overflow-wrap:anywhere}
+.window-title p{margin-top:4px;color:var(--sub);font-size:13px}
+.app .heading-actions{justify-content:flex-end;justify-self:end;flex-wrap:wrap}
+.app .select-mode-button{min-height:30px;border:0;border-radius:6px;background:transparent;color:var(--blue);font-size:13px;box-shadow:none;backdrop-filter:none}
+.app .select-mode-button:hover{background:var(--fill);transform:none}
+.app .periods,.app.non-library .periods{
+  position:static;transform:none;order:initial;display:flex;align-items:center;gap:2px;
+  padding:2px;margin:0;border:0;border-radius:8px;background:var(--fill);box-shadow:none;backdrop-filter:none
+}
+.app .periods::before,.app .periods::after{display:none}
+.app .periods button,.app.non-library .periods button{min-height:26px;padding:2px 12px;border-radius:6px;color:var(--text);font-size:12px}
+.app .periods button[aria-pressed="true"],.app.non-library .periods button[aria-pressed="true"]{background:var(--segment);box-shadow:0 1px 3px #0002}
+.app .context-bar{position:static;padding:2px 24px 8px;gap:6px}
+.app.has-context #library{padding-top:0}
+.app #library{min-height:0;margin:0;padding-inline:0}
+.app .page-content,.app.has-context.non-library .page-content{padding:12px 24px 32px}
+.page-heading h2{font-size:23px;letter-spacing:-.025em}
+.app .empty{padding-top:56px}
+.photo-day{padding:15px 24px 7px;font-size:16px;font-weight:650;letter-spacing:-.01em}
+.photo-day span{margin-inline-start:8px;color:var(--sub);font-size:12px;font-weight:500}
+.app .photo-grid{display:flex;flex-wrap:wrap;gap:2px;padding:0 2px}
+.photo-grid::after{content:"";flex-grow:1000000}
+.app .photo-card{flex:var(--photo-ratio,1) 0 min(100%,calc(var(--thumb) * var(--photo-ratio,1)));height:var(--thumb);border-radius:0}
+.app .photo-open{height:100%;aspect-ratio:auto;border-radius:0}
+.app .photo-open img{width:100%;height:100%;object-fit:cover}
+.app .photo-card.is-selected{border-radius:7px}
+.app .photo-card.is-selected .photo-open img{transform:scale(.93)}
+.app .photo-card.is-selected::after{border-radius:inherit;border-width:3px}
+.app .library-foot{padding:28px 16px 32px;gap:2px;font-size:13px}
+.app .library-foot strong{font-size:15px;font-weight:600}
+#load-more{display:block;margin:20px auto 0}
+.photo-inspector{min-width:0;grid-column:3;grid-row:2;padding:12px 16px 24px;background:var(--side);border-inline-start:1px solid var(--line);overflow:auto}
+.inspector-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.inspector-head h2{font-size:15px}
+.photo-inspector h3{margin-bottom:10px;font-size:14px;overflow-wrap:anywhere}
+.photo-inspector p,.photo-inspector dt{color:var(--sub);font-size:12px}
+.photo-inspector dl{margin-bottom:14px}
+.photo-inspector dl div{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.photo-inspector dd{text-align:right}
+.photo-selection-dock{position:absolute;z-index:21;bottom:20px;left:calc(var(--sidebar) + (100% - var(--sidebar) - var(--inspector-size,0px)) / 2);transform:translateX(-50%);display:flex;align-items:center;gap:6px;width:max-content;max-width:calc(100vw - 24px);padding:6px 8px 6px 14px;border:1px solid var(--line);border-radius:12px;background:var(--photo-bar);backdrop-filter:blur(24px) saturate(160%);box-shadow:0 8px 24px #0002}
+.photo-selection-dock .selection-count{color:var(--text)}
+.photo-selection-dock .icon-btn{color:var(--blue)}
+@media(max-width:1000px){.app .library-heading{grid-template-columns:minmax(0,1fr) auto}.app .periods{grid-row:2;grid-column:1/-1;justify-self:center}}
+@media(max-width:860px){.app.inspector-open{--inspector-size:0px}.photo-inspector{position:absolute;inset:48px 0 0 auto;width:min(260px,90%);z-index:18;box-shadow:-8px 0 24px #0002}}
+@media(max-width:620px){
+ :root,.app.mobile-sidebar{--sidebar:0px}
+ .app.mobile-sidebar main{grid-column:2}
+ .app.mobile-sidebar .side{inset:48px auto 0 0;width:210px}
+ .app .top,.app.non-library .top,.app.is-scrolled:not(.non-library) .top{padding-inline:10px;gap:4px}
+ .app .library-heading{padding:16px 14px 9px;align-items:center}
+ .app.is-selecting .window-title,.app.is-selecting .periods{display:block}
+ .app.is-selecting .periods:not([hidden]){display:flex}
+ .app .heading-actions{gap:3px}
+ .app .select-mode-button{padding-inline:6px;font-size:11px}
+ .window-title h1{font-size:23px}
+ .app .context-bar,.photo-day{padding-inline:14px}
+ .app .page-content,.app.has-context.non-library .page-content{padding-inline:14px}
+ .app .photo-card{height:min(var(--thumb),130px)}
+}
+@media(max-width:360px){.top .icon-btn{width:24px}.top .search{padding-inline:5px}.top .search input{width:36px;font-size:11px}}
 </style>
 </head>
 <body>
@@ -146,22 +232,53 @@ main{grid-row:2;padding:74px 22px 0;background:var(--bg);scroll-padding-top:18px
     <div class="nav-label">Fijado</div>
     <nav aria-label="Colecciones fijadas">
       <a class="nav" data-route="favorites" href="#/favorites"><svg aria-hidden="true"><use href="#i-heart"/></svg>Favoritos<span class="count" id="favorite-count">3</span></a>
-      <a class="nav" data-route="imports" href="#/imports"><svg aria-hidden="true"><use href="#i-upload"/></svg>Importaciones</a>
       <a class="nav" data-route="trash" href="#/trash"><svg aria-hidden="true"><use href="#i-trash"/></svg>Eliminado recientemente</a>
     </nav>
     <div class="nav-label">Mis álbumes</div>
     <nav id="sidebar-albums" aria-label="Mis álbumes"></nav>
     <div class="side-bottom"><a class="nav" data-route="settings" href="#/settings"><svg aria-hidden="true"><use href="#i-settings"/></svg>Ajustes</a><div class="side-note"><i></i>Conectando con tu cuenta…</div></div>
   </aside>
-  <header class="top" aria-label="Herramientas de la fototeca">
-    <!-- SANTOLV_SIDEBAR_SHOW -->
-
-    <div class="top-group zoom-control" role="group" aria-label="Tamaño de las miniaturas"><button class="icon-btn" data-action="smaller" aria-label="Miniaturas más pequeñas"><svg aria-hidden="true"><use href="#i-minus"/></svg></button><input type="range" id="thumbnail-size" min="120" max="300" value="200" step="20" aria-label="Tamaño de las miniaturas"><button class="icon-btn" data-action="larger" aria-label="Miniaturas más grandes"><svg aria-hidden="true"><use href="#i-plus"/></svg></button></div>
-    <div class="photo-tools-middle"><!-- SANTOLV_UPLOAD_PHOTO --><div class="top-group periods" id="periods" role="group" aria-label="Vista de la fototeca"><button data-period="years" aria-pressed="false">Años</button><button data-period="months" aria-pressed="false">Meses</button><button data-period="all" aria-pressed="true">Todas las fotos</button></div></div>
-    <div class="toolbar-actions"><div class="top-group bulk-actions" id="bulk-actions" aria-label="Acciones de selección" hidden><button class="icon-btn" data-action="selection-favorite" aria-label="Marcar selección como favorita" title="Marcar como favoritas"><svg aria-hidden="true"><use href="#i-heart"/></svg></button><button class="icon-btn" data-action="selection-trash" aria-label="Mover selección a la papelera" title="Mover a la papelera"><svg aria-hidden="true"><use href="#i-trash"/></svg></button></div><div class="top-group"><button class="icon-btn" data-action="filter" title="Filtrar y ordenar" aria-label="Filtrar y ordenar la fototeca"><svg aria-hidden="true"><use href="#i-filter"/></svg></button><button class="icon-btn" data-action="about" title="Información" aria-label="Información de Fotos"><svg aria-hidden="true"><use href="#i-info"/></svg></button></div><label class="search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="search" type="search" placeholder="Buscar" aria-label="Buscar por nombre o lugar" autocomplete="off"></label></div>
-  </header>
-  <div class="context-bar" id="active-context" aria-label="Filtros activos" hidden></div>
-  <main id="content" tabindex="-1"><div class="library-heading"><div class="window-title"><strong id="window-title">Fototeca</strong><small id="window-subtitle">2024–2026</small></div><div class="heading-actions"><span class="selection-count" id="selection-count" aria-live="polite"></span><button class="select-mode-button" data-action="select-mode" aria-pressed="false">Seleccionar</button><button class="select-mode-button" data-action="select-all" hidden>Seleccionar todas</button></div></div><div id="library"></div><button class="button" id="load-more" hidden>Cargar más</button><footer class="library-foot"><strong id="library-count" role="status" aria-live="polite">20 fotos</strong><span>Biblioteca del servidor</span><span><svg aria-hidden="true"><use href="#i-shield"/></svg>Cambios guardados en tu cuenta.</span></footer></main>
+  <main id="content" tabindex="-1">
+    <header class="top" aria-label="Herramientas de la fototeca">
+      <div class="toolbar-leading">
+        <!-- SANTOLV_SIDEBAR_SHOW -->
+        <div class="zoom-control" role="group" aria-label="Tamaño de las miniaturas">
+          <button class="icon-btn" data-action="smaller" aria-label="Miniaturas más pequeñas"><svg aria-hidden="true"><use href="#i-minus"/></svg></button>
+          <input type="range" id="thumbnail-size" min="120" max="300" value="150" aria-label="Tamaño de las miniaturas">
+          <button class="icon-btn" data-action="larger" aria-label="Miniaturas más grandes"><svg aria-hidden="true"><use href="#i-plus"/></svg></button>
+        </div>
+      </div>
+      <div class="photo-tools-middle"><!-- SANTOLV_UPLOAD_PHOTO --></div>
+      <div class="toolbar-actions">
+        <button class="icon-btn" data-action="filter" title="Filtrar y ordenar" aria-label="Filtrar y ordenar la fototeca"><svg aria-hidden="true"><use href="#i-filter"/></svg></button>
+        <button class="icon-btn" data-action="inspect" title="Información" aria-label="Información de la foto" aria-controls="photo-inspector" aria-expanded="false"><svg aria-hidden="true"><use href="#i-info"/></svg></button>
+        <label class="search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="search" type="search" placeholder="Buscar" aria-label="Buscar en la fototeca" autocomplete="off"></label>
+      </div>
+    </header>
+    <div class="library-heading">
+      <div class="window-title"><h1 id="window-title">Fototeca</h1><p id="window-subtitle"></p></div>
+      <div class="top-group periods" id="periods" role="group" aria-label="Vista de la fototeca"><button data-period="years" aria-pressed="false">Años</button><button data-period="months" aria-pressed="false">Meses</button><button data-period="all" aria-pressed="true">Todas las fotos</button></div>
+      <div class="heading-actions"><button class="select-mode-button" data-action="select-mode" aria-pressed="false">Seleccionar</button><button class="select-mode-button" data-action="select-all" hidden>Seleccionar todas</button></div>
+    </div>
+    <div class="context-bar" id="active-context" aria-label="Filtros activos" hidden></div>
+    <div id="library"></div>
+    <button class="button" id="load-more" hidden>Cargar más</button>
+    <footer class="library-foot"><strong id="library-count" role="status" aria-live="polite"></strong><span>Biblioteca del servidor</span></footer>
+  </main>
+  <aside id="photo-inspector" class="photo-inspector" aria-label="Información de la foto" hidden>
+    <div class="inspector-head"><h2>Información</h2><button type="button" class="icon-btn" data-action="close-inspector" aria-label="Cerrar información"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div>
+    <p id="inspector-empty">Selecciona una foto para ver sus detalles.</p>
+    <div id="inspector-photo" hidden>
+      <h3 id="inspector-name"></h3>
+      <dl><div><dt>Fecha de subida</dt><dd id="inspector-date"></dd></div><div><dt>Tipo</dt><dd id="inspector-type"></dd></div><div><dt>Favorita</dt><dd id="inspector-favorite"></dd></div></dl>
+      <button type="button" class="button" data-action="open-inspected">Abrir foto</button>
+    </div>
+  </aside>
+  <div class="photo-selection-dock" id="bulk-actions" aria-label="Acciones de selección" hidden>
+    <span class="selection-count" id="selection-count" aria-live="polite"></span>
+    <button class="icon-btn" data-action="selection-favorite" aria-label="Marcar selección como favorita" title="Marcar como favoritas"><svg aria-hidden="true"><use href="#i-heart"/></svg></button>
+    <button class="icon-btn" data-action="selection-trash" aria-label="Mover selección a la papelera" title="Mover a la papelera"><svg aria-hidden="true"><use href="#i-trash"/></svg></button>
+  </div>
 </div>
   <dialog id="viewer" class="viewer" aria-label="Visor de fotos"><div class="viewer-layout"><div class="viewer-head"><div class="viewer-title"><strong id="viewer-name"></strong><small id="viewer-meta"></small></div><div class="viewer-actions"><button class="icon-btn" data-action="viewer-favorite" aria-label="Añadir a favoritos" aria-pressed="false"><svg aria-hidden="true"><use href="#i-heart"/></svg></button><button class="icon-btn" data-action="zoom" aria-label="Ampliar imagen" aria-pressed="false"><svg aria-hidden="true"><use href="#i-zoom"/></svg></button><button class="icon-btn" data-action="viewer-trash" aria-label="Mover a la papelera"><svg aria-hidden="true"><use href="#i-trash"/></svg></button><button class="icon-btn" data-action="close-viewer" aria-label="Cerrar visor"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div></div><div class="viewer-stage" id="viewer-stage"><button class="icon-btn" data-action="previous" aria-label="Foto anterior"><svg style="transform:rotate(180deg)" aria-hidden="true"><use href="#i-arrow"/></svg></button><div class="viewer-image-wrap"><img id="viewer-image" alt=""></div><button class="icon-btn" data-action="next" aria-label="Foto siguiente"><svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div><div class="viewer-foot" id="viewer-position"></div></div></dialog>
   <dialog id="info-dialog" aria-labelledby="info-title"><div class="dialog-head"><h2 id="info-title"></h2><button class="icon-btn" data-action="close-info" aria-label="Cerrar ventana"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div><div class="dialog-body" id="info-body"></div></dialog>
@@ -180,19 +297,24 @@ const escapeText = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;'
     const photos = [];
     const albums = [];
 
-const state={route:'photos',album:null,filter:'all',sort:'newest',period:'all',datePrefix:'',year:'',viewerId:null,viewerIds:[],zoom:false,selecting:false,selected:new Set()};
+const state={route:'photos',album:null,filter:'all',sort:'newest',period:'all',datePrefix:'',year:'',viewerId:null,infoId:null,viewerIds:[],zoom:false,selecting:false,selected:new Set()};
+const photoRatios=new Map();
 let toastTimer,dragDepth=0,pendingFocus=null,pendingUndo=null;
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
 const runningMotion=new WeakMap();
 function animateElement(element,keyframes,options={}){if(!element||reducedMotion.matches||typeof element.animate!=='function')return null;runningMotion.get(element)?.cancel();const animation=element.animate(keyframes,{duration:320,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards',...options});runningMotion.set(element,animation);animation.finished.catch(()=>{});return animation}
 function animateLibrary(){const cards=[...$('library').querySelectorAll('.photo-card,.album-cover,.period-card')];if(cards.length){const viewport=$('content').getBoundingClientRect();cards.filter(card=>{const rect=card.getBoundingClientRect();return rect.bottom>viewport.top&&rect.top<viewport.bottom}).slice(0,24).forEach((card,index)=>animateElement(card,[{opacity:0,transform:'translateY(10px) scale(.985)'},{opacity:1,transform:'none'}],{duration:380,delay:Math.min(index*16,160)}))}else animateElement($('library').firstElementChild,[{opacity:0,transform:'translateY(7px)'},{opacity:1,transform:'none'}],{duration:260})}
-function prepareImages(){for(const image of $('library').querySelectorAll('.photo-open img')){const button=image.closest('.photo-open');const loaded=()=>button.classList.add('is-loaded');const failed=()=>{button.classList.add('is-error');if(!button.querySelector('.image-fallback')){const fallback=document.createElement('span');fallback.className='image-fallback';fallback.innerHTML=icon('photos')+'<span>No se pudo cargar la imagen</span>';button.append(fallback)}};if(!image.hasAttribute('src')){image.addEventListener('load',loaded,{once:true});image.addEventListener('error',failed,{once:true})}else if(image.complete){if(image.naturalWidth)loaded();else failed()}else{image.addEventListener('load',loaded,{once:true});image.addEventListener('error',failed,{once:true})}}}
+function prepareImages(){for(const image of $('library').querySelectorAll('.photo-open img')){const button=image.closest('.photo-open');const loaded=()=>{
+  button.classList.add('is-loaded');
+  if(image.naturalWidth&&image.naturalHeight){
+    const ratio=Math.max(.45,Math.min(2.4,image.naturalWidth/image.naturalHeight));
+    photoRatios.set(image.dataset.media,ratio);
+    button.closest('.photo-card').style.setProperty('--photo-ratio',ratio);
+  }
+};const failed=()=>{button.classList.add('is-error');if(!button.querySelector('.image-fallback')){const fallback=document.createElement('span');fallback.className='image-fallback';fallback.innerHTML=icon('photos')+'<span>No se pudo cargar la imagen</span>';button.append(fallback)}};if(!image.hasAttribute('src')){image.addEventListener('load',loaded,{once:true});image.addEventListener('error',failed,{once:true})}else if(image.complete){if(image.naturalWidth)loaded();else failed()}else{image.addEventListener('load',loaded,{once:true});image.addEventListener('error',failed,{once:true})}}}
 
 
-let glassSyncFrame=0,tooltipTimer=0,tooltipTarget=null,reflectionFrame=0;
-function syncPeriodGlass(){const group=$('periods');if(group.hidden){delete group.dataset.glassReady;return}const active=group.querySelector('[aria-pressed="true"]');if(!active||!active.offsetWidth){delete group.dataset.glassReady;return}group.style.setProperty('--lens-x',active.offsetLeft+'px');group.style.setProperty('--lens-width',active.offsetWidth+'px');group.dataset.glassReady='true'}
-function queuePeriodGlass(){cancelAnimationFrame(glassSyncFrame);glassSyncFrame=requestAnimationFrame(syncPeriodGlass)}
-function pointPeriodGlass(button){const group=$('periods');if(!button)return;group.style.setProperty('--hover-x',button.offsetLeft+'px');group.style.setProperty('--hover-width',button.offsetWidth+'px');group.dataset.hovering='true'}
+let tooltipTimer=0,tooltipTarget=null,reflectionFrame=0;
 function prepareHoverDetails(){for(const button of $('library').querySelectorAll('.photo-open')){if(button.querySelector('.photo-details'))continue;const photo=photos.find(item=>item.id===button.dataset.photo);if(!photo)continue;const detail=document.createElement('span');detail.className='photo-details';detail.setAttribute('aria-hidden','true');detail.innerHTML='<strong>'+escapeText(photo.name)+'</strong><span class="photo-detail-meta"><span>'+escapeText(dateCompact(photo.date))+'</span><span>'+escapeText(photo.place)+'</span></span>';button.append(detail)}for(const button of document.querySelectorAll('.icon-btn[title],.sidebar-button[title],.select-mode-button[title]')){button.dataset.tooltip=button.title;button.removeAttribute('title')}}
 function hideGlassTooltip(){clearTimeout(tooltipTimer);$('glass-tooltip').hidden=true;if(tooltipTarget?.getAttribute('aria-describedby')==='glass-tooltip')tooltipTarget.removeAttribute('aria-describedby');tooltipTarget=null}
 function showGlassTooltip(button,immediate=false){hideGlassTooltip();if(!button||button.disabled)return;const text=button.dataset.tooltip||button.getAttribute('aria-label');if(!text)return;tooltipTarget=button;tooltipTimer=setTimeout(()=>{if(!button.isConnected||button.disabled)return;const box=button.getBoundingClientRect();if(!box.width)return;const tip=$('glass-tooltip');tip.textContent=text;tip.hidden=false;const rect=tip.getBoundingClientRect();tip.style.left=Math.max(8,Math.min(innerWidth-rect.width-8,box.left+box.width/2-rect.width/2))+'px';tip.style.top=(box.bottom+rect.height+14<innerHeight?box.bottom+9:Math.max(8,box.top-rect.height-9))+'px';button.setAttribute('aria-describedby','glass-tooltip');animateElement(tip,[{opacity:0,translate:'0 -4px'},{opacity:1,translate:'0 0'}],{duration:180})},immediate?0:350)}
@@ -206,13 +328,32 @@ function renderSelection(){
  const all=document.querySelector('[data-action="select-all"]');all.hidden=!state.selecting;all.textContent=state.selected.size===visible.size?'Deseleccionar':'Seleccionar todas';
  $('selection-count').textContent=state.selected.size?state.selected.size+' seleccionada'+(state.selected.size===1?'':'s'):state.selecting?'Selecciona fotos':'';
  $('bulk-actions').hidden=!state.selected.size;
+ updateInspector();
  for(const card of $('library').querySelectorAll('.photo-card')){const id=card.querySelector('[data-photo]').dataset.photo;card.classList.toggle('is-selected',state.selected.has(id));let button=card.querySelector('.select-photo');if(!button){button=document.createElement('button');button.className='select-photo';button.dataset.select=id;button.innerHTML=icon('check');card.append(button)}const photo=photos.find(item=>item.id===id);button.setAttribute('aria-pressed',String(state.selected.has(id)));button.setAttribute('aria-label',(state.selected.has(id)?'Deseleccionar ':'Seleccionar ')+photo.name);button.hidden=!available}
  for(const image of $('sidebar-albums').querySelectorAll('img')){const holder=document.createElement('span');holder.innerHTML=icon('albums');image.replaceWith(holder.firstElementChild)}
 }
+function updateInspector(){
+ if($('photo-inspector').hidden)return;
+ const id=state.selecting?(state.selected.size===1?state.selected.values().next().value:null):state.infoId;
+ const photo=photos.find(item=>item.id===id&&!item.deleted);
+ $('inspector-empty').hidden=!!photo;
+ $('inspector-photo').hidden=!photo;
+ if(!photo)return;
+ $('inspector-name').textContent=photo.name;
+ $('inspector-date').textContent=dateText(photo.date);
+ $('inspector-type').textContent=photo.name.split('.').at(-1).toUpperCase();
+ $('inspector-favorite').textContent=photo.favorite?'Sí':'No';
+}
+function setInspector(open){
+ $('photo-inspector').hidden=!open;
+ $('app').classList.toggle('inspector-open',open);
+ document.querySelector('[data-action="inspect"]').setAttribute('aria-expanded',String(open));
+ updateInspector();
+}
 function toggleSelection(id){state.selecting=true;if(state.selected.has(id))state.selected.delete(id);else state.selected.add(id);renderSelection();const target=document.querySelector('[data-select="'+id+'"]');if(target&&state.selected.has(id))animateElement(target,[{transform:'scale(.7)'},{transform:'scale(1.12)',offset:.65},{transform:'scale(1)'}],{duration:230})}
 
-function renderContext(){const chips=[];if(state.datePrefix)chips.push(['clear-date',monthText(state.datePrefix)]);else if(state.year)chips.push(['clear-date',state.year]);if(state.filter!=='all')chips.push(['clear-filter',({landscape:'Paisajes',city:'Ciudad',imported:'Añadidas por ti'})[state.filter]]);if($('search').value.trim())chips.push(['clear-search','Buscar: '+$('search').value.trim()]);$('active-context').hidden=!chips.length||state.route==='settings';$('app').classList.toggle('has-context',!$('active-context').hidden);$('active-context').innerHTML=chips.map(([action,label])=>'<button class="context-chip" data-action="'+action+'" aria-label="Quitar filtro: '+escapeText(label)+'"><span>'+escapeText(label)+'</span>'+icon('close')+'</button>').join('');const filterButton=document.querySelector('[data-action="filter"]');filterButton.classList.toggle('is-active',state.filter!=='all'||state.sort!=='newest')}
-function render({motion=false}={}){const focused=document.activeElement;const key=['photo','favorite','album'].find(name=>focused?.dataset?.[name]);const value=key?focused.dataset[key]:null;hideGlassTooltip();renderContent();prepareImages();prepareServerImages();prepareHoverDetails();renderContext();renderSelection();queuePeriodGlass();if(focused&&!focused.isConnected){const replacement=key?document.querySelector('[data-'+key+'="'+CSS.escape(value)+'"]'):null;(replacement||$('content')).focus({preventScroll:true})}if(motion)animateLibrary()}
+function renderContext(){const chips=[];if(state.datePrefix)chips.push(['clear-date',monthText(state.datePrefix)]);else if(state.year)chips.push(['clear-date',state.year]);if(state.filter!=='all')chips.push(['clear-filter','Solo favoritas']);if($('search').value.trim())chips.push(['clear-search','Buscar: '+$('search').value.trim()]);$('active-context').hidden=!chips.length||state.route==='settings';$('app').classList.toggle('has-context',!$('active-context').hidden);$('active-context').innerHTML=chips.map(([action,label])=>'<button class="context-chip" data-action="'+action+'" aria-label="Quitar filtro: '+escapeText(label)+'"><span>'+escapeText(label)+'</span>'+icon('close')+'</button>').join('');const filterButton=document.querySelector('[data-action="filter"]');filterButton.classList.toggle('is-active',state.filter!=='all'||state.sort!=='newest')}
+function render({motion=false}={}){const focused=document.activeElement;const key=['photo','favorite','album'].find(name=>focused?.dataset?.[name]);const value=key?focused.dataset[key]:null;hideGlassTooltip();renderContent();prepareImages();prepareServerImages();prepareHoverDetails();renderContext();renderSelection();if(focused&&!focused.isConnected){const replacement=key?document.querySelector('[data-'+key+'="'+CSS.escape(value)+'"]'):null;(replacement||$('content')).focus({preventScroll:true})}if(motion)animateLibrary()}
 async function closeDialog(dialog){if(!dialog.open||dialog.classList.contains('closing'))return;dialog.classList.add('closing');const animation=animateElement(dialog.classList.contains('viewer')?dialog.querySelector('.viewer-layout'):dialog,[{opacity:1,transform:'none'},{opacity:0,transform:dialog.classList.contains('viewer')?'scale(.975)':'translateY(7px) scale(.985)'}],{duration:160,easing:'ease-in'});if(animation)await animation.finished.catch(()=>{});dialog.close();dialog.classList.remove('closing')}
 function showShortcuts(){showInfo('Atajos de teclado','<div class="shortcut-row"><span>Buscar en la fototeca</span><kbd class="keyboard-key">/</kbd></div><div class="shortcut-row"><span>Foto anterior / siguiente</span><span><kbd class="keyboard-key">←</kbd> <kbd class="keyboard-key">→</kbd></span></div><div class="shortcut-row"><span>Marcar como favorita en el visor</span><kbd class="keyboard-key">F</kbd></div><div class="shortcut-row"><span>Cerrar ventana o limpiar búsqueda</span><kbd class="keyboard-key">Esc</kbd></div>')}
 function notify(text,undo=null){$('toast').replaceChildren(document.createTextNode(text));pendingUndo=undo;if(undo){const button=document.createElement('button');button.textContent='Deshacer';button.dataset.action='undo';$('toast').append(button)}$('toast').hidden=false;animateElement($('toast'),[{opacity:0,translate:'0 12px'},{opacity:1,translate:'0 0'}],{duration:260});clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$('toast').hidden=true;pendingUndo=null},undo?7000:4200)}
@@ -220,18 +361,18 @@ function dateText(value){return new Date(value+'T12:00:00').toLocaleDateString('
 function dateCompact(value){return new Date(value+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}
 function monthText(value){return new Date(value+'-01T12:00:00').toLocaleDateString('es-ES',{month:'long',year:'numeric'})}
 function setTheme(value){window.SantolvShell.setTheme(value)}
-function matches(){const query=$('search').value.trim().toLocaleLowerCase('es');return photos.filter(p=>(state.route==='trash'?p.deleted:!p.deleted)&&(state.route!=='favorites'||p.favorite)&&(state.route!=='imports'||p.imported)&&(!state.album||p.album===state.album)&&(!state.datePrefix||p.date.startsWith(state.datePrefix))&&(!state.year||p.date.startsWith(state.year))&&(state.filter==='all'||state.filter==='imported'&&p.imported||p.category===state.filter)&&(!query||(p.name+' '+p.place).toLocaleLowerCase('es').includes(query))).sort((a,b)=>state.sort==='name'?a.name.localeCompare(b.name,'es'):state.sort==='oldest'?a.date.localeCompare(b.date):b.date.localeCompare(a.date))}
+function matches(){const query=$('search').value.trim().toLocaleLowerCase('es');return photos.filter(p=>(state.route==='trash'?p.deleted:!p.deleted)&&(state.route!=='favorites'||p.favorite)&&(!state.album||p.album===state.album)&&(!state.datePrefix||p.date.startsWith(state.datePrefix))&&(!state.year||p.date.startsWith(state.year))&&(state.filter!=='favorites'||p.favorite)&&(!query||(p.name+' '+p.place).toLocaleLowerCase('es').includes(query))).sort((a,b)=>state.sort==='name'?a.name.localeCompare(b.name,'es'):state.sort==='oldest'?a.date.localeCompare(b.date):b.date.localeCompare(a.date))}
 function empty(title,text,action=''){return '<div class="empty">'+icon(state.route==='trash'?'trash':state.route==='favorites'?'heart':'photos')+'<h2>'+escapeText(title)+'</h2><p>'+escapeText(text)+'</p>'+action+'</div>'}
-function pageHeading(title,subtitle){return '<div class="page-heading"><div><h1>'+escapeText(title)+'</h1><p>'+escapeText(subtitle)+'</p></div></div>'}
-function photoMarkup(photo){return '<article class="photo-card"><button class="photo-open" data-photo="'+photo.id+'" aria-label="Abrir '+escapeText(photo.name)+'"><img data-media="'+photo.id+'" '+(photo.src?'src="'+escapeText(photo.src)+'"':'')+' alt="'+escapeText(photo.alt)+'" width="600" height="600" loading="lazy" decoding="async">'+(photo.favorite?'<span class="favorite-mark">'+icon('heart')+'</span>':'')+'</button><button class="photo-action" data-'+(photo.deleted?'restore':'favorite')+'="'+photo.id+'" aria-label="'+(photo.deleted?'Restaurar ':photo.favorite?'Quitar de favoritos: ':'Añadir a favoritos: ')+escapeText(photo.name)+'" '+(!photo.deleted?'aria-pressed="'+photo.favorite+'"':'')+'>'+icon(photo.deleted?'restore':'heart')+'</button></article>'}
+function pageHeading(title,subtitle){return '<div class="page-heading"><div><h2>'+escapeText(title)+'</h2><p>'+escapeText(subtitle)+'</p></div></div>'}
+function photoMarkup(photo){return '<article class="photo-card" style="--photo-ratio:'+(photoRatios.get(photo.id)||1)+'"><button class="photo-open" data-photo="'+photo.id+'" aria-label="Abrir '+escapeText(photo.name)+'"><img data-media="'+photo.id+'" '+(photo.src?'src="'+escapeText(photo.src)+'"':'')+' alt="'+escapeText(photo.alt)+'" width="600" height="600" loading="lazy" decoding="async">'+(photo.favorite?'<span class="favorite-mark">'+icon('heart')+'</span>':'')+'</button><button class="photo-action" data-'+(photo.deleted?'restore':'favorite')+'="'+photo.id+'" aria-label="'+(photo.deleted?'Restaurar ':photo.favorite?'Quitar de favoritos: ':'Añadir a favoritos: ')+escapeText(photo.name)+'" '+(!photo.deleted?'aria-pressed="'+photo.favorite+'"':'')+'>'+icon(photo.deleted?'restore':'heart')+'</button></article>'}
 function renderContent(){
- const titles={photos:'Fototeca',albums:state.album?albums.find(a=>a.id===state.album)?.name:'Colecciones',favorites:'Favoritos',imports:'Importaciones',trash:'Eliminado recientemente',settings:'Ajustes'};
+ const titles={photos:'Fototeca',albums:state.album?albums.find(a=>a.id===state.album)?.name:'Colecciones',favorites:'Favoritos',trash:'Eliminado recientemente',settings:'Ajustes'};
  const rows=matches(),album=albums.find(a=>a.id===state.album),isTimeline=state.route==='photos'&&state.period!=='all';
  const isGrid=!['settings'].includes(state.route)&&(state.route!=='albums'||!!album)&&!isTimeline&&rows.length>0;
  $('app').classList.toggle('non-library',!isGrid);
  $('window-title').textContent=titles[state.route];document.title=titles[state.route]+' · SantolvPhotos';
  const dates=rows.map(photo=>photo.date).sort();
- $('window-subtitle').textContent=rows.length?dateCompact(dates[0])+' – '+dateCompact(dates.at(-1)):'Biblioteca del servidor';
+ $('window-subtitle').textContent=rows.length?(dates[0]===dates.at(-1)?dateCompact(dates[0]):dateCompact(dates[0])+' – '+dateCompact(dates.at(-1))):'Biblioteca del servidor';
  if(state.route==='settings')$('window-subtitle').textContent='SantolvPhotos';
  if(state.route==='albums'&&!album)$('window-subtitle').textContent='Tus álbumes';
  $('periods').hidden=state.route!=='photos';document.querySelector('.zoom-control').hidden=!isGrid;
@@ -246,26 +387,33 @@ function renderContent(){
   $('library').innerHTML='<div class="page-content">'+pageHeading('Colecciones','Cada historia tiene su lugar.')+'<button class="button primary" data-action="new-album">Nuevo álbum</button>'+(visible.length?'<div class="album-grid">'+visible.map(a=>'<button class="album-cover" data-album="'+a.id+'"><span aria-hidden="true">'+icon('albums')+'</span><strong>'+escapeText(a.name)+'</strong><small>'+photos.filter(p=>p.album===a.id&&!p.deleted).length+' fotos</small></button>').join('')+'</div>':empty('No hay colecciones con ese nombre','Prueba con otra búsqueda.'))+'</div>';$('library-count').textContent=visible.length+' colecciones';return;
  }
  $('library-count').textContent=rows.length+' '+(rows.length===1?'foto':'fotos');
- if(!rows.length){$('library').innerHTML=empty(state.route==='trash'?'No hay fotos eliminadas':state.route==='favorites'?'Aquí estarán tus favoritos':state.route==='imports'?'Tus fotos, cuando quieras':'No se han encontrado fotos',state.route==='trash'?'Las fotos que retires de la fototeca aparecerán aquí.':state.route==='favorites'?'Marca el corazón de una foto para guardarla en esta colección.':state.route==='imports'?'Sube fotos para guardarlas en tu cuenta.':'Prueba otra búsqueda o cambia los filtros.',state.route==='imports'?'<button class="button primary" data-action="import">'+icon('upload')+'Importar fotos</button>':'');return}
+ if(!rows.length){$('library').innerHTML=empty(state.route==='trash'?'No hay fotos eliminadas':state.route==='favorites'?'Aquí estarán tus favoritos':'No se han encontrado fotos',state.route==='trash'?'Las fotos que retires de la fototeca aparecerán aquí.':state.route==='favorites'?'Marca el corazón de una foto para guardarla en esta colección.':'Prueba otra búsqueda o cambia los filtros.');return}
  if(isTimeline){
   const buckets=new Map();for(const photo of rows){const key=photo.date.slice(0,state.period==='years'?4:7);if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(photo)}
   $('library').innerHTML='<div class="page-content">'+(state.year?'<button class="back" data-action="all-years">'+icon('arrow')+'Todos los años</button>':'')+pageHeading(state.period==='years'?'Años':state.year||'Meses','Tu fototeca, a través del tiempo.')+'<div class="period-grid">'+[...buckets].map(([key,items])=>'<button class="period-card" data-bucket="'+key+'"><img data-media="'+items[0].id+'" '+(items[0].src?'src="'+escapeText(items[0].src)+'"':'')+' alt="" width="800" height="500" loading="lazy"><span class="period-copy"><strong>'+escapeText(state.period==='years'?key:monthText(key))+'</strong><small>'+items.length+' fotos</small></span></button>').join('')+'</div></div>';return;
  }
- $('library').innerHTML='<div class="photo-grid">'+rows.map(photoMarkup).join('')+'</div>';
+ const grid=items=>'<div class="photo-grid">'+items.map(photoMarkup).join('')+'</div>';
+ if(state.sort==='name'){$('library').innerHTML=grid(rows);return}
+ const days=new Map();
+ for(const photo of rows){
+  if(!days.has(photo.date))days.set(photo.date,[]);
+  days.get(photo.date).push(photo);
+ }
+ $('library').innerHTML=[...days].map(([day,items])=>'<section><h2 class="photo-day">'+escapeText(dateText(day))+'<span>'+items.length+' '+(items.length===1?'foto':'fotos')+'</span></h2>'+grid(items)+'</section>').join('');
 }
-function route(){const [requested,albumId]=location.hash.replace(/^#\/?/,'').split('/');state.route=['photos','albums','favorites','imports','trash','settings'].includes(requested)?requested:'photos';state.album=state.route==='albums'&&albums.some(a=>a.id===albumId)?albumId:null;state.filter='all';state.datePrefix='';state.year='';state.selecting=false;state.selected.clear();$('search').value='';$('content').scrollTop=0;$('app').classList.remove('mobile-sidebar');render({motion:true})}
-function openViewer(id){state.viewerIds=matches().map(p=>p.id);state.viewerId=id;if(photoSpace)photoApi('/nodes/'+id+'/touch',{method:'POST'}).catch(()=>{});pendingFocus=document.activeElement;updateViewer();$('viewer').showModal();animateElement($('viewer').querySelector('.viewer-layout'),[{opacity:0},{opacity:1}],{duration:260});animateElement($('viewer-image'),[{opacity:0,transform:'scale(.94)'},{opacity:1,transform:'none'}],{duration:420})}
+function route(){const [requested,albumId]=location.hash.replace(/^#\/?/,'').split('/');state.route=['photos','albums','favorites','trash','settings'].includes(requested)?requested:'photos';state.infoId=null;state.album=state.route==='albums'&&albums.some(a=>a.id===albumId)?albumId:null;state.filter='all';state.datePrefix='';state.year='';state.selecting=false;state.selected.clear();$('search').value='';$('content').scrollTop=0;$('app').classList.remove('mobile-sidebar');render({motion:true})}
+function openViewer(id){state.viewerIds=matches().map(p=>p.id);state.viewerId=id;state.infoId=id;if(photoSpace)photoApi('/nodes/'+id+'/touch',{method:'POST'}).catch(()=>{});pendingFocus=document.activeElement;updateViewer();$('viewer').showModal();animateElement($('viewer').querySelector('.viewer-layout'),[{opacity:0},{opacity:1}],{duration:260});animateElement($('viewer-image'),[{opacity:0,transform:'scale(.94)'},{opacity:1,transform:'none'}],{duration:420})}
 function updateViewer(direction=0){const photo=photos.find(p=>p.id===state.viewerId);if(!photo)return;const image=$('viewer-image');const changed=image.getAttribute('src')!==photo.src;if(changed){state.zoom=false;$('viewer-stage').classList.remove('zoomed');const zoom=document.querySelector('[data-action="zoom"]');zoom.setAttribute('aria-pressed','false');zoom.setAttribute('aria-label','Ampliar imagen');if(photo.src)image.src=photo.src;else{image.removeAttribute('src');imageUrl(photo).then(url=>{if(state.viewerId===photo.id)image.src=url}).catch(showPhotoError)}image.alt=photo.alt;if($('viewer').open)animateElement(image,[{opacity:0,transform:'translateX('+(direction*24)+'px) scale(.99)'},{opacity:1,transform:'none'}],{duration:300})}$('viewer-name').textContent=photo.name;$('viewer-meta').textContent=dateText(photo.date)+' · '+'Fecha de subida · Servidor';$('viewer-position').textContent=(state.viewerIds.indexOf(photo.id)+1)+' de '+state.viewerIds.length+' · ← → Navegar · F Favorito · Esc Cerrar';const favorite=document.querySelector('[data-action="viewer-favorite"]');favorite.classList.toggle('is-favorite',photo.favorite);favorite.setAttribute('aria-pressed',String(photo.favorite));favorite.setAttribute('aria-label',photo.favorite?'Quitar de favoritos':'Añadir a favoritos');document.querySelector('[data-action="viewer-trash"]').hidden=photo.deleted}
-function stepViewer(direction){const index=state.viewerIds.indexOf(state.viewerId);state.viewerId=state.viewerIds[(index+direction+state.viewerIds.length)%state.viewerIds.length];updateViewer(direction)}
+function stepViewer(direction){const index=state.viewerIds.indexOf(state.viewerId);state.viewerId=state.viewerIds[(index+direction+state.viewerIds.length)%state.viewerIds.length];state.infoId=state.viewerId;updateViewer(direction)}
 function showInfo(title,body){$('info-title').textContent=title;$('info-body').innerHTML=body;if(!$('info-dialog').open)$('info-dialog').showModal();animateElement($('info-dialog'),[{opacity:0,transform:'translateY(10px) scale(.975)'},{opacity:1,transform:'none'}],{duration:250})}
-function openFilters(){showInfo('Filtrar y ordenar','<label>Mostrar<select id="filter-kind"><option value="all">Todas las fotos</option><option value="landscape">Paisajes</option><option value="city">Ciudad</option><option value="imported">Añadidas por ti</option></select></label><label>Orden<select id="sort-kind"><option value="newest">Más recientes primero</option><option value="oldest">Más antiguas primero</option><option value="name">Por nombre</option></select></label><button class="button primary" data-action="close-info">Listo</button>');$('filter-kind').value=state.filter;$('sort-kind').value=state.sort;$('filter-kind').addEventListener('change',event=>{state.filter=event.target.value;render()});$('sort-kind').addEventListener('change',event=>{state.sort=event.target.value;render()})}
+function openFilters(){showInfo('Filtrar y ordenar','<label>Mostrar<select id="filter-kind"><option value="all">Todas las fotos</option><option value="favorites">Solo favoritas</option></select></label><label>Orden<select id="sort-kind"><option value="newest">Más recientes primero</option><option value="oldest">Más antiguas primero</option><option value="name">Por nombre</option></select></label><button class="button primary" data-action="close-info">Listo</button>');$('filter-kind').value=state.filter;$('sort-kind').value=state.sort;$('filter-kind').addEventListener('change',event=>{state.filter=event.target.value;render()});$('sort-kind').addEventListener('change',event=>{state.sort=event.target.value;render()})}
 function thumbnailSize(value){const cards=[...$('library').querySelectorAll('.photo-card')];for(const card of cards)runningMotion.get(card)?.cancel();const before=cards.map(card=>card.getBoundingClientRect());$('thumbnail-size').value=String(Math.min(300,Math.max(120,value)));document.documentElement.style.setProperty('--thumb',$('thumbnail-size').value+'px');if(reducedMotion.matches)return;const after=cards.map(card=>card.getBoundingClientRect());const viewport=$('content').getBoundingClientRect();cards.forEach((card,index)=>{const from=before[index],to=after[index];if(!to.width||to.top>viewport.bottom||to.bottom<viewport.top)return;animateElement(card,[{transformOrigin:'0 0',transform:'translate('+(from.left-to.left)+'px,'+(from.top-to.top)+'px) scale('+(from.width/to.width)+','+(from.height/to.height)+')'},{transformOrigin:'0 0',transform:'none'}],{duration:300})})}
 document.addEventListener('click',async event=>{
  const target=event.target.closest('button,[data-album]');if(!target)return;
  if(target.dataset.album){location.hash='/albums/'+target.dataset.album;return}
  if(target.dataset.period){state.period=target.dataset.period;state.datePrefix='';state.year='';$('content').scrollTop=0;render({motion:true});return}
  if(target.dataset.bucket){if(state.period==='years'){state.year=target.dataset.bucket;state.period='months'}else{state.datePrefix=target.dataset.bucket;state.period='all'}$('content').scrollTop=0;render({motion:true});return}
- if(target.dataset.select){toggleSelection(target.dataset.select);return}if(target.dataset.photo){if(state.selecting||event.ctrlKey||event.metaKey||event.shiftKey){state.selecting=true;toggleSelection(target.dataset.photo)}else openViewer(target.dataset.photo);return}
+ if(target.dataset.select){toggleSelection(target.dataset.select);return}if(target.dataset.photo){if(state.selecting||event.ctrlKey||event.metaKey||event.shiftKey){state.selecting=true;toggleSelection(target.dataset.photo)}else if(!$('photo-inspector').hidden){state.infoId=target.dataset.photo;updateInspector()}else openViewer(target.dataset.photo);return}
  if(target.dataset.favorite){toggleFavorite(target.dataset.favorite);return}
  if(target.dataset.restore){await restorePhoto(target.dataset.restore);return}
  const action=target.dataset.action;
@@ -278,7 +426,9 @@ document.addEventListener('click',async event=>{
  if(action==='smaller')thumbnailSize(Number($('thumbnail-size').value)-20);if(action==='larger')thumbnailSize(Number($('thumbnail-size').value)+20);
  if(action==='all-years'){state.year='';state.datePrefix='';state.period='years';render({motion:true})}
  if(action==='theme'){const dark=document.documentElement.dataset.theme==='dark'||(!document.documentElement.dataset.theme&&matchMedia('(prefers-color-scheme: dark)').matches);setTheme(dark?'light':'dark');if(state.route==='settings')renderSettings();notify('Tema '+(dark?'claro':'oscuro'))}
- if(action==='about')showInfo('SantolvPhotos','<p>Tu biblioteca está conectada al backend compartido de Santolv.</p><p>Favoritos, álbumes, originales y papelera se conservan en tu cuenta.</p>');
+ if(action==='inspect')setInspector($('photo-inspector').hidden);
+ if(action==='close-inspector'){setInspector(false);document.querySelector('[data-action="inspect"]').focus()}
+ if(action==='open-inspected'){const id=state.selecting?state.selected.values().next().value:state.infoId;if(id)openViewer(id)}
  if(action==='new-album')await createAlbum();
  if(action==='close-info')await closeDialog($('info-dialog'));if(action==='close-viewer')await closeDialog($('viewer'));
  if(action==='shortcuts')showShortcuts();
@@ -301,10 +451,6 @@ $('content').addEventListener('scroll',()=>{$('app').classList.toggle('is-scroll
 reducedMotion.addEventListener('change',()=>{if(reducedMotion.matches)for(const animation of document.getAnimations?.()||[])animation.cancel()});
 document.addEventListener('dragenter',event=>{if(!event.dataTransfer?.types.includes('Files'))return;event.preventDefault();dragDepth++;$('drop-hint').hidden=false});document.addEventListener('dragover',event=>{if(event.dataTransfer?.types.includes('Files'))event.preventDefault()});document.addEventListener('dragleave',()=>{dragDepth=Math.max(0,dragDepth-1);if(!dragDepth)$('drop-hint').hidden=true});document.addEventListener('drop',event=>{if(!event.dataTransfer?.files.length)return;event.preventDefault();dragDepth=0;$('drop-hint').hidden=true;if($('viewer').open||$('info-dialog').open){notify('Cierra la ventana antes de añadir fotos.');return}importFiles(event.dataTransfer.files)});
 
-$('periods').addEventListener('pointerover',event=>{if(event.pointerType==='touch')return;pointPeriodGlass(event.target.closest('[data-period]'))});
-$('periods').addEventListener('pointerleave',()=>{delete $('periods').dataset.hovering});
-$('periods').addEventListener('focusin',event=>pointPeriodGlass(event.target.closest('[data-period]')));
-$('periods').addEventListener('focusout',event=>{if(!$('periods').contains(event.relatedTarget))delete $('periods').dataset.hovering});
 $('periods').addEventListener('keydown',event=>{const buttons=[...$('periods').querySelectorAll('[data-period]')],index=buttons.indexOf(document.activeElement);if(index<0)return;let next;if(event.key==='ArrowRight')next=(index+1)%buttons.length;else if(event.key==='ArrowLeft')next=(index+buttons.length-1)%buttons.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=buttons.length-1;else return;event.preventDefault();buttons[next].focus();buttons[next].click()});
 document.addEventListener('pointerover',event=>{if(event.pointerType==='touch')return;const button=event.target.closest('.icon-btn,.sidebar-button,.select-mode-button');if(button&&!button.contains(event.relatedTarget))showGlassTooltip(button)});
 document.addEventListener('pointerout',event=>{if(tooltipTarget&&!tooltipTarget.contains(event.relatedTarget))hideGlassTooltip()});
@@ -313,9 +459,7 @@ document.addEventListener('focusout',event=>{if(tooltipTarget===event.target)hid
 document.addEventListener('pointerdown',hideGlassTooltip);
 document.addEventListener('pointermove',event=>{if(reducedMotion.matches||event.pointerType==='touch'||reflectionFrame)return;const target=event.target.closest('.icon-btn,.sidebar-button,.select-mode-button');if(!target)return;const x=event.clientX,y=event.clientY;reflectionFrame=requestAnimationFrame(()=>{reflectionFrame=0;if(!target.isConnected)return;const rect=target.getBoundingClientRect();target.style.setProperty('--shine-x',(x-rect.left)+'px');target.style.setProperty('--shine-y',(y-rect.top)+'px')})},{passive:true});
 $('content').addEventListener('scroll',hideGlassTooltip,{passive:true});
-window.addEventListener('resize',()=>{hideGlassTooltip();queuePeriodGlass()},{passive:true});
-if(typeof ResizeObserver==='function'){const glassObserver=new ResizeObserver(queuePeriodGlass);glassObserver.observe($('periods'))}
-if(document.fonts?.ready)document.fonts.ready.then(queuePeriodGlass);
+window.addEventListener('resize',hideGlassTooltip,{passive:true});
 
 
 const API_ORIGIN=location.protocol==='https:'?location.origin:'http://localhost:8443';
@@ -335,12 +479,12 @@ function clearMedia(){mediaGeneration++;for(const url of mediaUrls.values())URL.
 async function loadLibrary(append=false){
  const data=await photoApi('/photos/library'+(append&&libraryCursor?'?after='+encodeURIComponent(libraryCursor):''));
  if(!append){photos.length=0;albums.length=0}
- for(const item of data.items){if(item.kind==='folder'){if(!item.deleted)albums.push({...item,eyebrow:'Álbum',cover:''});continue}photos.push({...item,src:mediaUrls.get(item.id)||'',alt:item.name,place:'Fecha de subida',category:'imported',imported:true})}
+ for(const item of data.items){if(item.kind==='folder'){if(!item.deleted)albums.push({...item,eyebrow:'Álbum',cover:''});continue}photos.push({...item,src:mediaUrls.get(item.id)||'',alt:item.name,place:'Fecha de subida'})}
  libraryCursor=data.next_cursor;const albumId=location.hash.replace(/^#\/?/,'').split('/')[1];if(state.route==='albums'&&albums.some(a=>a.id===albumId))state.album=albumId;render();$('load-more').hidden=!libraryCursor;
 }
 function showPhotoError(error){notify(error.message||'No se pudo completar la operación.')}
 async function beginPhotos(){try{const me=await photoApi('/me');csrf=me.csrf_token||'';if(me.must_change_password){leavePhotos();return}window.SantolvShell?.session(me.expires_at);photoSpace=(await photoApi('/photos/space',{method:'POST'})).id;document.querySelector('.side-note').textContent=me.username+' · Conectado';window.SantolvShell?.account(me,{logout:endPhotosSession,switch:endPhotosSession});await loadLibrary();
- const params=new URLSearchParams(location.search),requested=params.get('photo')||params.get('album');if(requested){const data=await photoApi('/photos/library?id='+encodeURIComponent(requested));const item=data.items[0];if(item&&!item.deleted){if(item.kind==='folder'){if(!albums.some(a=>a.id===item.id))albums.push({...item,eyebrow:'Álbum',cover:''});location.hash='/albums/'+item.id}else{if(!photos.some(p=>p.id===item.id))photos.push({...item,src:'',alt:item.name,place:'Fecha de subida',category:'imported',imported:true});render();openViewer(item.id)}}}
+ const params=new URLSearchParams(location.search),requested=params.get('photo')||params.get('album');if(requested){const data=await photoApi('/photos/library?id='+encodeURIComponent(requested));const item=data.items[0];if(item&&!item.deleted){if(item.kind==='folder'){if(!albums.some(a=>a.id===item.id))albums.push({...item,eyebrow:'Álbum',cover:''});location.hash='/albums/'+item.id}else{if(!photos.some(p=>p.id===item.id))photos.push({...item,src:'',alt:item.name,place:'Fecha de subida'});render();openViewer(item.id)}}}
  }catch(error){$('library').textContent='No se pudo conectar con tu biblioteca.';showPhotoError(error)}}
 
 async function endPhotosSession(){if(photoBusy)throw new Error('Espera a que termine la operación de Fotos.');await photoApi('/auth/logout',{method:'POST'});window.SantolvShell?.sessionEnded();leavePhotos()}

@@ -2,6 +2,9 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
 const html=fs.readFileSync(path.join(__dirname,'../../frontend/photos/index.html'),'utf8');
 for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
+assert(!html.includes('data-route="imports"')&&!html.includes('Importaciones'));
+assert(html.includes('<div class="photo-tools-middle"><!-- SANTOLV_UPLOAD_PHOTO --></div>'));
+for(const id of ['viewer','viewer-image','info-dialog','file-input','photo-inspector'])assert(html.includes(`id="${id}"`),id);
 const client=html.slice(html.indexOf('const API_ORIGIN=')).split('</script>')[0].replace(/route\(\);\s*$/,'');
 const requests=[],photos=[{id:'photo',revision:4,favorite:false}],elements=new Map();
 const $=id=>{if(!elements.has(id))elements.set(id,{hidden:true,value:'',addEventListener(){}});return elements.get(id)};

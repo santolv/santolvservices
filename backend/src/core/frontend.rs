@@ -57,9 +57,22 @@ impl Frontend {
         })
     }
     fn with_shell(html: &str) -> Arc<str> {
+        let sidebar = include_str!("../../../frontend/shared/sidebar-button.html").trim();
         html.replace(
             "<!-- SANTOLV_SHELL -->",
             include_str!("../../../frontend/shared/shell.html"),
+        )
+        .replace(
+            "<!-- SANTOLV_SIDEBAR_HIDE -->",
+            &sidebar
+                .replace("{{action}}", "hide")
+                .replace("{{label}}", "Ocultar barra lateral"),
+        )
+        .replace(
+            "<!-- SANTOLV_SIDEBAR_SHOW -->",
+            &sidebar
+                .replace("{{action}}", "show")
+                .replace("{{label}}", "Mostrar barra lateral"),
         )
         .replacen(
             "<head>",

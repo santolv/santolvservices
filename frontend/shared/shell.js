@@ -58,6 +58,22 @@
     for (const button of document.querySelectorAll('[data-shell-theme]')) {
       button.addEventListener('click', window.SantolvShell.toggleTheme);
     }
+    for (const button of document.querySelectorAll('[data-shell-sidebar]')) {
+      button.addEventListener('click', () => {
+        const app = button.closest('.app');
+        const opening = button.dataset.shellSidebar === 'show';
+        if (window.matchMedia('(max-width:620px)').matches) {
+          app.classList.remove('sidebar-hidden');
+          app.classList.toggle('mobile-sidebar', opening);
+        } else {
+          app.classList.toggle('sidebar-hidden', !opening);
+        }
+        requestAnimationFrame(() => {
+          const next = opening ? 'hide' : 'show';
+          app.querySelector(`[data-shell-sidebar="${next}"]`)?.focus();
+        });
+      });
+    }
     document.getElementById?.('shell-apps-menu')?.addEventListener('beforetoggle', async event => {
       if (event.newState !== 'open') return;
       const status = document.getElementById('shell-apps-status');

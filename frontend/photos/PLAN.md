@@ -10,6 +10,7 @@ referencia; sus restricciones de demo y repositorio independiente están superad
 - [x] Backend compartido desplegado en la instalación local, con copia previa.
 - [x] Barra superior con cuenta, acceso a Inicio mediante cuatro puntos y tema
   global sincronizado con Drive e Inicio, también entre pestañas.
+- [x] Control lateral de la fototeca compartido con Drive, en el panel y la barra de herramientas.
 - [x] Almacenamiento usuarios/<UUID>/photos separado de Drive.
 - [x] Subida real por bloques con integridad y confirmación durable.
 - [x] Biblioteca paginada, originales autenticados, favoritos y álbumes persistentes.

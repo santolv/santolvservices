@@ -39,7 +39,8 @@ assert.equal(element('html').dataset.theme,'dark');
 assert.equal(vm.runInContext('state.view',context),'recent');
 assert(!html.includes('Configurar acceso a Fotos'));
 assert(!html.includes('portal-apps'));
-assert(html.includes("'portal-home':()=>location.assign('/')"));
+assert(!html.includes('portal-home'));
+assert(html.includes('data-nav="recent" aria-current="page"'));
 vm.runInContext("state.view='recent';state.me=null;state.rows=[]",context);
 assert(!html.includes('Destacados'));
 (async()=>{

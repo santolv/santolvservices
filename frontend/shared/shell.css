@@ -24,5 +24,13 @@
 .shell-drive-mark{background:#2684ed}.shell-photos-mark{background:#e86296}
 :root[data-theme="dark"] .shell-menu{background:#26262d;color:#efeff5;border-color:#42424b}
 :root[data-theme="dark"] .shell-menu a:hover,:root[data-theme="dark"] .shell-menu button:hover{background:#373743}
+.sidebar-top{height:46px;display:flex;align-items:center;padding-left:3px;margin-bottom:9px;flex:none}
+.app .shell-sidebar-toggle{display:grid;place-items:center;flex:none;width:30px;height:30px;padding:0;border:0;border-radius:7px;background:transparent;color:var(--blue);cursor:pointer}
+.app .shell-sidebar-toggle svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+.app .shell-sidebar-toggle:hover{background:var(--fill)}
+.app .shell-sidebar-toggle:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.app .shell-sidebar-toggle[data-shell-sidebar="show"]{display:none}
+.app.sidebar-hidden .shell-sidebar-toggle[data-shell-sidebar="show"]{display:grid}
+@media(max-width:620px){.sidebar-top{margin-bottom:5px}.app:not(.mobile-sidebar) .shell-sidebar-toggle[data-shell-sidebar="show"]{display:grid}.app.mobile-sidebar .shell-sidebar-toggle[data-shell-sidebar="show"]{display:none}}
 @media(max-width:620px){.shell-header{padding-inline:12px}.shell-controls{gap:5px}.shell-home{padding:0 8px}}
 @media(max-width:390px){.shell-home span{display:none}.shell-home{width:34px;padding:0}}

@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const html = fs.readFileSync(path.join(__dirname, '../../santolvdrive/frontend/pruebahtml/index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../../frontend/drive/index.html'), 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/\nconnectAPI\(\);\s*$/, '');
 const elements = new Map();
 function element(id) {
@@ -25,7 +25,7 @@ const context = vm.createContext({ console, Headers, Blob, ArrayBuffer, Uint8Arr
 });
 context.window.matchMedia=()=>({matches:false,addEventListener(){}});
 context.localStorage={getItem(){return null},setItem(){}};
-vm.runInContext(fs.readFileSync(path.join(__dirname,'../../frontend/shell.js'),'utf8'),context);
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../../frontend/shared/shell.js'),'utf8'),context);
 vm.runInContext(script, context);
 assert(!/demoNodes|demoUser|Vista previa sin conexión|Opcional en esta demo/.test(html));
 const markup=html.slice(0,html.indexOf('<script>'));

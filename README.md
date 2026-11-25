@@ -5,9 +5,26 @@ las interfaces HTML/CSS/JavaScript se mantienen separadas:
 
 | Dirección | Interfaz | Contenido |
 | --- | --- | --- |
-| `/` y `/index.html` | `frontend/index.html` | Acceso, cuenta y selector de servicios |
-| `/drive/` | `santolvdrive/frontend/pruebahtml/index.html` | Archivos, carpetas, compartidos y papelera |
-| `/photos/` | `santolvphotos/frontend/index.html` | Fototeca, álbumes, favoritos, subidas y papelera |
+| `/` y `/index.html` | `frontend/home/index.html` | Acceso, cuenta y selector de servicios |
+| `/drive/` | `frontend/drive/index.html` | Archivos, carpetas, compartidos y papelera |
+| `/photos/` | `frontend/photos/index.html` | Fototeca, álbumes, favoritos, subidas y papelera |
+
+## Dónde editar
+
+| Si cambias… | Carpeta |
+| --- | --- |
+| Autenticación, usuarios, permisos y activación de servicios | `backend/src/core/` |
+| Rutas y lógica propias de Drive | `backend/src/modules/drive/` |
+| Rutas y lógica propias de Fotos | `backend/src/modules/photos/` |
+| Archivos, transferencias y tareas que comparten los módulos | `backend/src/file_store/` |
+| Barra superior, navegación, cuenta y tema global | `frontend/shared/` |
+| Inicio, Drive o Fotos | `frontend/home/`, `frontend/drive/` o `frontend/photos/` |
+| Esquema de PostgreSQL | `backend/migrations/` |
+
+El registro de módulos está en `backend/src/modules/mod.rs`. La instalación
+local vive aparte en `backend/servidor/`. Para ver cambios en localhost,
+compila desde `backend/` con `cargo build --release --locked`, detén el servidor
+y sustituye el ejecutable de `servidor/` por el de `target/release/` antes de arrancar.
 
 El inicio muestra los servicios y lo último trabajado, sin barra lateral. El
 historial reúne elementos autorizados de Drive y Fotos y abre cada uno en su

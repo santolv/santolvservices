@@ -8,7 +8,7 @@
 *.p12
 *.pfx
 
-# Datos locales y originales privados (las muestras están en frontend/assets/)
+# Datos locales y originales privados (las muestras están en assets/)
 /data/
 /uploads/
 /originals/

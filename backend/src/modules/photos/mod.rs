@@ -17,7 +17,7 @@ pub const SERVICE: crate::core::manager::Service = crate::core::manager::Service
     id: "photos",
     schema: "photos",
     page: "/photos",
-    html: include_str!("../../../../santolvphotos/frontend/index.html"),
+    html: include_str!("../../../../frontend/photos/index.html"),
     uses_file_store: true,
     worker: |app, id| Box::pin(crate::worker::run(app, id)),
     routes,

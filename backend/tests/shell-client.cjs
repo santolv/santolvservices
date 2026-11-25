@@ -1,5 +1,5 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
-const script=fs.readFileSync(path.join(__dirname,'../../frontend/shell.js'),'utf8');
+const script=fs.readFileSync(path.join(__dirname,'../../frontend/shared/shell.js'),'utf8');
 const values=new Map(),pages=[];
 function page(){
  const events={},buttonEvents={},attributes={};
@@ -22,7 +22,7 @@ for(const p of pages){p.media.matches=true;p.media.change()}
 assert.deepEqual(themes(),['dark','dark','dark']);
 values.set('santolv.theme','light');home.events.pageshow();assert.equal(home.document.documentElement.dataset.theme,'light');
 photos.window.SantolvShell.setTheme('invalid');assert.deepEqual(themes(),['light','light','light']);
-for(const file of ['frontend/index.html','santolvdrive/frontend/pruebahtml/index.html','santolvphotos/frontend/index.html']){
+for(const file of ['frontend/home/index.html','frontend/drive/index.html','frontend/photos/index.html']){
  const html=fs.readFileSync(path.join(__dirname,'../..',file),'utf8');
  assert(html.includes('<!-- SANTOLV_SHELL -->'),file);
 }

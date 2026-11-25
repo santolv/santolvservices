@@ -15,7 +15,7 @@ async function main(){
  const cli=(args,input)=>{const result=cp.spawnSync(exe,[...args,'--config',config],{windowsHide:true,input:input?JSON.stringify(input):undefined,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return JSON.parse(result.stdout)};
  cli(['users','create','--stdin'],{username:'file-user',password});
  const users=cli(['users','list']);assert.equal(users.items.length,1);assert.equal(users.items[0].username,'file-user');assert(!users.items[0].password_hash);
- backend=cp.spawn(exe,['serve','--config',config,...(process.env.TEST_SERVICES?[]:['--frontend',path.resolve('../santolvdrive/frontend/pruebahtml/index.html')])],{windowsHide:true,stdio:'ignore'});
+ backend=cp.spawn(exe,['serve','--config',config,...(process.env.TEST_SERVICES?[]:['--frontend',path.resolve('../frontend/drive/index.html')])],{windowsHide:true,stdio:'ignore'});
  let ready=false;for(let i=0;i<80;i++){try{if((await fetch(api+'/health/live')).ok){ready=true;break}}catch{}await pause(100)}assert(ready);
  const page=await fetch('http://localhost:15500/');assert.equal(page.status,200);const pageHtml=await page.text();assert(pageHtml.includes('nonce="'));assert(pageHtml.includes(api));assert(page.headers.get('content-security-policy').includes("frame-ancestors 'none'"));
  {

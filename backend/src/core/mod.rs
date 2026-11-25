@@ -2,6 +2,7 @@ pub mod admin;
 pub mod app;
 pub mod auth;
 pub mod error;
+pub mod frontend;
 pub mod limits;
 pub mod manager;
 pub mod openapi;

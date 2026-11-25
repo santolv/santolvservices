@@ -67,7 +67,7 @@ impl Frontend {
     }
     pub fn bundled(origin: &str, api_origin: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let mut s = Self::from_html(
-            Self::with_shell(include_str!("../../frontend/index.html")),
+            Self::with_shell(include_str!("../../../frontend/home/index.html")),
             origin,
             api_origin,
         )?;
@@ -84,14 +84,14 @@ impl Frontend {
     fn with_shell(html: &str) -> Arc<str> {
         html.replace(
             "<!-- SANTOLV_SHELL -->",
-            include_str!("../../frontend/shell.html"),
+            include_str!("../../../frontend/shared/shell.html"),
         )
         .replacen(
             "<head>",
             &format!(
                 "<head><style>{}</style><script>{}</script>",
-                include_str!("../../frontend/shell.css"),
-                include_str!("../../frontend/shell.js")
+                include_str!("../../../frontend/shared/shell.css"),
+                include_str!("../../../frontend/shared/shell.js")
             ),
             1,
         )

@@ -155,7 +155,7 @@ pub fn routes(core: &App) -> Router {
         if service.uses_file_store {
             services.push(Registered {
                 service,
-                file_routes: modules::common_files().with_state(app.clone()),
+                file_routes: crate::file_store::routes().with_state(app.clone()),
                 app,
             });
         }

@@ -6,15 +6,16 @@
   No volver a pedir permiso por estos lenguajes o por SVG/JSON necesarios para la web.
 - Consultar antes de introducir otros lenguajes o cambiar sustancialmente este sistema.
 - El alcance actual es implementar el HTML base de la interfaz web/de PC en
-  `frontend/index.html`, siguiendo las capturas de iCloud Photos proporcionadas
+  `index.html`, siguiendo las capturas de iCloud Photos proporcionadas
   por el usuario: barra lateral clara, herramientas y fechas fuera de las fotos,
   cuadrícula ordenada y selección azul. Mantener Liquid Glass y las animaciones.
-  La base técnica sigue siendo la de SantolvDrive y el plan está en `frontend/PLAN.md`.
-  El backend compartido está en `../backend`, autorizado para conectar Fotos y
+  La base técnica sigue siendo la de SantolvDrive y el plan está en `PLAN.md`.
+  El backend compartido está en `../../backend`, autorizado para conectar Fotos y
   Drive; no duplicarlo dentro de este servicio. La interfaz móvil y las aplicaciones
   descargables quedan pendientes de que el propietario decida su tecnología.
 - Usar `https://github.com/santolv/santolvdrive` como referencia técnica, comprobando
   el código real y distinguiendo las dependencias del servidor de las del navegador.
+- La lógica Rust de Fotos está en ../../backend/src/modules/photos.
 - Mantener el plan actualizado al completar cada fase o cambiar una decisión.
 - Al finalizar cada trabajo que modifique archivos, realizar las comprobaciones
   pertinentes, revisar el diff y crear un commit local con los cambios de ese trabajo.

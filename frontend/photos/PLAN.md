@@ -4,7 +4,7 @@ Actualización del 24 de noviembre de 2026: el propietario ha autorizado la fase
 backend. El plan histórico inferior describe la maqueta inicial y queda como
 referencia; sus restricciones de demo y repositorio independiente están superadas.
 
-- [x] Backend compartido Rust en ../../backend; interfaces separadas.
+- [x] Interfaz en frontend/photos y lógica en backend/src/modules/photos, dentro del backend compartido.
 - [x] Inicio sin barra lateral, actividad reciente común y sesión HttpOnly/CSRF.
 - [x] Backend compartido desplegado en la instalación local, con copia previa.
 - [x] Barra superior con cuenta, acceso a Inicio mediante cuatro puntos y tema

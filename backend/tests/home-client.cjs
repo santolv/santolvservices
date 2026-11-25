@@ -1,5 +1,5 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
-const html=fs.readFileSync(path.join(__dirname,'../../frontend/index.html'),'utf8');
+const html=fs.readFileSync(path.join(__dirname,'../../frontend/home/index.html'),'utf8');
 assert(!/<aside|id="navigation"|id="sidebar"/.test(html));
 const elements=new Map();
 function element(){return {hidden:false,_text:'',children:[],value:'',get textContent(){return this._text+this.children.map(c=>c.textContent).join(' ')},set textContent(value){this._text=value;this.children=[]},addEventListener(){},setAttribute(){},replaceChildren(...children){this.children=children},append(...children){this.children.push(...children)}}}

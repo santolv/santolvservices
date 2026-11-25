@@ -15,7 +15,8 @@ referencia; sus restricciones de demo y repositorio independiente están superad
 - [x] Botón de subida compartido con Drive y carpeta protegida en Mi unidad.
 - [x] Dependencia de Drive para abrir Fotos y ejecutar sus tareas internas.
 - [x] Diseño de Fototeca aportado por el propietario, con mosaico por días, panel de información y subida centrada.
-- [x] Almacenamiento usuarios/<UUID>/photos separado de Drive.
+- [x] Almacenamiento usuarios/<UUID>/drive/Photos y acceso protegido desde Mi unidad.
+- [x] Visor centrado que conserva las proporciones y el tamaño original de las fotos pequeñas.
 - [x] Subida real por bloques con integridad y confirmación durable.
 - [x] Biblioteca paginada, originales autenticados, favoritos y álbumes persistentes.
 - [x] Papelera y restauración mediante el motor de Drive.

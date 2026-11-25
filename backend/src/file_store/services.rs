@@ -3,7 +3,7 @@ use crate::{
     error::{Error, Result},
     storage,
 };
-use sqlx::Row;
+use sqlx::{Postgres, Row, Transaction};
 
 // Run before accepting requests or starting workers; SQL records the source across restarts.
 pub async fn migrate_storage(s: &App) -> Result<()> {
@@ -11,7 +11,17 @@ pub async fn migrate_storage(s: &App) -> Result<()> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('service-storage-migration',0))")
         .execute(&mut *tx)
         .await?;
-    let rows = sqlx::query("SELECT id,legacy_storage_directory,storage_directory FROM spaces WHERE legacy_storage_directory IS NOT NULL FOR UPDATE").fetch_all(&mut *tx).await?;
+    migrate_spaces(s, &mut tx, false).await?;
+    sqlx::query("SET LOCAL search_path TO photos, public")
+        .execute(&mut *tx)
+        .await?;
+    migrate_spaces(s, &mut tx, true).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn migrate_spaces(s: &App, tx: &mut Transaction<'_, Postgres>, photos: bool) -> Result<()> {
+    let rows = sqlx::query("SELECT id,owner_id,legacy_storage_directory,storage_directory FROM spaces WHERE legacy_storage_directory IS NOT NULL FOR UPDATE").fetch_all(&mut **tx).await?;
     for row in rows {
         let id: uuid::Uuid = row.get("id");
         let old: String = row.get("legacy_storage_directory");
@@ -20,21 +30,29 @@ pub async fn migrate_storage(s: &App) -> Result<()> {
         let target = s.root.join(&new);
         // Validate the legacy path before using any database value as a filesystem path.
         let components: Vec<_> = old.split('/').collect();
-        if components.len() != 2
-            || !matches!(components[0], "usuarios" | "usuarios_compat")
-            || components[1].is_empty()
-            || components[1].contains(['\\', ':'])
-            || matches!(components[1], "." | "..")
+        let owner: uuid::Uuid = row.get("owner_id");
+        let parent = if photos {
+            if old != format!("usuarios/{owner}/photos") || new != storage::photos_directory(owner)
+            {
+                return Err(Error::conflict("invalid_storage_directory"));
+            }
+            // Validates every ancestor and creates Drive before moving the old Photos tree.
+            storage::prepare_space(&s.root, &storage::user_directory("", owner)).await?;
+            s.root.join("usuarios").join(owner.to_string())
+        } else if let [branch @ ("usuarios" | "usuarios_compat"), name] = components.as_slice()
+            && !name.is_empty()
+            && !name.contains(['\\', ':'])
+            && !matches!(*name, "." | "..")
         {
+            s.root.join(branch)
+        } else {
             return Err(Error::conflict("invalid_storage_directory"));
-        }
-        let exists = tokio::fs::try_exists(&source).await?;
-        if exists {
-            storage::private_dir(&s.root.join(components[0])).await?;
-            if tokio::fs::try_exists(&target).await? {
+        };
+        storage::private_dir(&parent).await?;
+        if let Some(info) = dir_metadata(&source).await? {
+            if dir_metadata(&target).await?.is_some() {
                 return Err(Error::conflict("storage_layout_conflict"));
             }
-            let info = tokio::fs::symlink_metadata(&source).await?;
             if !info.is_dir() || storage::unsafe_link(&info) {
                 return Err(Error::conflict("invalid_storage_directory"));
             }
@@ -48,35 +66,42 @@ pub async fn migrate_storage(s: &App) -> Result<()> {
         // Outstanding publication/move journals contain absolute paths as well as node IDs.
         for (select, update) in [
             (
-                "SELECT j.node_id,j.source AS path FROM workspace_moves j JOIN nodes n ON n.id=j.node_id WHERE n.space_id=$1",
+                "SELECT j.node_id,j.source AS path FROM workspace_moves j WHERE j.node_id IN (SELECT id FROM nodes WHERE space_id=$1 UNION SELECT node_id FROM workspace_jobs WHERE space_id=$1 UNION SELECT node_id FROM workspace_entries WHERE space_id=$1)",
                 "UPDATE workspace_moves SET source=$2 WHERE node_id=$1",
             ),
             (
-                "SELECT j.node_id,j.target AS path FROM workspace_moves j JOIN nodes n ON n.id=j.node_id WHERE n.space_id=$1",
+                "SELECT j.node_id,j.target AS path FROM workspace_moves j WHERE j.node_id IN (SELECT id FROM nodes WHERE space_id=$1 UNION SELECT node_id FROM workspace_jobs WHERE space_id=$1 UNION SELECT node_id FROM workspace_entries WHERE space_id=$1)",
                 "UPDATE workspace_moves SET target=$2 WHERE node_id=$1",
             ),
             (
-                "SELECT j.node_id,j.target AS path FROM workspace_publications j JOIN nodes n ON n.id=j.node_id WHERE n.space_id=$1",
+                "SELECT j.node_id,j.target AS path FROM workspace_publications j WHERE j.node_id IN (SELECT id FROM nodes WHERE space_id=$1 UNION SELECT node_id FROM workspace_jobs WHERE space_id=$1 UNION SELECT node_id FROM workspace_entries WHERE space_id=$1)",
                 "UPDATE workspace_publications SET target=$2 WHERE node_id=$1",
             ),
         ] {
-            let entries = sqlx::query(select).bind(id).fetch_all(&mut *tx).await?;
+            let entries = sqlx::query(select).bind(id).fetch_all(&mut **tx).await?;
             for entry in entries {
                 let path: String = entry.get("path");
                 if let Ok(suffix) = std::path::Path::new(&path).strip_prefix(&source) {
                     sqlx::query(update)
                         .bind(entry.get::<uuid::Uuid, _>("node_id"))
                         .bind(target.join(suffix).to_string_lossy().as_ref())
-                        .execute(&mut *tx)
+                        .execute(&mut **tx)
                         .await?;
                 }
             }
         }
         sqlx::query("UPDATE spaces SET legacy_storage_directory=NULL WHERE id=$1")
             .bind(id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
     }
-    tx.commit().await?;
     Ok(())
+}
+
+async fn dir_metadata(path: &std::path::Path) -> Result<Option<std::fs::Metadata>> {
+    match tokio::fs::symlink_metadata(path).await {
+        Ok(metadata) => Ok(Some(metadata)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
 }

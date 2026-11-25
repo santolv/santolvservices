@@ -13,6 +13,7 @@ function element(id) {
     listeners:{}, attributes:{}, classList:{toggle(c,value){if(value??!classes.has(c))classes.add(c);else classes.delete(c)},add(c){classes.add(c)},remove(c){classes.delete(c)},contains(c){return classes.has(c)}},
     addEventListener(type,handler){this.listeners[type]=handler},insertAdjacentHTML(position,html){this.innerHTML+=html}, querySelectorAll(){return []},querySelector(selector){return selector==='[type=submit]'?element('modal-submit'):null},
     setAttribute(name,value){this.attributes[name]=String(value)},removeAttribute(name){delete this.attributes[name]},
+    toggleAttribute(name,force){if(force)this.setAttribute(name,'');else this.removeAttribute(name)},
     showModal(){this.open=true},close(){this.open=false} });
   return elements.get(id);
 }

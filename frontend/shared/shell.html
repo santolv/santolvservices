@@ -1,4 +1,4 @@
-<header class="shell-header">
+<header class="shell-header" id="santolv-topbar">
   <a class="shell-brand" href="/" aria-label="Santolv, Inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="8.5" height="8.5" rx="2.8" fill="#2e91ff"/><rect x="13.5" y="2" width="8.5" height="8.5" rx="2.8" fill="#b275f4"/><rect x="2" y="13.5" width="8.5" height="8.5" rx="2.8" fill="#f39b61"/><rect x="13.5" y="13.5" width="8.5" height="8.5" rx="2.8" fill="#52c78b"/></svg><span>Santolv</span></a>
 <div class="shell-controls" aria-label="Controles de Santolv">
   <a class="shell-button shell-home" href="/" aria-label="Volver a Inicio" title="Volver a Inicio">
@@ -11,6 +11,9 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><g class="shell-sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19m-14 0 1.5-1.5m11-11L19 5"/></g><path class="shell-moon" d="M20.8 13A9 9 0 0 1 11 3.2 9 9 0 1 0 20.8 13Z"/></svg>
   </button>
   <button class="shell-button shell-profile account-avatar" type="button" popovertarget="shell-account-menu" aria-label="Mi cuenta" title="Mi cuenta" hidden></button>
+  <button class="shell-button" type="button" id="shell-hide-topbar" aria-controls="santolv-topbar" aria-label="Ocultar barra superior" title="Ocultar barra superior">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14m-12 9 5-5 5 5m-5-5v11"/></svg>
+  </button>
   <nav id="shell-apps-menu" class="shell-menu" popover aria-label="Aplicaciones de Santolv">
     <strong>Aplicaciones</strong>
     <a href="/drive/" data-shell-service="drive" hidden><span aria-hidden="true" class="shell-app-mark shell-drive-mark"></span>Drive</a>
@@ -26,3 +29,8 @@
   </section>
 </div>
 </header>
+<div class="shell-top-edge">
+  <button class="shell-button" type="button" id="shell-show-topbar" aria-controls="santolv-topbar">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14m-12 9 5 5 5-5m-5-5v10"/></svg><span>Mostrar barra</span>
+  </button>
+</div>

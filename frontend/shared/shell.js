@@ -3,6 +3,7 @@
   'use strict';
   const key = 'santolv.theme';
   const sessionKey = 'santolv.session-ended';
+  const topbarKey = 'santolv.topbar-hidden';
   const API_ORIGIN=location.protocol==='https:'?location.origin:'http://localhost:8443';
   let account, sessionTimer;
   function returnHome() {
@@ -13,6 +14,11 @@
   const valid = value => ['light', 'dark', 'system'].includes(value) ? value : 'light';
   function saved() {
     try { return valid(localStorage.getItem(key)); } catch { return 'light'; }
+  }
+  function applyTopbar() {
+    let hidden = false;
+    try { hidden = sessionStorage.getItem(topbarKey) === 'true'; } catch {}
+    document.documentElement.toggleAttribute('data-topbar-hidden', hidden);
   }
   let preference = saved();
   function apply() {
@@ -62,6 +68,15 @@
     preference() { return preference; }
   };
   function bind() {
+    const hideTopbar = document.getElementById('shell-hide-topbar');
+    const showTopbar = document.getElementById('shell-show-topbar');
+    function toggleTopbar(hidden, event) {
+      try { sessionStorage.setItem(topbarKey, String(hidden)); } catch {}
+      document.documentElement.toggleAttribute('data-topbar-hidden', hidden);
+      if (event.detail === 0) (hidden ? showTopbar : hideTopbar).focus();
+    }
+    hideTopbar?.addEventListener('click', event => toggleTopbar(true, event));
+    showTopbar?.addEventListener('click', event => toggleTopbar(false, event));
     for (const button of document.querySelectorAll('[data-shell-theme]')) {
       button.addEventListener('click', window.SantolvShell.toggleTheme);
     }
@@ -117,6 +132,7 @@
     }
     apply();
   }
+  applyTopbar();
   apply();
   document.addEventListener('DOMContentLoaded', bind, { once: true });
   window.addEventListener('pageshow', event => {

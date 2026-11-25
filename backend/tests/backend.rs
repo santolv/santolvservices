@@ -95,6 +95,50 @@ async fn modular_migration_preserves_existing_photo_metadata_and_file_links(pool
             .unwrap(),
         0
     );
+    for migration in migrations.iter().filter(|migration| migration.version > 13) {
+        sqlx::raw_sql(migration.sql.clone())
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+    }
+    drop(connection);
+    let h = Harness::new(pool).await;
+    let old = h.app.root.join(format!("usuarios/{owner}/photos"));
+    let new = h.app.root.join(format!("usuarios/{owner}/drive/Photos"));
+    let original = std::path::Path::new("archivos/muestra.jpg/muestra.jpg");
+    tokio::fs::create_dir_all(old.join(original).parent().unwrap())
+        .await
+        .unwrap();
+    tokio::fs::write(old.join(original), b"old").await.unwrap();
+    sqlx::query("INSERT INTO photos.workspace_publications VALUES($1,$2)")
+        .bind(node)
+        .bind(old.join(original).to_string_lossy().as_ref())
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    tokio::fs::create_dir_all(&new).await.unwrap();
+    assert!(
+        santolvdrive::services::migrate_storage(&h.app)
+            .await
+            .is_err()
+    );
+    assert_eq!(tokio::fs::read(old.join(original)).await.unwrap(), b"old");
+    tokio::fs::remove_dir(&new).await.unwrap();
+    santolvdrive::services::migrate_storage(&h.app)
+        .await
+        .unwrap();
+    santolvdrive::services::migrate_storage(&h.app)
+        .await
+        .unwrap();
+    assert!(!old.exists());
+    assert_eq!(tokio::fs::read(new.join(original)).await.unwrap(), b"old");
+    let journal: String =
+        sqlx::query_scalar("SELECT target FROM photos.workspace_publications WHERE node_id=$1")
+            .bind(node)
+            .fetch_one(&h.app.db)
+            .await
+            .unwrap();
+    assert_eq!(std::path::Path::new(&journal), new.join(original));
 }
 
 #[sqlx::test]
@@ -694,7 +738,7 @@ async fn photos_share_sessions_but_isolate_storage_and_persist_favorites(pool: P
             .fetch_one(&h.app.db)
             .await
             .unwrap();
-    assert_eq!(directory, format!("usuarios/{}/photos", a.id));
+    assert_eq!(directory, format!("usuarios/{}/drive/Photos", a.id));
     assert!(h.app.root.join(&directory).join("archivos").is_dir());
     let photo_account = Account {
         id: a.id,
@@ -772,7 +816,7 @@ async fn photos_share_sessions_but_isolate_storage_and_persist_favorites(pool: P
     let (_, drive_root) = h.json("GET", &root, Some(&a.token), &[], json!(null)).await;
     assert_eq!(
         drive_root["photos_folder"],
-        json!({"id":"photos","name":"Fotos","kind":"folder","protected":true})
+        json!({"id":"photos","name":"Photos","kind":"folder","protected":true})
     );
     let mount = "/api/v1/photos/drive-folder";
     let (status, album) = h

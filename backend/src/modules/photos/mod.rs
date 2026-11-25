@@ -106,7 +106,7 @@ pub async fn space(State(s): State<App>, u: User) -> Result<Json<Value>> {
         id
     } else {
         let id = Uuid::new_v4();
-        let directory = format!("usuarios/{}/photos", u.id);
+        let directory = storage::photos_directory(u.id);
         storage::prepare_space(&s.root, &directory).await?;
         sqlx::query("INSERT INTO spaces(id,name,kind,owner_id,quota,storage_directory,service) VALUES($1,'Fotos','personal',$2,$3,$4,'photos')")
             .bind(id).bind(u.id).bind(s.quota).bind(directory).execute(&mut *tx).await?;

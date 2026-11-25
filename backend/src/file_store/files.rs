@@ -317,7 +317,7 @@ pub async fn list(
         .await?;
         if personal_drive {
             page["photos_folder"] =
-                json!({"id":"photos","name":"Fotos","kind":"folder","protected":true});
+                json!({"id":"photos","name":"Photos","kind":"folder","protected":true});
         }
     }
     Ok(Json(page))

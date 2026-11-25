@@ -73,6 +73,9 @@ pub fn portable_username(value: &str) -> bool {
 pub fn user_directory(_username: &str, id: Uuid) -> String {
     format!("usuarios/{id}/drive")
 }
+pub(crate) fn photos_directory(id: Uuid) -> String {
+    format!("{}/Photos", user_directory("", id))
+}
 pub(crate) async fn private_dir(path: &Path) -> Result<()> {
     match tokio::fs::create_dir(path).await {
         Ok(()) => {
@@ -104,13 +107,16 @@ pub(crate) fn unsafe_link(info: &std::fs::Metadata) -> bool {
 }
 pub async fn prepare_space(root: &Path, directory: &str) -> Result<()> {
     let parts: Vec<_> = directory.split('/').collect();
-    if let ["usuarios", user, service @ ("drive" | "photos")] = parts.as_slice() {
+    if let ["usuarios", user, "drive"] | ["usuarios", user, "drive", "Photos"] = parts.as_slice() {
         if user.parse::<Uuid>().is_err() {
             return Err(Error::bad("invalid_storage_directory"));
         }
         private_dir(&root.join("usuarios")).await?;
         private_dir(&root.join("usuarios").join(user)).await?;
-        private_dir(&root.join("usuarios").join(user).join(service)).await?;
+        private_dir(&root.join("usuarios").join(user).join("drive")).await?;
+        if parts.len() == 4 {
+            private_dir(&root.join(directory)).await?;
+        }
         return prepare_contents(root, directory).await;
     }
     let (branch, component) = directory

@@ -111,9 +111,9 @@ volver al ejecutable anterior, restaura esa copia.
     drive/
       archivos/<carpeta>/<nombre del archivo>/<archivo original>
       papelera/...
-    photos/
-      archivos/<álbum>/<nombre de foto>/<foto original>
-      papelera/...
+      Photos/
+        archivos/<álbum>/<nombre de foto>/<foto original>
+        papelera/...
   organizaciones/<UUID del espacio>/archivos/...
   .temporal/{cargas,publicaciones,movimientos}/...
 ```
@@ -128,8 +128,9 @@ La migración `0012_services.sql` registra las rutas anteriores. Antes de acepta
 peticiones, Rust mueve `usuarios/<nombre>` o `usuarios_compat/<UUID>` a
 `usuarios/<UUID>/drive`, conservando nombres y diarios de operaciones pendientes.
 Se reanuda tras una interrupción. Si existen simultáneamente origen y destino,
-devuelve `storage_layout_conflict` conservando ambos. Fotos crea su espacio al
-abrirse por primera vez, sin duplicar usuarios ni el motor de subidas.
+devuelve `storage_layout_conflict` conservando ambos. La migración `0016_photos_inside_drive.sql`
+aplica ese mismo mecanismo al traslado de `usuarios/<UUID>/photos` a
+`usuarios/<UUID>/drive/Photos`. Fotos crea su espacio al abrirse por primera vez.
 
 Para actualizar: detener la versión anterior, guardar una copia de PostgreSQL y
 del almacenamiento y arrancar con **el mismo** `server.json` y `storage_root`.
@@ -145,7 +146,7 @@ Consulta la [guía para Windows y Linux](backend/README.md#instalación-local).
 
 ## Fotos conectado
 
-- En Drive, **Mi unidad → Fotos** abre una carpeta protegida con tus álbumes y
+- En Drive, **Mi unidad → Photos** abre una carpeta protegida con tus álbumes y
   **Cámara**, donde aparecen las fotos sin álbum. Drive permite navegar y
   descargar. Las subidas y los cambios de biblioteca se hacen desde Fotos.
   Las dos vistas leen los mismos originales.

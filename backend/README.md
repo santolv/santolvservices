@@ -67,7 +67,24 @@ Se conserva una copia `server.before-local.json` y no se alteran cuentas ni arch
 
 El origen opaco `null` y `local_file: true` se rechazan. Abrir el HTML con doble clic muestra la dirección HTTP de la interfaz; no inicia una sesión. La interfaz usa cookies HttpOnly y CSRF desde su origen explícito. Solo los clientes nativos sin Origin ni Fetch Metadata pueden solicitar bearer con `mobile: true`; su duración sigue las mismas reglas de sesión. HTTP solo se permite en loopback.
 
-Los listeners conservan límites de 256 conexiones, cabeceras de 32 KiB con 30 segundos de plazo e inactividad de 60 segundos. PostgreSQL escucha en 127.0.0.1 con SCRAM-SHA-256 y rol limitado. `serve` lo arranca cuando hace falta; `database-stop --config ./servidor/server.json` lo detiene explícitamente. No se registra todavía arranque automático al reiniciar el equipo.
+Los listeners conservan límites de 256 conexiones, cabeceras de 32 KiB con 30 segundos de plazo e inactividad de 60 segundos. PostgreSQL escucha en 127.0.0.1 con SCRAM-SHA-256 y rol limitado.
+
+`santolvdrive serve` arranca la instancia PostgreSQL de esta instalación como
+proceso hijo e imprime ambos PID. Drive, Fotos y el resto de módulos se ejecutan
+dentro del proceso principal. Una instancia PostgreSQL externa se administra por
+separado.
+
+- Para un apagado ordenado, pulsa **Ctrl+C** en la consola de Santolv. En Unix,
+  también puedes enviar `SIGTERM` al PID de Santolv.
+- En Windows puedes finalizar el PID de Santolv desde **Detalles** del
+  Administrador de tareas o ejecutar `taskkill /PID <PID de Santolv> /T /F`.
+  Windows cierra los procesos PostgreSQL de esa instalación con Santolv.
+  Una parada forzada puede requerir recuperación automática de PostgreSQL
+  al volver a arrancar.
+- Si vienes de una versión que dejaba PostgreSQL arrancado en segundo plano,
+  detén primero el Santolv anterior. Si PostgreSQL sigue activo, ejecuta
+  `santolvdrive database-stop --config ./servidor/server.json` antes de arrancar
+  la nueva versión.
 
 El directorio de instalación es privado para propietario/SYSTEM en Windows y propietario en Unix. `server.json`, sus backups y `postgres-state.json` contienen secretos y deben protegerse y respaldarse cifrados. Las migraciones son incrementales; la actualización conserva cuentas y contenido existente.
 

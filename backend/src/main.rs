@@ -1,4 +1,4 @@
-use santolvdrive::{core::manager, router};
+use santolvdrive::{App, core::manager, installer::Config, postgres::Managed, router};
 use std::{env, path::PathBuf};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -63,7 +63,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
         return Ok(());
     }
-    let s = config.connect().await?;
+    let (s, mut database) = config.connect(command == "serve").await?;
+    let result = run(command, &args, s, &config, &mut database).await;
+    let shutdown = match database {
+        Some(database) if database.pid().is_some() => database.shutdown().await,
+        _ => Ok(()),
+    };
+    result.and(shutdown)
+}
+
+async fn run(
+    command: &str,
+    args: &[String],
+    s: App,
+    config: &Config,
+    database: &mut Option<Managed>,
+) -> Result<(), Box<dyn std::error::Error>> {
     if matches!(command, "users" | "services") {
         let end = args
             .iter()
@@ -141,18 +156,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
     println!("Servidor local: {}", config.app_origin);
+    if let Some(pid) = database.as_ref().and_then(Managed::pid) {
+        println!("Santolv PID {} | PostgreSQL PID {pid}", std::process::id());
+    }
     let task = tokio::spawn(manager::run(s.clone()));
-    let result = if let Some(tls) = tls {
-        santolvdrive::tls::serve(listener, tls, router(s), shutdown()).await
-    } else {
-        santolvdrive::tls::serve_http(listener, router(s), shutdown()).await
+    let result = tokio::select! {
+        result = async {
+            if let Some(tls) = tls {
+                santolvdrive::tls::serve(listener, tls, router(s), shutdown()).await
+            } else {
+                santolvdrive::tls::serve_http(listener, router(s), shutdown()).await
+            }
+        } => result,
+        result = wait_for_database_exit(database.as_mut()) => result,
     };
     task.abort();
+    let _ = task.await;
     if let Some(frontend) = frontend {
         frontend.abort();
+        let _ = frontend.await;
     }
     result?;
     Ok(())
+}
+
+async fn wait_for_database_exit(database: Option<&mut Managed>) -> std::io::Result<()> {
+    if let Some(database) = database
+        && database.pid().is_some()
+    {
+        loop {
+            if database.exited()? {
+                return Err(std::io::Error::other("Managed PostgreSQL stopped"));
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+    }
+    std::future::pending().await
 }
 async fn shutdown() {
     #[cfg(unix)]

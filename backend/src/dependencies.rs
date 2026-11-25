@@ -365,14 +365,15 @@ mod tests {
         assert!(crate::postgres::tools(&bin));
         assert_eq!(portable_postgres(t.path()).await.unwrap(), bin);
         let state = crate::postgres::prepare(t.path(), bin).unwrap();
-        let url = crate::postgres::ensure(&state).await.unwrap();
+        let database = crate::postgres::ensure(&state, true).await.unwrap();
+        let url = crate::postgres::configured_url(&state).unwrap();
         let pool = sqlx::PgPool::connect(&url).await.unwrap();
         let version: String = sqlx::query_scalar("SHOW server_version")
             .fetch_one(&pool)
             .await
             .unwrap();
         pool.close().await;
-        crate::postgres::stop(&state).await.unwrap();
+        database.shutdown().await.unwrap();
         assert!(version.starts_with(POSTGRES_VERSION));
         assert!(
             !deps

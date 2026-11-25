@@ -141,14 +141,20 @@ impl Config {
         }
         Ok(())
     }
-    pub async fn connect(&self) -> Result<App> {
+    pub async fn connect(
+        &self,
+        own_database: bool,
+    ) -> Result<(App, Option<crate::postgres::Managed>)> {
         self.validate()?;
-        if let Some(state) = &self.managed_postgres {
-            let expected = crate::postgres::ensure(state).await?;
+        let database = if let Some(state) = &self.managed_postgres {
+            let expected = crate::postgres::configured_url(state)?;
             if expected != self.database_url {
                 return Err("managed PostgreSQL URL does not match its private state".into());
             }
-        }
+            Some(crate::postgres::ensure(state, own_database).await?)
+        } else {
+            None
+        };
         let mut app = App::connect(
             &self.database_url,
             self.storage_root.clone(),
@@ -160,7 +166,7 @@ impl Config {
         .await?;
         app.frontend_origin = self.frontend_origin.clone();
 
-        Ok(app)
+        Ok((app, database))
     }
 }
 pub(crate) fn prompt(label: &str) -> Result<String> {
@@ -242,13 +248,16 @@ async fn automatic_config(root: &Path, app_origin: String, bin: PathBuf) -> Resu
     };
     c.validate()?;
     let state = crate::postgres::prepare(root, bin)?;
-    c.database_url = crate::postgres::ensure(&state).await?;
+    c.database_url = crate::postgres::configured_url(&state)?;
     c.managed_postgres = Some(PathBuf::from("postgres-state.json"));
     let bytes = serde_json::to_vec_pretty(&c)?;
     c.storage_root = root.join(&c.storage_root);
     c.managed_postgres = Some(state);
-    let app = c.connect().await?;
+    let (app, database) = c.connect(false).await?;
     app.db.close().await;
+    if let Some(database) = database {
+        database.shutdown().await?;
+    }
     write_new(&root.join("server.json"), &bytes)?;
     Ok(c)
 }
@@ -423,7 +432,7 @@ pub async fn install(args: &[String]) -> Result<()> {
     if let (Some(cert), Some(key)) = (&config.tls_cert_file, &config.tls_key_file) {
         tls::config(cert, key)?;
     }
-    let app = config.connect().await?;
+    let (app, database) = config.connect(false).await?;
     let initialized: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE account_type='admin')")
             .fetch_one(&app.db)
@@ -456,6 +465,10 @@ pub async fn install(args: &[String]) -> Result<()> {
         config.frontend_origin
     );
 
+    app.db.close().await;
+    if let Some(database) = database {
+        database.shutdown().await?;
+    }
     Ok(())
 }
 
@@ -565,19 +578,15 @@ mod tests {
         .unwrap();
         assert!(c.allow_insecure_localhost);
         assert!(c.bind.ip().is_loopback());
-        let app = c.connect().await.unwrap();
+        let (app, database) = c.connect(false).await.unwrap();
         assert!(!app.secure);
         app.db.close().await;
         let original = std::fs::read(t.path().join("server.json")).unwrap();
-        crate::postgres::stop(c.managed_postgres.as_ref().unwrap())
-            .await
-            .unwrap();
+        database.unwrap().shutdown().await.unwrap();
         let reloaded = super::Config::load(&t.path().join("server.json")).unwrap();
-        let restarted = reloaded.connect().await.unwrap();
+        let (restarted, database) = reloaded.connect(true).await.unwrap();
         restarted.db.close().await;
-        crate::postgres::stop(c.managed_postgres.as_ref().unwrap())
-            .await
-            .unwrap();
+        database.unwrap().shutdown().await.unwrap();
         assert_eq!(
             std::fs::read(t.path().join("server.json")).unwrap(),
             original

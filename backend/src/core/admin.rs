@@ -39,7 +39,36 @@ pub async fn console(
             set_disabled(s, actor, id, action == "disable").await?;
             Ok(json!({"updated":true,"disabled":action == "disable"}))
         }
-        _ => Err("usage: users [list [AFTER_UUID] | create | disable USERNAME | enable USERNAME | reset-password | audit [AFTER_ID]] --config PATH".into()),
+        [action, username] if action == "modules" => {
+            let id = user_id(s, username).await?;
+            let denied = sqlx::query_scalar::<_, String>("SELECT service_id FROM public.service_user_denials WHERE user_id=$1 ORDER BY service_id")
+                .bind(id).fetch_all(&s.db).await?;
+            Ok(json!({"username":auth::username(username)?,"denied":denied,
+                "available":crate::core::manager::accessible(&s.db, id).await?}))
+        }
+        [action, username, module] if action == "deny-module" || action == "allow-module" => {
+            let id = user_id(s, username).await?;
+            if !crate::modules::REGISTERED.iter().any(|service| service.id == module) {
+                return Err(Error::denied().into());
+            }
+            let mut tx = s.db.begin().await?;
+            let installed = sqlx::query_scalar::<_, String>("SELECT id FROM public.service_settings WHERE id=$1 FOR KEY SHARE")
+                .bind(module).fetch_optional(&mut *tx).await?.is_some();
+            if !installed { return Err(Error::denied().into()); }
+            let denied = action == "deny-module";
+            let query = if denied {
+                "INSERT INTO public.service_user_denials(user_id, service_id) VALUES($1,$2) ON CONFLICT DO NOTHING"
+            } else {
+                "DELETE FROM public.service_user_denials WHERE user_id=$1 AND service_id=$2"
+            };
+            let result = sqlx::query(query).bind(id).bind(module).execute(&mut *tx).await?;
+            if result.rows_affected() != 0 {
+                audit(&mut tx, actor, id, &format!("{action}:{module}")).await?;
+            }
+            tx.commit().await?;
+            Ok(json!({"module":module,"denied":denied}))
+        }
+        _ => Err("usage: users [list | create | disable USERNAME | enable USERNAME | reset-password | audit | modules USERNAME | deny-module USERNAME ID | allow-module USERNAME ID]".into()),
     }
 }
 async fn user_id(s: &App, username: &str) -> Result<Uuid> {

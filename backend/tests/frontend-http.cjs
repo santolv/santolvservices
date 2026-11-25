@@ -19,8 +19,8 @@ async function main(){
  let ready=false;for(let i=0;i<80;i++){try{if((await fetch(api+'/health/live')).ok){ready=true;break}}catch{}await pause(100)}assert(ready);
  const page=await fetch('http://localhost:15500/');assert.equal(page.status,200);const pageHtml=await page.text();assert(pageHtml.includes('nonce="'));assert(pageHtml.includes(api));assert(page.headers.get('content-security-policy').includes("frame-ancestors 'none'"));
  {
-   assert(pageHtml.includes('id="services"'));assert(!pageHtml.includes('id="navigation"'));
-   for(const [route,title] of [['drive/','SantolvDrive'],['photos/','SantolvPhotos']]){const r=await fetch('http://localhost:15500/'+route);assert.equal(r.status,200);assert((await r.text()).includes(title))}
+   assert(pageHtml.includes('id="login"'));assert(!pageHtml.includes('id="services"'));assert(!pageHtml.includes('class="shell-header"'));
+   for(const route of ['drive/','photos/']){const r=await fetch('http://localhost:15500/'+route,{redirect:'manual'});assert.equal(r.status,303);assert.equal(r.headers.get('location'),'/')}
    assert.equal((await fetch('http://localhost:15500/photos/server.json')).status,404);
  }
  const rootResponse=await fetch(api+'/');assert(rootResponse.headers.get('content-type').includes('application/json'));assert.equal((await fetch(api+'/index.html')).status,404);
@@ -37,7 +37,8 @@ async function main(){
  const cookieBody=await cookieLogin.json();assert.equal(cookieBody.expires_in,7200);assert(!cookieBody.token);const sessionCookie=cookieLogin.headers.getSetCookie().find(v=>v.includes('Max-Age=7200'));assert(sessionCookie.includes('HttpOnly'));assert(sessionCookie.includes('SameSite=Strict'));const cookie=sessionCookie.split(';')[0];
  const cookieHeaders={Origin:'http://localhost:15500',Cookie:cookie};
  const restored=await (await fetch(api+'/api/v1/me',{headers:cookieHeaders})).json();assert.equal(restored.csrf_token,cookieBody.csrf_token);assert(!restored.token);
- const secondPage=await fetch('http://localhost:15500/');assert.equal(secondPage.status,200);
+ const secondPage=await fetch('http://localhost:15500/',{headers:{Cookie:cookie}});assert.equal(secondPage.status,200);assert((await secondPage.text()).includes('id="services"'));
+ for(const [route,title] of [['drive/','SantolvDrive'],['photos/','SantolvPhotos']]){const r=await fetch('http://localhost:15500/'+route,{headers:{Cookie:cookie}});assert.equal(r.status,200);assert((await r.text()).includes(title))}
  const logout=await fetch(api+'/api/v1/auth/logout',{method:'POST',headers:{...cookieHeaders,'X-CSRF-Token':restored.csrf_token}});assert.equal(logout.status,204);assert.equal((await fetch(api+'/api/v1/me',{headers:cookieHeaders})).status,401);
  const spaces=await (await fetch(api+'/api/v1/spaces',{headers})).json();assert(!spaces.items[0].storage_directory);
  const payload=Buffer.from([0,1,255,10,42]),sha256=crypto.createHash('sha256').update(payload).digest('hex');

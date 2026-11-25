@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .is_some_and(|v| matches!(v.as_str(), "--help" | "help"))
     {
         println!(
-            "santolvdrive [serve [--frontend PATH_TO_INDEX_HTML] | services [list | enable ID | disable ID] | users [list [AFTER_UUID] | create | disable USERNAME | enable USERNAME | reset-password | audit [AFTER_ID]] | install [--directory PATH] [--origin http://localhost:8443] [--dependencies-only | --stdin] | install --check | configure-local | bootstrap-admin [--stdin] | reset-admin | admin-initialized | database-stop] [--config server.json]"
+            "santolvdrive [serve | services [list | enable ID | disable ID] | users [list [AFTER_UUID] | create | disable USERNAME | enable USERNAME | reset-password | audit [AFTER_ID] | modules USERNAME | deny-module USERNAME ID | allow-module USERNAME ID] | install [--directory PATH] [--origin http://localhost:8443] [--dependencies-only | --stdin] | install --check | configure-local | bootstrap-admin [--stdin] | reset-admin | admin-initialized | database-stop] [--config server.json]"
         );
         return Ok(());
     }
@@ -120,9 +120,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
     let frontend = if config.app_origin.starts_with("http://") {
-        let view =
-            santolvdrive::frontend::Frontend::bundled(&config.frontend_origin, &config.app_origin)?
-                .with_services(s.db.clone());
+        let view = santolvdrive::frontend::Frontend::bundled(
+            &config.frontend_origin,
+            &config.app_origin,
+            s.clone(),
+        )?;
         let origin = url::Url::parse(&config.frontend_origin)?;
         let socket = tokio::net::TcpListener::bind((
             std::net::Ipv4Addr::LOCALHOST,

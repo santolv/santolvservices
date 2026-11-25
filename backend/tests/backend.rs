@@ -98,6 +98,234 @@ async fn modular_migration_preserves_existing_photo_metadata_and_file_links(pool
 }
 
 #[sqlx::test]
+async fn only_authenticated_users_get_pages_and_only_allowed_modules_can_be_used(pool: PgPool) {
+    use santolvdrive::{admin, core::manager, frontend};
+    let h = Harness::new(pool).await;
+    let web = frontend::router(
+        frontend::Frontend::bundled(
+            "http://localhost:5500",
+            "http://127.0.0.1:8080",
+            h.app.clone(),
+        )
+        .unwrap(),
+    );
+    let page = |path: &str, cookie: &str| {
+        let request = Request::builder()
+            .uri(path)
+            .header("host", "localhost:5500")
+            .header("cookie", cookie)
+            .body(Body::empty())
+            .unwrap();
+        web.clone().oneshot(request)
+    };
+    let html = |response: axum::response::Response| async move {
+        String::from_utf8(
+            to_bytes(response.into_body(), 1024 * 1024)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap()
+    };
+    let login = page("/", "").await.unwrap();
+    assert_eq!(login.status(), StatusCode::OK);
+    assert_eq!(login.headers()["cache-control"], "no-store");
+    let csp = login.headers()["content-security-policy"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    assert!(csp.contains("form-action 'none'") && csp.contains("style-src-attr 'none'"));
+    let login = html(login).await;
+    let nonce = login
+        .split("nonce=\"")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap();
+    assert!(csp.contains(&format!("script-src 'nonce-{nonce}'")));
+    assert!(login.contains("id=\"login\""));
+    assert!(!login.contains("data-shell-theme") && !login.contains("data-shell-account"));
+    for route in [
+        "/index.html",
+        "/drive",
+        "/drive/",
+        "/photos/",
+        "/photos/index.html",
+    ] {
+        let response = page(route, "drive_session=invalid").await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER, "{route}");
+        assert_eq!(response.headers()["location"], "/");
+    }
+    for route in [
+        "/server.json",
+        "/photos/AGENTS.md",
+        "/drive/../../server.json",
+        "/api/v1/me",
+    ] {
+        assert_eq!(
+            page(route, "").await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+    for route in [
+        "/api/v1/services",
+        "/api/v1/photos/library",
+        "/api/v1/activity/recent",
+        "/api/v1/openapi.json",
+    ] {
+        assert_eq!(
+            h.req("GET", route, None, &[], Body::empty()).await.0,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    let alice = h.account("modules-alice").await;
+    let bob = h.account("modules-bob").await;
+    let browser_login = |username: String| {
+        let data = json!({"username":username,"password":"very strong test password"}).to_string();
+        let harness = &h;
+        async move {
+            let (status, headers, _) = harness
+                .req(
+                    "POST",
+                    "/api/v1/auth/login",
+                    None,
+                    &[
+                        ("origin", "http://localhost:5500"),
+                        ("content-type", "application/json"),
+                    ],
+                    Body::from(data),
+                )
+                .await;
+            assert_eq!(status, StatusCode::OK);
+            headers["set-cookie"]
+                .to_str()
+                .unwrap()
+                .split(';')
+                .next()
+                .unwrap()
+                .to_owned()
+        }
+    };
+    let cookie = browser_login(alice.username.clone()).await;
+    let bob_cookie = browser_login(bob.username.clone()).await;
+    let (created, space) = h
+        .json(
+            "POST",
+            "/api/v1/photos/space",
+            Some(&alice.token),
+            &[],
+            json!({}),
+        )
+        .await;
+    assert_eq!(created, StatusCode::OK);
+    let shared_path = format!("/api/v1/spaces/{}/nodes", space["id"].as_str().unwrap());
+    assert_eq!(
+        h.req("GET", &shared_path, Some(&alice.token), &[], Body::empty())
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert!(
+        html(page("/photos/", &cookie).await.unwrap())
+            .await
+            .contains("SantolvPhotos")
+    );
+    let command = |action: &str| vec![action.to_owned(), alice.username.clone(), "photos".into()];
+    admin::console(&h.app, &command("deny-module"))
+        .await
+        .unwrap();
+    let home = html(page("/", &cookie).await.unwrap()).await;
+    assert!(home.contains("data-shell-service=\"drive\""));
+    assert!(
+        !home.contains("data-shell-service=\"photos\"")
+            && !home.contains("class=\"service\" href=\"/photos/\"")
+    );
+    assert!(!home.contains("id=\"login\""));
+    assert_eq!(
+        page("/photos/", &cookie).await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        page("/photos/index.html", &bob_cookie)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    for route in ["/api/v1/photos/library", &shared_path] {
+        assert_eq!(
+            h.req("GET", route, Some(&alice.token), &[], Body::empty())
+                .await
+                .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    let (_, _, catalog) = h
+        .req(
+            "GET",
+            "/api/v1/services",
+            Some(&alice.token),
+            &[],
+            Body::empty(),
+        )
+        .await;
+    assert_eq!(
+        serde_json::from_slice::<Value>(&catalog).unwrap()["items"],
+        json!([{"id":"drive","enabled":true,"path":"/drive"}])
+    );
+    assert_eq!(
+        h.req(
+            "POST",
+            "/api/v1/services/install",
+            Some(&alice.token),
+            &[],
+            Body::empty()
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    admin::console(&h.app, &command("allow-module"))
+        .await
+        .unwrap();
+    assert_eq!(
+        page("/photos/", &cookie).await.unwrap().status(),
+        StatusCode::OK
+    );
+    sqlx::query("DELETE FROM public.service_settings WHERE id='photos'")
+        .execute(&h.app.db)
+        .await
+        .unwrap();
+    assert!(
+        manager::set_enabled(&h.app.db, "photos", true)
+            .await
+            .is_err()
+    );
+    assert!(manager::lease(&h.app.db, "photos").await.unwrap().is_none());
+    assert_eq!(
+        page("/photos/", &cookie).await.unwrap().status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        h.req(
+            "GET",
+            "/api/v1/photos/library",
+            Some(&alice.token),
+            &[],
+            Body::empty()
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        page("/drive/", &cookie).await.unwrap().status(),
+        StatusCode::OK
+    );
+}
+
+#[sqlx::test]
 async fn concurrent_users_and_hot_service_disable(pool: PgPool) {
     use santolvdrive::core::manager;
     let h = Harness::new(pool).await;
@@ -881,7 +1109,11 @@ async fn short_cookie_sessions_restore_csrf_after_reload_and_expire(pool: PgPool
     assert!(set_cookie.contains("HttpOnly"));
     assert!(set_cookie.contains("SameSite=Strict"));
     assert!(set_cookie.contains("Max-Age=7200"));
-    assert!(set_cookie.contains("Path=/api/v1"));
+    assert!(set_cookie.contains("; Path=/;"));
+    assert!(headers.get_all("set-cookie").iter().any(|value| {
+        let value = value.to_str().unwrap();
+        value.starts_with("drive_session=; Path=/api/v1;") && value.contains("Max-Age=0")
+    }));
     let cookie = set_cookie.split(';').next().unwrap();
     let raw = cookie.strip_prefix("drive_session=").unwrap();
     let stored: String = sqlx::query_scalar("SELECT token_hash FROM sessions WHERE token_hash=$1")

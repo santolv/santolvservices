@@ -6,7 +6,7 @@ pub fn document() -> Value {
         (
             "/api/v1/services",
             "get",
-            "Registered services and their current enabled state",
+            "Active, installed services available to the authenticated user",
             "",
         ),
         (

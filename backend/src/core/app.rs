@@ -166,7 +166,7 @@ pub fn router(s: App) -> Router {
         .route("/api/v1/me", get(auth::me))
         .route(
             "/api/v1/openapi.json",
-            get(|| async { axum::Json(crate::openapi::document()) }),
+            get(|_: auth::User| async { axum::Json(crate::openapi::document()) }),
         )
         .with_state(s.clone())
         .merge(crate::core::manager::routes(&s))

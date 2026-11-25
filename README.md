@@ -26,7 +26,9 @@ local vive aparte en `backend/servidor/`. Para ver cambios en localhost,
 compila desde `backend/` con `cargo build --release --locked`, detén el servidor
 y sustituye el ejecutable de `servidor/` por el de `target/release/` antes de arrancar.
 
-El inicio muestra los servicios y lo último trabajado, sin barra lateral. El
+Sin sesión, `/` entrega únicamente `frontend/home/login.html`. Las rutas de
+Drive y Fotos redirigen al mismo formulario. El inicio autenticado muestra
+los servicios disponibles para la cuenta y lo último trabajado, sin barra lateral. El
 historial reúne elementos autorizados de Drive y Fotos y abre cada uno en su
 servicio. Las pantallas de Drive y Fotos ofrecen Inicio para volver al selector.
 El inicio no muestra herramientas de los servicios. Rust entrega el documento
@@ -72,6 +74,23 @@ en nuevas peticiones al módulo, lo oculta al volver a cargar Inicio y espera qu
 terminen los lotes internos ya iniciados. Las peticiones admitidas previamente
 pueden concluir. Los trabajos persistentes y los datos quedan disponibles al
 reactivarlo. La API de Inicio sigue operativa con ambos módulos desactivados.
+
+Los módulos se incorporan compilando el servidor y aplicando sus migraciones.
+`services list` distingue entre instalado y activo. No hay operaciones de
+instalación o activación en la API de usuarios. Para administrar los permisos
+por cuenta desde `backend/`:
+
+```powershell
+.\servidor\santolvdrive.exe users modules nombre
+.\servidor\santolvdrive.exe users deny-module nombre photos
+.\servidor\santolvdrive.exe users allow-module nombre photos
+```
+
+El bloqueo persiste en PostgreSQL. Afecta a la página, el catálogo, la actividad
+reciente y las operaciones del módulo, incluidas las de archivos compartidos.
+Quitar el bloqueo por usuario vuelve a dar acceso si el módulo está activo.
+Tras actualizar desde una versión con la cookie limitada a la API, entra de nuevo
+desde Inicio para obtener la cookie de las páginas protegidas.
 
 La migración `0013_modules.sql` mueve los metadatos de Fotos en una transacción
 y conserva sus IDs, favoritos y referencias a los originales. Los originales

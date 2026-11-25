@@ -63,12 +63,40 @@ pub async fn enabled(db: &PgPool, id: &str) -> Result<bool> {
             .bind(id)
             .fetch_optional(db)
             .await?
-            .unwrap_or(true),
+            .unwrap_or(false),
     )
 }
 
 pub fn disabled() -> Error {
     Error(StatusCode::SERVICE_UNAVAILABLE, "service_disabled")
+}
+
+pub async fn require_access(db: &PgPool, id: &str, user_id: Uuid) -> Result<()> {
+    let state: Option<(bool, bool)> = sqlx::query_as(
+        "SELECT enabled, EXISTS(SELECT 1 FROM public.service_user_denials
+         WHERE user_id=$2 AND service_id=$1) FROM public.service_settings WHERE id=$1",
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(db)
+    .await?;
+    match state {
+        Some((_, true)) => Err(Error(StatusCode::FORBIDDEN, "service_forbidden")),
+        Some((false, false)) => Err(disabled()),
+        Some((true, false)) => Ok(()),
+        None => Err(Error(StatusCode::NOT_FOUND, "service_not_installed")),
+    }
+}
+
+pub async fn accessible(db: &PgPool, user_id: Uuid) -> Result<Vec<String>> {
+    Ok(sqlx::query_scalar(
+        "SELECT id FROM public.service_settings s WHERE enabled
+         AND NOT EXISTS (SELECT 1 FROM public.service_user_denials d
+                         WHERE d.user_id=$1 AND d.service_id=s.id)",
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await?)
 }
 
 pub async fn lease(db: &PgPool, id: &str) -> Result<Option<Transaction<'static, Postgres>>> {
@@ -82,7 +110,7 @@ pub async fn lease(db: &PgPool, id: &str) -> Result<Option<Transaction<'static, 
         return Ok(None);
     }
     let on: bool = sqlx::query_scalar(
-        "SELECT COALESCE((SELECT enabled FROM public.service_settings WHERE id=$1),true)",
+        "SELECT COALESCE((SELECT enabled FROM public.service_settings WHERE id=$1),false)",
     )
     .bind(id)
     .fetch_one(&mut *tx)
@@ -100,8 +128,14 @@ pub async fn set_enabled(db: &PgPool, id: &str, on: bool) -> Result<()> {
         .bind(format!("service:{id}"))
         .execute(&mut *tx)
         .await?;
-    sqlx::query("INSERT INTO public.service_settings(id,enabled) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled")
-        .bind(id).bind(on).execute(&mut *tx).await?;
+    let updated = sqlx::query("UPDATE public.service_settings SET enabled=$2 WHERE id=$1")
+        .bind(id)
+        .bind(on)
+        .execute(&mut *tx)
+        .await?;
+    if updated.rows_affected() == 0 {
+        return Err(Error(StatusCode::NOT_FOUND, "service_not_installed"));
+    }
     tx.commit().await?;
     Ok(())
 }
@@ -114,11 +148,9 @@ pub async fn catalog(db: &PgPool) -> Result<Value> {
     let items: Vec<_> = modules::REGISTERED
         .iter()
         .map(|module| {
-            let on = settings
-                .iter()
-                .find(|(id, _)| id == module.id)
-                .is_none_or(|(_, on)| *on);
-            json!({"id":module.id,"enabled":on,"path":module.page})
+            let setting = settings.iter().find(|(id, _)| id == module.id);
+            json!({"id":module.id,"installed":setting.is_some(),
+                "enabled":setting.is_some_and(|(_, on)| *on),"path":module.page})
         })
         .collect();
     Ok(json!({"items":items}))
@@ -137,18 +169,17 @@ pub fn routes(core: &App) -> Router {
     for service in modules::REGISTERED {
         let service = *service;
         let app = service.app(core);
-        let db = core.db.clone();
+        let auth = core.clone();
         let registered =
             (service.routes)()
                 .with_state(app.clone())
                 .route_layer(middleware::from_fn(move |request: Request, next: Next| {
-                    let db = db.clone();
+                    let auth = auth.clone();
                     async move {
-                        if enabled(&db, service.id).await? {
-                            Ok::<_, Error>(next.run(request).await)
-                        } else {
-                            Err(disabled())
-                        }
+                        let (mut parts, body) = request.into_parts();
+                        let user = User::from_request_parts(&mut parts, &auth).await?;
+                        require_access(&auth.db, service.id, user.id).await?;
+                        Ok::<_, Error>(next.run(Request::from_parts(parts, body)).await)
                     }
                 }));
         router = router.merge(registered);
@@ -164,9 +195,19 @@ pub fn routes(core: &App) -> Router {
     router
         .route(
             "/api/v1/services",
-            axum::routing::get(|State((core, _)): State<Dispatch>| async move {
-                catalog(&core.db).await.map(Json)
-            }),
+            axum::routing::get(
+                |State((core, _)): State<Dispatch>, request: Request| async move {
+                    let (mut parts, _) = request.into_parts();
+                    let user = User::from_request_parts(&mut parts, &core).await?;
+                    let allowed = accessible(&core.db, user.id).await?;
+                    let items: Vec<_> = modules::REGISTERED
+                        .iter()
+                        .filter(|module| allowed.iter().any(|id| id == module.id))
+                        .map(|module| json!({"id":module.id,"enabled":true,"path":module.page}))
+                        .collect();
+                    Ok::<_, Error>(Json(json!({"items":items})))
+                },
+            ),
         )
         .route("/api/v1/activity/recent", axum::routing::get(activity))
         .fallback(dispatch)
@@ -195,7 +236,7 @@ async fn dispatch(State((core, services)): State<Dispatch>, request: Request) ->
         _ => return Err(Error::denied()),
     };
     let (mut parts, body) = request.into_parts();
-    User::from_request_parts(&mut parts, &core).await?;
+    let user = User::from_request_parts(&mut parts, &core).await?;
     let (id, body) = if let Some(id) = id {
         (
             id.parse::<Uuid>().map_err(|_| Error::bad("invalid_id"))?,
@@ -214,15 +255,19 @@ async fn dispatch(State((core, services)): State<Dispatch>, request: Request) ->
         "uploads" => "SELECT EXISTS(SELECT 1 FROM uploads WHERE id=$1)",
         _ => "SELECT EXISTS(SELECT 1 FROM spaces WHERE id=$1)",
     };
+    let installed: Vec<String> = sqlx::query_scalar("SELECT id FROM public.service_settings")
+        .fetch_all(&core.db)
+        .await?;
     for module in services {
+        if !installed.iter().any(|id| id == module.service.id) {
+            continue;
+        }
         if sqlx::query_scalar::<_, bool>(lookup)
             .bind(id)
             .fetch_one(&module.app.db)
             .await?
         {
-            if !enabled(&core.db, module.service.id).await? {
-                return Err(disabled());
-            }
+            require_access(&core.db, module.service.id, user.id).await?;
             return Ok(module
                 .file_routes
                 .oneshot(Request::from_parts(parts, body))
@@ -242,8 +287,9 @@ async fn activity(
     let user = User::from_request_parts(&mut parts, &core).await?;
     let mut items = Vec::new();
     let mut boundary = None;
+    let allowed = accessible(&core.db, user.id).await?;
     for module in services {
-        if !enabled(&core.db, module.service.id).await? {
+        if !allowed.iter().any(|id| id == module.service.id) {
             continue;
         }
         let mut page = files::recent_items(&module.app, user.id, query.clone()).await?;

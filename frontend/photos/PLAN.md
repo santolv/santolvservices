@@ -6,6 +6,7 @@ referencia; sus restricciones de demo y repositorio independiente están superad
 
 - [x] Interfaz en frontend/photos y lógica en backend/src/modules/photos, dentro del backend compartido.
 - [x] Inicio sin barra lateral, actividad reciente común y sesión HttpOnly/CSRF.
+- [x] Acceso web desde el formulario único de Inicio, con bloqueo de módulos por cuenta.
 - [x] Backend compartido desplegado en la instalación local, con copia previa.
 - [x] Barra superior con cuenta, acceso a Inicio mediante cuatro puntos y tema
   global sincronizado con Drive e Inicio, también entre pestañas.

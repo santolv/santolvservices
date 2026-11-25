@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iniciar sesión · Santolv</title>
+<style>
+:root{font:16px system-ui,sans-serif;color:#202124;background:#f3f4f6}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px}
+main{width:min(100%,400px);padding:32px;border:1px solid #dddfe4;border-radius:16px;background:#fff}
+h1{font-size:1.65rem;margin:0 0 24px}form,label{display:grid;gap:8px}
+form{gap:16px}label{font-size:.875rem;font-weight:600}
+input,button{font:inherit;padding:11px 12px;border:1px solid #cbcdd3;border-radius:8px}
+button{cursor:pointer;background:#1755bc;color:white;border-color:#1755bc;font-weight:600}
+button:disabled{opacity:.65}button.secondary{background:#fff;color:#1755bc}
+#status{font-size:.875rem;color:#922c22;margin:16px 0 0}#status:empty{display:none}
+@media(prefers-color-scheme:dark){:root{color:#eee;background:#17181b}main,input{color:#eee;background:#23252a;border-color:#484a50}button.secondary{background:#23252a;color:#a8c6ff}#status{color:#ffb4aa}}
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">Iniciar sesión en Santolv</h1>
+  <form id="login" method="post">
+    <label>Usuario<input id="username" autocomplete="username" maxlength="64" required></label>
+    <label>Contraseña<input id="password" type="password" autocomplete="current-password" maxlength="1024" required></label>
+    <button type="submit">Entrar</button>
+  </form>
+  <form id="change-password" method="post" hidden>
+    <label>Contraseña temporal<input id="current-password" type="password" autocomplete="current-password" maxlength="1024" required></label>
+    <label>Nueva contraseña<input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></label>
+    <button type="submit">Guardar contraseña</button>
+    <button type="button" id="cancel" class="secondary">Cerrar sesión</button>
+  </form>
+  <p id="status" role="status"></p>
+</main>
+<script>
+'use strict';
+const API_ORIGIN=location.protocol==='https:'?location.origin:'http://localhost:8443';
+const get=id=>document.getElementById(id);
+let csrf='',submitted=false;
+async function api(path,body){
+  const headers={};
+  if(body!==undefined)headers['Content-Type']='application/json';
+  if(csrf)headers['X-CSRF-Token']=csrf;
+  const response=await fetch(API_ORIGIN+'/api/v1'+path,{method:body===undefined?'GET':'POST',credentials:'include',headers,body:body===undefined?undefined:JSON.stringify(body)});
+  if(!response.ok){
+    const messages={401:'Comprueba el usuario o la contraseña.',429:'Espera un momento antes de volver a intentarlo.'};
+    throw new Error(messages[response.status]||'No se pudo completar la operación.');
+  }
+  return response.status===204?null:response.json();
+}
+function passwordChange(session){
+  csrf=session.csrf_token;
+  get('title').textContent='Cambia tu contraseña temporal';
+  get('login').hidden=true;
+  get('change-password').hidden=false;
+  get('current-password').focus();
+}
+async function run(button,action){
+  button.disabled=true;
+  get('status').textContent='';
+  try{await action()}catch(error){get('status').textContent=error.message}finally{button.disabled=false}
+}
+get('login').addEventListener('submit',event=>{
+  event.preventDefault();
+  submitted=true;
+  run(event.submitter,async()=>{
+    const session=await api('/auth/login',{username:get('username').value.trim(),password:get('password').value});
+    get('password').value='';
+    if(session.must_change_password)passwordChange(session);
+    else location.replace('/');
+  });
+});
+get('change-password').addEventListener('submit',event=>{
+  event.preventDefault();
+  run(event.submitter,async()=>{
+    await api('/auth/password',{current_password:get('current-password').value,new_password:get('new-password').value});
+    location.replace('/');
+  });
+});
+get('cancel').addEventListener('click',event=>run(event.currentTarget,async()=>{
+  await api('/auth/logout',null);
+  location.replace('/');
+}));
+api('/me').then(session=>{if(!submitted&&session.must_change_password)passwordChange(session)}).catch(()=>{});
+</script>
+</body>
+</html>

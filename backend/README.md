@@ -48,7 +48,7 @@ y del almacenamiento, y sustituye el ejecutable de `servidor/`. Reutiliza su
 configuración, sus cuentas y sus datos. Consulta las [rutas y el esquema
 modular](../README.md#almacenamiento).
 
-Las sesiones normales duran dos horas y las iniciales pendientes de cambio de contraseña quince minutos. Cookie `HttpOnly`, `SameSite=Strict`, ámbito `/api/v1`, `Secure` al usar HTTPS. `/api/v1/me` recupera el CSRF al recargar sin exponer el identificador de sesión. No se guardan credenciales en almacenamiento del navegador. El cierre de sesión y el cambio/restablecimiento de contraseña revocan el acceso en el servidor. Consultar **INFORME_SEGURIDAD.md** para los riesgos pendientes y los requisitos antes de publicar mediante Pangolin.
+Las sesiones normales duran dos horas y las iniciales pendientes de cambio de contraseña quince minutos. La cookie de sesión usa `HttpOnly`, `SameSite=Strict`, ruta `/` y `Secure` con HTTPS. El mismo servidor comprueba la cookie al servir las páginas protegidas y exige CSRF en las operaciones que cambian datos. `/api/v1/me` recupera el CSRF al recargar sin exponer el identificador de sesión. El cierre de sesión y el cambio o restablecimiento de contraseña revocan el acceso en el servidor. Consultar **INFORME_SEGURIDAD.md** para los requisitos antes de publicar mediante Pangolin.
 
 Para una configuración anterior, detener el proceso y ejecutar con el binario nuevo:
 
@@ -86,6 +86,9 @@ Desde backend, usando la configuración existente:
 .\servidor\santolvdrive.exe users enable nombre
 .\servidor\santolvdrive.exe users reset-password
 .\servidor\santolvdrive.exe users audit
+.\servidor\santolvdrive.exe users modules nombre
+.\servidor\santolvdrive.exe users deny-module nombre photos
+.\servidor\santolvdrive.exe users allow-module nombre photos
 ```
 
 Create y reset-password piden el usuario y una contraseña temporal oculta, con repetición. Para automatización aceptan --stdin antes de --config y un objeto JSON {username,password} por la entrada estándar, con límite de 4096 bytes; nunca pasar contraseñas como argumentos. List y audit aceptan un cursor después del nombre de la acción, devuelto como next_cursor. Desactivar una cuenta revoca sus sesiones y bloquea las publicaciones pendientes, conservando sus archivos. Reactivarla no recupera las sesiones anteriores. Restablecer su contraseña exige cambiarla al entrar y no reactiva cuentas desactivadas.

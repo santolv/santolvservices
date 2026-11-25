@@ -2,8 +2,13 @@
 (() => {
   'use strict';
   const key = 'santolv.theme';
+  const sessionKey = 'santolv.session-ended';
   const API_ORIGIN=location.protocol==='https:'?location.origin:'http://localhost:8443';
-  let account;
+  let account, sessionTimer;
+  function returnHome() {
+    document.body.hidden = true;
+    location.replace('/');
+  }
   const media = window.matchMedia('(prefers-color-scheme: dark)');
   const valid = value => ['light', 'dark', 'system'].includes(value) ? value : 'light';
   function saved() {
@@ -28,6 +33,14 @@
   }
   window.SantolvShell = {
     setTheme,
+    session(expiresAt) {
+      if (!Number.isFinite(expiresAt)) return;
+      clearTimeout(sessionTimer);
+      sessionTimer = setTimeout(returnHome, Math.max(0, expiresAt * 1000 - Date.now()));
+    },
+    sessionEnded() {
+      try { localStorage.setItem(sessionKey, String(Date.now())); } catch {}
+    },
     account(name, handlers) {
       account = handlers;
       const trigger = document.querySelector('.shell-profile');
@@ -54,6 +67,7 @@
       status.textContent = 'Cargando aplicaciones…';
       try {
         const response = await fetch(API_ORIGIN + '/api/v1/services', {credentials: 'include'});
+        if (response.status === 401) { returnHome(); return; }
         if (!response.ok) throw new Error();
         const {items} = await response.json();
         for (const link of links) link.hidden = !items.some(item => item.enabled && item.id === link.dataset.shellService);
@@ -83,8 +97,12 @@
   }
   apply();
   document.addEventListener('DOMContentLoaded', bind, { once: true });
-  window.addEventListener('pageshow', () => { preference = saved(); apply(); });
+  window.addEventListener('pageshow', event => {
+    if (event?.persisted) { document.body.hidden = true; location.reload(); return; }
+    preference = saved(); apply();
+  });
   window.addEventListener('storage', event => {
+    if (event.key === sessionKey) { returnHome(); return; }
     if (event.key === key || event.key === null) { preference = saved(); apply(); }
   });
   media.addEventListener('change', () => { if (preference === 'system') apply(); });

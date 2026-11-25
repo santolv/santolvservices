@@ -394,17 +394,17 @@ pub async fn login(
         r.headers_mut().insert(
             "set-cookie",
             format!(
-                "drive_session={raw}; Path=/api/v1; HttpOnly; SameSite=Strict; Max-Age={expires}{}",
+                "drive_session={raw}; Path=/; HttpOnly; SameSite=Strict; Max-Age={expires}{}",
                 if s.secure { "; Secure" } else { "" }
             )
             .parse()
             .unwrap(),
         );
-        // Clear the old, broader cookie so two credentials cannot be sent together.
+        // Clear the old API-only cookie to prevent duplicate credentials.
         r.headers_mut().append(
             "set-cookie",
             format!(
-                "drive_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0{}",
+                "drive_session=; Path=/api/v1; HttpOnly; SameSite=Strict; Max-Age=0{}",
                 if s.secure { "; Secure" } else { "" }
             )
             .parse()

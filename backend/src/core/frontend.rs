@@ -60,9 +60,22 @@ impl Frontend {
     }
     fn with_shell(html: &str) -> Arc<str> {
         let sidebar = include_str!("../../../frontend/shared/sidebar-button.html").trim();
+        let upload = include_str!("../../../frontend/shared/upload-button.html").trim();
         html.replace(
             "<!-- SANTOLV_SHELL -->",
             include_str!("../../../frontend/shared/shell.html"),
+        )
+        .replace(
+            "<!-- SANTOLV_UPLOAD_FILE -->",
+            &upload
+                .replace("{{action}}", "upload")
+                .replace("{{label}}", "Subir archivo"),
+        )
+        .replace(
+            "<!-- SANTOLV_UPLOAD_PHOTO -->",
+            &upload
+                .replace("{{action}}", "import")
+                .replace("{{label}}", "Subir fotos"),
         )
         .replace(
             "<!-- SANTOLV_SIDEBAR_HIDE -->",

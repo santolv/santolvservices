@@ -19,6 +19,7 @@ pub const SERVICE: crate::core::manager::Service = crate::core::manager::Service
     page: "/photos",
     html: include_str!("../../../../frontend/photos/index.html"),
     uses_file_store: true,
+    requires: Some("drive"),
     worker: |app, id| Box::pin(crate::worker::run(app, id)),
     routes,
 };
@@ -28,7 +29,65 @@ fn routes() -> axum::Router<App> {
     axum::Router::new()
         .route("/api/v1/photos/library", get(library))
         .route("/api/v1/photos/space", post(space))
+        .route("/api/v1/photos/drive-folder", get(drive_folder))
         .route("/api/v1/photos/{id}/favorite", put(favorite))
+}
+
+#[derive(Deserialize)]
+struct DriveFolder {
+    after: Option<Uuid>,
+    parent: Option<Uuid>,
+    #[serde(default)]
+    camera: bool,
+}
+
+async fn drive_folder(
+    State(s): State<App>,
+    u: User,
+    Query(q): Query<DriveFolder>,
+) -> Result<Json<Value>> {
+    if q.camera && q.parent.is_some() {
+        return Err(Error::bad("invalid_photo_folder"));
+    }
+    let space: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM spaces WHERE owner_id=$1 AND service='photos' AND kind='personal' AND deleted_at IS NULL",
+    ).bind(u.id).fetch_optional(&s.db).await?;
+    let mut page = if let Some(space) = space {
+        let kind = if q.camera {
+            Some("file")
+        } else if q.parent.is_none() {
+            Some("folder")
+        } else {
+            None
+        };
+        files::list_children(
+            &s,
+            &u,
+            space,
+            files::Listing {
+                parent: q.parent,
+                after: q.after,
+                limit: None,
+                trash: false,
+            },
+            kind,
+        )
+        .await?
+    } else if q.parent.is_none() {
+        json!({"items":[],"next_cursor":null})
+    } else {
+        return Err(Error::denied());
+    };
+    if !q.camera && q.parent.is_none() && q.after.is_none() {
+        page["items"]
+            .as_array_mut()
+            .expect("directory items")
+            .insert(
+                0,
+                json!({"id":"photos-camera","name":"Cámara","kind":"folder","protected":true}),
+            );
+    }
+    Ok(Json(page))
 }
 
 pub async fn space(State(s): State<App>, u: User) -> Result<Json<Value>> {

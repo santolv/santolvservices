@@ -93,6 +93,10 @@ Quitar el bloqueo por usuario vuelve a dar acceso si el módulo está activo.
 Tras actualizar desde una versión con la cookie limitada a la API, entra de nuevo
 desde Inicio para obtener la cookie de las páginas protegidas.
 
+Fotos requiere que Drive esté instalado, activo y permitido para la cuenta.
+Desactivar Drive también suspende las rutas y las tareas de Fotos. Al reactivar
+Drive se vuelve a aplicar el estado configurado para Fotos.
+
 La migración `0013_modules.sql` mueve los metadatos de Fotos en una transacción
 y conserva sus IDs, favoritos y referencias a los originales. Los originales
 siguen en la misma ruta del disco. Detén el ejecutable anterior y guarda una
@@ -141,6 +145,10 @@ Consulta la [guía para Windows y Linux](backend/README.md#instalación-local).
 
 ## Fotos conectado
 
+- En Drive, **Mi unidad → Fotos** abre una carpeta protegida con tus álbumes y
+  **Cámara**, donde aparecen las fotos sin álbum. Drive permite navegar y
+  descargar. Las subidas y los cambios de biblioteca se hacen desde Fotos.
+  Las dos vistas leen los mismos originales.
 - Subidas por bloques con SHA-256 y confirmación durable antes de mostrar éxito.
 - Biblioteca paginada en grupos de 100 elementos; originales autenticados al
   hacerse visibles, una descarga a la vez y caché de ocho imágenes.

@@ -299,6 +299,37 @@ pub async fn list(
     Path(space): Path<Uuid>,
     Query(q): Query<Listing>,
 ) -> Result<Json<Value>> {
+    let is_root = q.parent.is_none() && q.after.is_none() && !q.trash;
+    let mut page = list_children(&s, &u, space, q, None).await?;
+    if is_root
+        && crate::core::manager::accessible(&s.db, u.id)
+            .await?
+            .iter()
+            .any(|id| id == "photos")
+    {
+        let personal_drive: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM spaces WHERE id=$1 AND owner_id=$2
+             AND service='drive' AND kind='personal' AND deleted_at IS NULL)",
+        )
+        .bind(space)
+        .bind(u.id)
+        .fetch_one(&s.db)
+        .await?;
+        if personal_drive {
+            page["photos_folder"] =
+                json!({"id":"photos","name":"Fotos","kind":"folder","protected":true});
+        }
+    }
+    Ok(Json(page))
+}
+
+pub(crate) async fn list_children(
+    s: &App,
+    u: &User,
+    space: Uuid,
+    q: Listing,
+    kind: Option<&str>,
+) -> Result<Value> {
     let mut tx = s.db.begin().await?;
     if q.trash {
         if member_role(&mut tx, space, u.id).await? < 1 {
@@ -313,6 +344,9 @@ pub async fn list(
     );
     query.push_bind(space);
     query.push(" AND NOT EXISTS(SELECT 1 FROM purge_jobs p WHERE p.node_id=nodes.id)");
+    if let Some(kind) = kind {
+        query.push(" AND kind=").push_bind(kind);
+    }
     if q.trash {
         query.push(" AND trashed_at IS NOT NULL");
     } else {
@@ -334,9 +368,9 @@ pub async fn list(
     } else {
         None
     };
-    Ok(Json(
+    Ok(
         json!({"items":nodes.into_iter().take(limit as usize).collect::<Vec<_>>(),"next_cursor":next}),
-    ))
+    )
 }
 #[derive(Serialize, Deserialize)]
 pub struct FolderInput {

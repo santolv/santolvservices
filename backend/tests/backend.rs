@@ -622,6 +622,14 @@ async fn concurrent_users_and_hot_service_disable(pool: PgPool) {
             .await
             .unwrap();
         assert_eq!(
+            manager::set_enabled(&h.app.db, "photos", true)
+                .await
+                .unwrap_err()
+                .1,
+            "required_service_disabled"
+        );
+        assert!(manager::lease(&h.app.db, "photos").await.unwrap().is_none());
+        assert_eq!(
             h.req("GET", &ap, Some(&alice.token), &[], Body::empty())
                 .await
                 .0,
@@ -637,8 +645,12 @@ async fn concurrent_users_and_hot_service_disable(pool: PgPool) {
             )
             .await
             .0,
-            StatusCode::OK
+            StatusCode::SERVICE_UNAVAILABLE
         );
+        manager::set_enabled(&h.app.db, "drive", true)
+            .await
+            .unwrap();
+        assert!(manager::enabled(&h.app.db, "photos").await.unwrap());
         assert_eq!(
             h.json("GET", "/api/v1/me", Some(&alice.token), &[], json!({}))
                 .await
@@ -756,6 +768,67 @@ async fn photos_share_sessions_but_isolate_storage_and_persist_favorites(pool: P
         .await;
     assert_eq!(library["items"][0]["id"], node.to_string());
     assert_eq!(library["items"][0]["favorite"], true);
+    let root = format!("/api/v1/spaces/{}/nodes", a.space);
+    let (_, drive_root) = h.json("GET", &root, Some(&a.token), &[], json!(null)).await;
+    assert_eq!(
+        drive_root["photos_folder"],
+        json!({"id":"photos","name":"Fotos","kind":"folder","protected":true})
+    );
+    let mount = "/api/v1/photos/drive-folder";
+    let (status, album) = h
+        .json(
+            "POST",
+            &format!("/api/v1/spaces/{space}/nodes"),
+            Some(&a.token),
+            &[("idempotency-key", "mount-album")],
+            json!({"name":"Viaje"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let album = id(&album, "id");
+    let (_, mounted) = h.json("GET", mount, Some(&a.token), &[], json!(null)).await;
+    assert_eq!(mounted["items"][0]["name"], "Cámara");
+    assert_eq!(mounted["items"][1]["id"], album.to_string());
+    let camera = format!("{mount}?camera=true");
+    let (_, camera_items) = h
+        .json("GET", &camera, Some(&a.token), &[], json!(null))
+        .await;
+    assert_eq!(camera_items["items"][0]["id"], node.to_string());
+    let (_, other_camera) = h
+        .json("GET", &camera, Some(&b.token), &[], json!(null))
+        .await;
+    assert_eq!(other_camera["items"], json!([]));
+    let foreign_album = format!("{mount}?parent={album}");
+    assert_eq!(
+        h.json("GET", &foreign_album, Some(&b.token), &[], json!(null))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        h.json(
+            "PATCH",
+            "/api/v1/nodes/photos",
+            Some(&a.token),
+            &[],
+            json!({"name":"Cambio"})
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        h.json(
+            "POST",
+            "/api/v1/nodes/photos/trash",
+            Some(&a.token),
+            &[],
+            json!(null)
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
     let (_, other) = h
         .json(
             "GET",
@@ -784,8 +857,13 @@ async fn photos_share_sessions_but_isolate_storage_and_persist_favorites(pool: P
             json!({}),
         )
         .await;
-    assert_eq!(activity["items"][0]["id"], node.to_string());
-    assert_eq!(activity["items"][0]["service"], "photos");
+    assert!(
+        activity["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["id"] == node.to_string() && item["service"] == "photos")
+    );
     let (_, other_activity) = h
         .json(
             "GET",

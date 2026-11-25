@@ -24,8 +24,16 @@ pub struct Service {
     pub page: &'static str,
     pub html: &'static str,
     pub uses_file_store: bool,
+    pub requires: Option<&'static str>,
     pub worker: fn(App, &'static str) -> futures_util::future::BoxFuture<'static, ()>,
     pub routes: fn() -> Router<App>,
+}
+
+fn dependency(id: &str) -> Option<&'static str> {
+    modules::REGISTERED
+        .iter()
+        .find(|service| service.id == id)?
+        .requires
 }
 
 impl Service {
@@ -59,11 +67,12 @@ impl Service {
 
 pub async fn enabled(db: &PgPool, id: &str) -> Result<bool> {
     Ok(
-        sqlx::query_scalar("SELECT enabled FROM public.service_settings WHERE id=$1")
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM public.service_settings WHERE id=$1 AND enabled)
+            AND ($2::text IS NULL OR EXISTS(SELECT 1 FROM public.service_settings WHERE id=$2 AND enabled))")
             .bind(id)
-            .fetch_optional(db)
-            .await?
-            .unwrap_or(false),
+            .bind(dependency(id))
+            .fetch_one(db)
+            .await?,
     )
 }
 
@@ -73,11 +82,14 @@ pub fn disabled() -> Error {
 
 pub async fn require_access(db: &PgPool, id: &str, user_id: Uuid) -> Result<()> {
     let state: Option<(bool, bool)> = sqlx::query_as(
-        "SELECT enabled, EXISTS(SELECT 1 FROM public.service_user_denials
-         WHERE user_id=$2 AND service_id=$1) FROM public.service_settings WHERE id=$1",
+        "SELECT enabled AND ($3::text IS NULL OR EXISTS(
+             SELECT 1 FROM public.service_settings WHERE id=$3 AND enabled
+         )), EXISTS(SELECT 1 FROM public.service_user_denials
+         WHERE user_id=$2 AND service_id IN ($1,$3)) FROM public.service_settings WHERE id=$1",
     )
     .bind(id)
     .bind(user_id)
+    .bind(dependency(id))
     .fetch_optional(db)
     .await?;
     match state {
@@ -89,30 +101,44 @@ pub async fn require_access(db: &PgPool, id: &str, user_id: Uuid) -> Result<()> 
 }
 
 pub async fn accessible(db: &PgPool, user_id: Uuid) -> Result<Vec<String>> {
-    Ok(sqlx::query_scalar(
+    let available: Vec<String> = sqlx::query_scalar(
         "SELECT id FROM public.service_settings s WHERE enabled
          AND NOT EXISTS (SELECT 1 FROM public.service_user_denials d
                          WHERE d.user_id=$1 AND d.service_id=s.id)",
     )
     .bind(user_id)
     .fetch_all(db)
-    .await?)
+    .await?;
+    Ok(modules::REGISTERED
+        .iter()
+        .filter(|service| {
+            available.iter().any(|id| id == service.id)
+                && service
+                    .requires
+                    .is_none_or(|required| available.iter().any(|id| id == required))
+        })
+        .map(|service| service.id.to_owned())
+        .collect())
 }
 
 pub async fn lease(db: &PgPool, id: &str) -> Result<Option<Transaction<'static, Postgres>>> {
     let mut tx = db.begin().await?;
-    let granted: bool =
-        sqlx::query_scalar("SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1,0))")
-            .bind(format!("service:{id}"))
-            .fetch_one(&mut *tx)
-            .await?;
-    if !granted {
-        return Ok(None);
+    for service in dependency(id).into_iter().chain([id]) {
+        let granted: bool =
+            sqlx::query_scalar("SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1,0))")
+                .bind(format!("service:{service}"))
+                .fetch_one(&mut *tx)
+                .await?;
+        if !granted {
+            return Ok(None);
+        }
     }
     let on: bool = sqlx::query_scalar(
-        "SELECT COALESCE((SELECT enabled FROM public.service_settings WHERE id=$1),false)",
+        "SELECT EXISTS(SELECT 1 FROM public.service_settings WHERE id=$1 AND enabled)
+            AND ($2::text IS NULL OR EXISTS(SELECT 1 FROM public.service_settings WHERE id=$2 AND enabled))",
     )
     .bind(id)
+    .bind(dependency(id))
     .fetch_one(&mut *tx)
     .await?;
     Ok(on.then_some(tx))
@@ -124,6 +150,21 @@ pub async fn set_enabled(db: &PgPool, id: &str, on: bool) -> Result<()> {
     }
     // Serialize with workers so a completed disable cannot leave a batch running.
     let mut tx = db.begin().await?;
+    if let Some(required) = dependency(id) {
+        sqlx::query("SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))")
+            .bind(format!("service:{required}"))
+            .execute(&mut *tx)
+            .await?;
+        let ready: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM public.service_settings WHERE id=$1 AND enabled)",
+        )
+        .bind(required)
+        .fetch_one(&mut *tx)
+        .await?;
+        if on && !ready {
+            return Err(Error::conflict("required_service_disabled"));
+        }
+    }
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
         .bind(format!("service:{id}"))
         .execute(&mut *tx)
@@ -149,8 +190,12 @@ pub async fn catalog(db: &PgPool) -> Result<Value> {
         .iter()
         .map(|module| {
             let setting = settings.iter().find(|(id, _)| id == module.id);
+            let configured = setting.is_some_and(|(_, on)| *on);
+            let ready = module
+                .requires
+                .is_none_or(|required| settings.iter().any(|(id, on)| id == required && *on));
             json!({"id":module.id,"installed":setting.is_some(),
-                "enabled":setting.is_some_and(|(_, on)| *on),"path":module.page})
+                "enabled":configured && ready,"path":module.page})
         })
         .collect();
     Ok(json!({"items":items}))

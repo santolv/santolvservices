@@ -11,6 +11,7 @@ pub const SERVICE: Service = Service {
     page: "/drive",
     html: include_str!("../../../../frontend/drive/index.html"),
     uses_file_store: true,
+    requires: None,
     worker: |app, id| Box::pin(crate::worker::run(app, id)),
     routes,
 };

@@ -12,6 +12,8 @@ referencia; sus restricciones de demo y repositorio independiente están superad
   global sincronizado con Drive e Inicio, también entre pestañas.
 - [x] Control lateral de la fototeca compartido con Drive, en el panel y la barra de herramientas.
 - [x] Página de cuenta compartida para editar el nombre visible y el avatar de cada usuario.
+- [x] Botón de subida compartido con Drive y carpeta protegida en Mi unidad.
+- [x] Dependencia de Drive para abrir Fotos y ejecutar sus tareas internas.
 - [x] Almacenamiento usuarios/<UUID>/photos separado de Drive.
 - [x] Subida real por bloques con integridad y confirmación durable.
 - [x] Biblioteca paginada, originales autenticados, favoritos y álbumes persistentes.

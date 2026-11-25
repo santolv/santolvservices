@@ -156,11 +156,11 @@ main{grid-row:2;padding:79.18px 23.54px 0;background:var(--bg);scroll-padding-to
 .app .empty{padding-top:59.92px}
 .photo-day{padding:16.05px 25.68px 7.49px;font-size:17.12px;font-weight:650;letter-spacing:-.01em}
 .photo-day span{margin-inline-start:8.56px;color:var(--sub);font-size:12.84px;font-weight:500}
-.app .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,calc(var(--thumb) * 9 / 16)),1fr));gap:2.14px;padding:0 2.14px}
+.app .photo-grid{display:flex;flex-wrap:wrap;gap:2.14px;padding:0 2.14px}
 .photo-loading-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--thumb)),1fr));grid-auto-rows:var(--thumb);gap:2.14px;padding:14.98px 2.14px 0}
 .photo-loading-grid span{background:var(--fill)}
-.app .photo-card{aspect-ratio:9/16;height:auto;border-radius:0}
-.app .photo-open{height:100%;aspect-ratio:auto;border-radius:0}
+.app .photo-card{flex:none;width:var(--thumb);height:var(--thumb);border-radius:0}
+.app .photo-open{height:100%;aspect-ratio:auto;border-radius:0;padding:0;border:0}
 .app .photo-open img{width:100%;height:100%;object-fit:cover}
 .app .photo-card.is-selected{border-radius:7.49px}
 .app .photo-card.is-selected .photo-open img{transform:scale(.93)}
@@ -194,7 +194,7 @@ main{grid-row:2;padding:79.18px 23.54px 0;background:var(--bg);scroll-padding-to
  .window-title h1{font-size:24.61px}
  .app .context-bar,.photo-day{padding-inline:14.98px}
  .app .page-content,.app.has-context.non-library .page-content{padding-inline:14.98px}
- .app .photo-card{height:auto}
+ .app .photo-card{min-width:0}
 }
 @media(max-width:360px){.top .icon-btn{width:25.68px}.top .search{padding-inline:5.35px}.top .search input{width:38.52px;font-size:11.77px}}
 </style>
@@ -314,9 +314,36 @@ function showImageFailure(image){
   fallback.innerHTML=icon('photos')+'<span>No se pudo cargar la imagen</span>';
   button.append(fallback);
 }
+const photoRatios=new Map();
+function layoutPhotoGrid(){
+ const target=Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--thumb'))||160;
+ for(const grid of $('library').querySelectorAll('.photo-grid')){
+  const width=grid.clientWidth-4.28,gap=2.14;
+  if(width<=0)continue;
+  let row=[],sum=0;
+  const placeRow=last=>{
+   const height=Math.min(last?target:Infinity,(width-gap*(row.length-1))/sum);
+   for(const card of row){
+    card.style.width=(height*(photoRatios.get(card.querySelector('img').dataset.media)||1))+'px';
+    card.style.height=height+'px';
+   }
+   row=[];sum=0;
+  };
+  for(const card of grid.children){
+   const ratio=photoRatios.get(card.querySelector('img').dataset.media)||1;
+   row.push(card);sum+=ratio;
+   if(sum*target+gap*(row.length-1)>=width)placeRow(false);
+  }
+  if(row.length)placeRow(true);
+ }
+}
 function prepareImages(){
   for(const image of $('library').querySelectorAll('img[data-media]')){
     const loaded=arriving=>{
+      if(image.naturalWidth&&image.naturalHeight){
+        photoRatios.set(image.dataset.media,image.naturalWidth/image.naturalHeight);
+        layoutPhotoGrid();
+      }
       image.classList.add('is-loaded');
       if(arriving)image.classList.add('is-arriving');
     };
@@ -327,6 +354,7 @@ function prepareImages(){
       image.addEventListener('error',()=>showImageFailure(image),{once:true});
     }
   }
+  layoutPhotoGrid();
 }
 
 
@@ -442,6 +470,7 @@ function thumbnailSize(value){
  $('thumbnail-size').value=String(Math.min(300,Math.max(120,value)));
  document.documentElement.style.setProperty('--thumb',$('thumbnail-size').value+'px');
  try{localStorage.setItem('santolv.photos.thumbnail-size',$('thumbnail-size').value)}catch{}
+ layoutPhotoGrid();
  if(reducedMotion.matches)return;
  const after=cards.map(card=>card.getBoundingClientRect());
  const viewport=$('content').getBoundingClientRect();
@@ -557,6 +586,7 @@ $('load-more').addEventListener('click',async()=>{const button=$('load-more');bu
 window.addEventListener('pagehide',clearMedia);
 window.addEventListener('pageshow',()=>beginPhotos());
 
+new ResizeObserver(layoutPhotoGrid).observe($('content'));
 restoreThumbnailSize();
 route();
 

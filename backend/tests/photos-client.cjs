@@ -7,12 +7,24 @@ const pendingImage={complete:true,classes:new Set(),listeners:{},dataset:{media:
 const cachedImage={...pendingImage,classes:new Set(),hasAttribute(){return true},naturalWidth:300};
 for(const image of [pendingImage,cachedImage])image.classList={add:name=>image.classes.add(name)};
 vm.runInNewContext(html.slice(html.indexOf('function showImageFailure'), html.indexOf('let tooltipTimer'))+'\nprepareImages();',
- {$:()=>({querySelectorAll:()=>[pendingImage,cachedImage]})});
+ {$:()=>({querySelectorAll:selector=>selector==='.photo-grid'?[]:[pendingImage,cachedImage]}),getComputedStyle:()=>({getPropertyValue:()=>160}),document:{documentElement:{}}});
 assert.deepEqual([...pendingImage.classes],[]);
 pendingImage.listeners.load();
 assert.deepEqual([...pendingImage.classes],['is-loaded','is-arriving']);
 assert.deepEqual([...cachedImage.classes],['is-loaded']);
 const thumbnailCode=html.slice(html.indexOf('function restoreThumbnailSize'),html.indexOf("document.addEventListener('click',async event=>",html.indexOf('function restoreThumbnailSize')));
+const gridCards=['landscape','portrait'].map(id=>({style:{},querySelector:()=>({dataset:{media:id}})}));
+const gridContext=vm.createContext({
+ $:()=>({querySelectorAll:()=>[{clientWidth:400,children:gridCards}]}),
+ document:{documentElement:{}},getComputedStyle:()=>({getPropertyValue:()=>160})
+});
+vm.runInContext(html.slice(html.indexOf('const photoRatios='),html.indexOf('function prepareImages'))+
+ ";photoRatios.set('landscape',2);photoRatios.set('portrait',.5);layoutPhotoGrid()",gridContext);
+const widths=gridCards.map(card=>parseFloat(card.style.width));
+const heights=gridCards.map(card=>parseFloat(card.style.height));
+assert(Math.abs(widths[0]/heights[0]-2)<.001);
+assert(Math.abs(widths[1]/heights[1]-.5)<.001);
+assert.equal(heights[0],heights[1]);
 let savedThumbnail='240',renderedThumbnail;
 const thumbnailInput={value:'150'};
 const thumbnailContext=vm.createContext({
@@ -20,6 +32,7 @@ const thumbnailContext=vm.createContext({
  document:{documentElement:{style:{setProperty(_,value){renderedThumbnail=value}}}},
  localStorage:{getItem(){return savedThumbnail},setItem(_,value){savedThumbnail=value}},
  reducedMotion:{matches:true}
+ ,layoutPhotoGrid(){}
 });
 vm.runInContext(thumbnailCode+';restoreThumbnailSize()',thumbnailContext);
 assert.equal(renderedThumbnail,'240px');
@@ -37,7 +50,7 @@ const requests=[],photos=[{id:'photo',revision:4,favorite:false}],elements=new M
 const $=id=>{if(!elements.has(id))elements.set(id,{hidden:true,value:'',addEventListener(){}});return elements.get(id)};
 let reply={ok:true,status:200,data:{revision:5,favorite:true}};
 const context=vm.createContext({Headers,Blob,ArrayBuffer,Uint8Array,URL,crypto:require('node:crypto').webcrypto,console,setTimeout,photos,albums:[],
- state:{route:'photos',selected:new Set()},$,render(){},updateViewer(){},notify(){},route(){},restoreThumbnailSize(){},
+ state:{route:'photos',selected:new Set()},$,render(){},updateViewer(){},notify(){},route(){},restoreThumbnailSize(){},layoutPhotoGrid(){},ResizeObserver:class{observe(){}},
  location:{protocol:'http:',hash:'',assign(){}},window:{addEventListener(){}},
  IntersectionObserver:class{observe(){}unobserve(){}disconnect(){}},
  fetch:async(url,options)=>{requests.push({url,options});return {...reply,json:async()=>reply.data}}

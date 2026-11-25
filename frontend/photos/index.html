@@ -526,7 +526,7 @@ function clearMedia(){mediaGeneration++;for(const url of mediaUrls.values())URL.
 async function loadLibrary(append=false){
  const data=await photoApi('/photos/library'+(append&&libraryCursor?'?after='+encodeURIComponent(libraryCursor):''));
  if(!append){photos.length=0;albums.length=0}
- for(const item of data.items){if(item.kind==='folder'){if(!item.deleted)albums.push({...item,eyebrow:'Álbum',cover:''});continue}photos.push({...item,src:mediaUrls.get(item.id+':256:'+item.version)||'',alt:item.name,place:'Fecha de subida'})}
+ for(const item of data.items){if(item.kind==='folder'){if(!item.deleted)albums.push({...item,eyebrow:'Álbum',cover:''});continue}photos.push({...item,src:mediaUrls.get(item.id+':1280:'+item.version)||'',alt:item.name,place:'Fecha de subida'})}
  libraryLoading=false;libraryCursor=data.next_cursor;const albumId=location.hash.replace(/^#\/?/,'').split('/')[1];if(state.route==='albums'&&albums.some(a=>a.id===albumId))state.album=albumId;render();$('load-more').hidden=!libraryCursor;
 }
 function showPhotoError(error){notify(error.message||'No se pudo completar la operación.')}
@@ -535,12 +535,12 @@ async function beginPhotos(){try{const me=await photoApi('/me');csrf=me.csrf_tok
  }catch(error){libraryLoading=false;$('library').textContent='No se pudo conectar con tu biblioteca.';$('library-count').textContent='';showPhotoError(error)}}
 
 async function endPhotosSession(){if(photoBusy)throw new Error('Espera a que termine la operación de Fotos.');await photoApi('/auth/logout',{method:'POST'});window.SantolvShell?.sessionEnded();leavePhotos()}
-function imageUrl(photo,size=256){
+function imageUrl(photo,size=1280){
  const key=photo.id+':'+size+':'+photo.version;
  if(mediaUrls.has(key))return Promise.resolve(mediaUrls.get(key));
  if(mediaRequests.has(key))return mediaRequests.get(key);
  const generation=mediaGeneration;
- const request=(size===256?mediaTail:Promise.resolve()).then(async()=>{
+ const request=(size===1280?mediaTail:Promise.resolve()).then(async()=>{
   for(let attempt=0;attempt<30;attempt++){
    if(generation!==mediaGeneration)throw new Error('Carga cancelada.');
    const url=size==='original'?'/nodes/'+photo.id+'/content':'/photos/'+photo.id+'/image/'+size+'?version='+encodeURIComponent(photo.version||'');
@@ -548,23 +548,23 @@ function imageUrl(photo,size=256){
    if(r.status===401){leavePhotos();throw new Error('Sesión caducada.')}
    if(r.status===202){await new Promise(resolve=>setTimeout(resolve,2000));continue}
    if(!r.ok)throw new Error('No se pudo cargar '+photo.name);
-   if(Number(r.headers.get('content-length'))>30*1024*1024){await r.body.cancel();throw new Error('Imagen demasiado grande para el visor.')}
+   if(Number(r.headers.get('content-length'))>256*1024*1024){await r.body.cancel();throw new Error('Imagen demasiado grande para el visor.')}
    const blob=await r.blob();
    const blobUrl=URL.createObjectURL(size==='original'?new Blob([blob],{type:({jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',avif:'image/avif'})[photo.name.split('.').at(-1).toLowerCase()]||'application/octet-stream'}):blob);
    if(generation!==mediaGeneration){URL.revokeObjectURL(blobUrl);throw new Error('Carga cancelada.')}
    mediaUrls.set(key,blobUrl);
-   if(size===256)photo.src=blobUrl;
+   if(size===1280)photo.src=blobUrl;
    while(mediaUrls.size>80){
     const [oldKey,oldUrl]=mediaUrls.entries().next().value;
     mediaUrls.delete(oldKey);URL.revokeObjectURL(oldUrl);
-    const old=photos.find(p=>oldKey.startsWith(p.id+':256:'));
+    const old=photos.find(p=>oldKey.startsWith(p.id+':1280:'));
     if(old)old.src='';
    }
    return blobUrl;
   }
   throw new Error('La foto sigue procesándose. Vuelve a intentarlo.');
  }).finally(()=>mediaRequests.delete(key));
- if(size===256)mediaTail=request.catch(()=>{});mediaRequests.set(key,request);return request;
+ if(size===1280)mediaTail=request.catch(()=>{});mediaRequests.set(key,request);return request;
 }
 const imageObserver=new IntersectionObserver(entries=>{for(const entry of entries){if(!entry.isIntersecting)continue;const image=entry.target;imageObserver.unobserve(image);const photo=photos.find(p=>p.id===image.dataset.media);if(photo&&!photo.deleted)imageUrl(photo).then(url=>{if(image.isConnected)image.src=url}).catch(()=>{if(image.isConnected)showImageFailure(image)})}},{root:$('content'),rootMargin:'0px'});
 const virtualMarkup=new WeakMap();
@@ -596,7 +596,7 @@ async function trashPhoto(){const photo=photos.find(p=>p.id===state.viewerId);if
 async function restorePhoto(id){if(await persistPhoto(photos.find(p=>p.id===id),'restore'))notify('Foto restaurada.')}
 const sha256=async buffer=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',buffer)),b=>b.toString(16).padStart(2,'0')).join('');
 async function uploadPhoto(file){
- // shortcut: browser hashing buffers one image (30 MiB max); use streaming hashing for larger originals.
+ // shortcut: browser hashing buffers one image (256 MiB max); use streaming hashing for larger originals.
  const buffer=await file.arrayBuffer();const upload=await photoApi('/uploads',{method:'POST',body:{space_id:photoSpace,parent_id:state.album,name:file.name,size:file.size,sha256:await sha256(buffer)}});
  let accepted=false;try{for(let offset=0;offset<file.size;offset+=1024*1024){const chunk=buffer.slice(offset,offset+1024*1024);await photoApi('/uploads/'+upload.id+'/content',{method:'PATCH',body:chunk,headers:{'Content-Type':'application/octet-stream','Upload-Offset':String(offset),'X-Chunk-SHA256':await sha256(chunk)}});notify('Subiendo '+file.name+' · '+Math.min(100,Math.round((offset+chunk.byteLength)/file.size*100))+'%')}
  await photoApi('/uploads/'+upload.id+'/complete',{method:'POST'});accepted=true;
@@ -604,9 +604,9 @@ async function uploadPhoto(file){
  throw new Error('El servidor sigue procesando '+file.name+'. Actualiza la biblioteca para comprobar el resultado.');
  }catch(error){if(!accepted)await photoApi('/uploads/'+upload.id,{method:'DELETE'}).catch(()=>{});throw error}
 }
-async function importFiles(files){if(photoBusy||!photoSpace)return;photoBusy=true;let added=0;try{for(const file of files){if(!/^image\/(jpeg|png|webp|gif|avif)$/.test(file.type)||!file.size||file.size>30*1024*1024){notify(file.name+': admite JPEG, PNG, WebP, GIF o AVIF de hasta 30 MiB.');continue}await uploadPhoto(file);added++}if(added)notify(added+' '+(added===1?'foto guardada':'fotos guardadas')+' en el servidor.')}catch(error){showPhotoError(error)}finally{photoBusy=false;$('file-input').value='';await loadLibrary().catch(showPhotoError)}}
+async function importFiles(files){if(photoBusy||!photoSpace)return;photoBusy=true;let added=0;try{for(const file of files){if(!/^image\/(jpeg|png|webp|gif|avif)$/.test(file.type)||!file.size||file.size>256*1024*1024){notify(file.name+': admite JPEG, PNG, WebP, GIF o AVIF de hasta 256 MiB.');continue}await uploadPhoto(file);added++}if(added)notify(added+' '+(added===1?'foto guardada':'fotos guardadas')+' en el servidor.')}catch(error){showPhotoError(error)}finally{photoBusy=false;$('file-input').value='';await loadLibrary().catch(showPhotoError)}}
 async function createAlbum(){if(!photoSpace)return notify('Espera a que se conecte la biblioteca.');showInfo('Nuevo álbum','<form id="album-form"><label>Nombre<input id="album-name" required maxlength="255" autocomplete="off"></label><button class="button primary">Crear álbum</button></form>');$('album-form').addEventListener('submit',async event=>{event.preventDefault();const button=event.target.querySelector('button');button.disabled=true;try{await photoApi('/spaces/'+photoSpace+'/nodes',{method:'POST',body:{name:$('album-name').value,parent_id:null}});await closeDialog($('info-dialog'));await loadLibrary()}catch(error){showPhotoError(error)}finally{button.disabled=false}})}
-function renderSettings(){const theme=window.SantolvShell.preference();$('library').innerHTML='<div class="page-content settings">'+pageHeading('Ajustes','Tu fototeca, a tu manera.')+'<h2>Apariencia</h2><div class="group"><label class="setting-row">Tema<select id="theme-select" data-shell-theme-select><option value="system">Según el sistema</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></label></div><h2>Biblioteca</h2><p>Conectada al servidor Santolv. Favoritos, álbumes, fotos y papelera se guardan en tu cuenta.</p><p>Las fechas corresponden a la subida. La búsqueda abarca las fotos cargadas; usa Cargar más para continuar.</p><p>Esta versión muestra originales JPEG, PNG, WebP, GIF y AVIF de hasta 30 MiB. Se generan versiones WebP de 256 y 1280 px. La reproducción de vídeo queda pendiente.</p></div>';$('theme-select').value=theme;$('theme-select').addEventListener('change',event=>setTheme(event.target.value))}
+function renderSettings(){const theme=window.SantolvShell.preference();$('library').innerHTML='<div class="page-content settings">'+pageHeading('Ajustes','Tu fototeca, a tu manera.')+'<h2>Apariencia</h2><div class="group"><label class="setting-row">Tema<select id="theme-select" data-shell-theme-select><option value="system">Según el sistema</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></label></div><h2>Biblioteca</h2><p>Conectada al servidor Santolv. Favoritos, álbumes, fotos y papelera se guardan en tu cuenta.</p><p>Las fechas corresponden a la subida. La búsqueda abarca las fotos cargadas; usa Cargar más para continuar.</p><p>Esta versión muestra originales JPEG, PNG, WebP, GIF y AVIF de hasta 256 MiB. Se generan versiones WebP de 1280 px. La reproducción de vídeo queda pendiente.</p></div>';$('theme-select').value=theme;$('theme-select').addEventListener('change',event=>setTheme(event.target.value))}
 $('load-more').addEventListener('click',async()=>{const button=$('load-more');button.disabled=true;try{await loadLibrary(true)}catch(error){showPhotoError(error)}finally{button.disabled=false}});
 window.addEventListener('pagehide',clearMedia);
 window.addEventListener('pageshow',()=>beginPhotos());

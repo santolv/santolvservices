@@ -146,7 +146,7 @@ Consulta la [guía para Windows y Linux](backend/README.md#instalación-local).
 
 ## Fotos conectado
 
-La galería usa recuadros 4:3. Rust genera WebP de 256 y 1280 px sobre el lado
+La galería usa recuadros 4:3. Rust genera WebP de 1280 px sobre el lado
 mayor, conservando la proporción y sin ampliar fotos pequeñas. Los originales
 se mantienen intactos. Una cola PostgreSQL persistente genera cada versión una
 vez y conserva los derivados en photos.derivatives. Cambiar el contenido,
@@ -156,9 +156,9 @@ La ampliación solicita el original. Las respuestas usan caché privada con
 revalidación de permisos y ETag.
 
 El procesamiento admite JPEG, PNG, GIF y WebP con image e image-webp,
-sin ejecutables externos. Usa un solo decodificador, un archivo de hasta 30 MiB,
-16 millones de píxeles, dimensiones máximas de 12000 px y un límite de asignación
-del decodificador de 128 MiB. El consumo total incluye el archivo y las versiones
+sin ejecutables externos. Usa un solo decodificador, un archivo de hasta 256 MiB,
+200 millones de píxeles, dimensiones máximas de 32768 px y un límite de asignación
+del decodificador de 1 GiB. El procesador lee del disco y mantiene una sola foto activa. El límite del decodificador es 1 GiB, y el consumo total también incluye transformaciones de orientación y versiones
 reducidas. GIF genera una imagen estática. AVIF conserva su original pero queda
 fuera de la generación de derivados con estos codecs habilitados. Los errores de
 formato se registran para evitar reprocesamiento continuo. WebP se codifica sin
@@ -174,7 +174,7 @@ metadatos EXIF/XMP/GPS.
 - Favoritos persistentes con control de revisiones, álbumes como carpetas y
   subidas dentro del álbum abierto.
 - Papelera y restauración mediante el motor existente y su conservación.
-- JPEG, PNG, WebP, GIF y AVIF de hasta 30 MiB. Fechas de subida y búsqueda sobre
+- JPEG, PNG, WebP, GIF y AVIF de hasta 256 MiB. Fechas de subida y búsqueda sobre
   los elementos cargados.
 
 Pendientes: miniaturas derivadas en el servidor, EXIF, vídeo, HEIC/RAW y clientes

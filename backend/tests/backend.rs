@@ -2025,7 +2025,7 @@ async fn photo_derivatives_are_persistent_private_and_versioned(pool: PgPool) {
         app.clone(),
         "photos",
     ));
-    let path = format!("/api/v1/photos/{node}/image/256");
+    let path = format!("/api/v1/photos/{node}/image/1280");
     let result = async {
         let mut ready = None;
         for _ in 0..40 {
@@ -2042,7 +2042,7 @@ async fn photo_derivatives_are_persistent_private_and_versioned(pool: PgPool) {
         let (_, headers, bytes) = ready.expect("thumbnail generated");
         assert_eq!(headers["content-type"], "image/webp");
         assert_eq!(headers["cache-control"], "private, no-cache");
-        assert_eq!(image::load_from_memory(&bytes).unwrap().width(), 256);
+        assert_eq!(image::load_from_memory(&bytes).unwrap().width(), 1280);
         assert_eq!(
             h.req("GET", &path, Some(&bob.token), &[], Body::empty())
                 .await

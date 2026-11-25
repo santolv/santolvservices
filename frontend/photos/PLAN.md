@@ -29,7 +29,7 @@ referencia; sus restricciones de demo y repositorio independiente están superad
 - [x] Biblioteca paginada, originales autenticados, favoritos y álbumes persistentes.
 - [x] Papelera y restauración mediante el motor de Drive.
 - [x] Fechas de subida explícitas y búsqueda sobre elementos cargados.
-- [x] Derivados WebP persistentes de 256/1280 px, cola Rust, permisos, caché privada y carga visible virtualizada.
+- [x] Derivados WebP persistentes de 1280 px, cola Rust, permisos, caché privada y carga visible virtualizada.
 - [ ] Vídeo, clientes móviles y decodificación AVIF.
 - [ ] Reanudación de la cola de Fotos tras cerrar la pestaña.
 - [ ] Renombrar álbumes y organizar fotos ya subidas desde la interfaz de Fotos.

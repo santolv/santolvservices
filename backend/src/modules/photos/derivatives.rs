@@ -12,27 +12,24 @@ use axum::{
 };
 use image::ImageDecoder;
 use sqlx::Row;
-use std::{
-    io::{BufReader, Cursor},
-    time::Duration,
-};
+use std::{io::BufReader, time::Duration};
 use uuid::Uuid;
 
 // One decoder in the process, including when more than one app instance is constructed.
 static PROCESSOR: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
-fn encode(bytes: Vec<u8>) -> std::result::Result<(Vec<u8>, Vec<u8>), String> {
-    let mut reader = image::ImageReader::new(BufReader::new(Cursor::new(bytes)))
+fn encode(source: impl std::io::BufRead + std::io::Seek) -> std::result::Result<Vec<u8>, String> {
+    let mut reader = image::ImageReader::new(source)
         .with_guessed_format()
         .map_err(|e| e.to_string())?;
     let mut limits = image::Limits::default();
-    limits.max_alloc = Some(128 * 1024 * 1024);
-    limits.max_image_width = Some(12000);
-    limits.max_image_height = Some(12000);
+    limits.max_alloc = Some(1024 * 1024 * 1024);
+    limits.max_image_width = Some(32768);
+    limits.max_image_height = Some(32768);
     reader.limits(limits);
     let mut decoder = reader.into_decoder().map_err(|e| e.to_string())?;
     let (width, height) = decoder.dimensions();
-    if width == 0 || height == 0 || u64::from(width) * u64::from(height) > 16_000_000 {
+    if width == 0 || height == 0 || u64::from(width) * u64::from(height) > 200_000_000 {
         return Err("image_limits".into());
     }
     let orientation = decoder.orientation().map_err(|e| e.to_string())?;
@@ -57,7 +54,7 @@ fn encode(bytes: Vec<u8>) -> std::result::Result<(Vec<u8>, Vec<u8>), String> {
             .map_err(|e| e.to_string())?;
         Ok(output)
     };
-    Ok((variant(256)?, variant(1280)?))
+    variant(1280)
 }
 
 pub async fn run(app: App) {
@@ -98,31 +95,24 @@ async fn process(app: &App) -> Result<()> {
         )
         .await?;
         let result = async {
-            use tokio::io::AsyncReadExt;
             let file = storage::open_verified(&path).await?;
-            if row.get::<i64, _>("size") > 30 * 1024 * 1024 {
+            if file.metadata().await?.len() > 256 * 1024 * 1024 {
                 return Err(Error::bad("image_limits"));
             }
-            let mut bytes = Vec::new();
-            file.take(30 * 1024 * 1024 + 1)
-                .read_to_end(&mut bytes)
-                .await?;
-            if bytes.len() > 30 * 1024 * 1024 {
-                return Err(Error::bad("image_limits"));
-            }
-            tokio::task::spawn_blocking(move || encode(bytes))
+            let source = BufReader::new(file.into_std().await);
+            tokio::task::spawn_blocking(move || encode(source))
                 .await
                 .map_err(|_| Error::unavailable())?
                 .map_err(|_| Error::bad("invalid_image"))
         }
         .await;
-        let (thumbnail, preview, error) = match result {
-            Ok((thumbnail, preview)) => (Some(thumbnail), Some(preview), false),
-            Err(error) if error.0 == StatusCode::BAD_REQUEST => (None, None, true),
+        let (preview, error) = match result {
+            Ok(preview) => (Some(preview), false),
+            Err(error) if error.0 == StatusCode::BAD_REQUEST => (None, true),
             Err(error) => return Err(error),
         };
-        sqlx::query("INSERT INTO derivatives(node_id,version_id,thumbnail,preview,error) VALUES($1,$2,$3,$4,$5) ON CONFLICT(node_id) DO UPDATE SET version_id=excluded.version_id,thumbnail=excluded.thumbnail,preview=excluded.preview,error=excluded.error")
-            .bind(id).bind(row.get::<Uuid,_>("current_version")).bind(thumbnail).bind(preview).bind(error).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO derivatives(node_id,version_id,preview,error) VALUES($1,$2,$3,$4) ON CONFLICT(node_id) DO UPDATE SET version_id=excluded.version_id,preview=excluded.preview,error=excluded.error")
+            .bind(id).bind(row.get::<Uuid,_>("current_version")).bind(preview).bind(error).execute(&mut *tx).await?;
     }
     sqlx::query("DELETE FROM derivative_jobs WHERE node_id IN (SELECT node_id FROM derivatives)")
         .execute(&mut *tx)
@@ -137,17 +127,16 @@ pub async fn get(
     Path((id, size)): Path<(Uuid, u32)>,
     headers: HeaderMap,
 ) -> Result<Response> {
-    if !matches!(size, 256 | 1280) {
+    if size != 1280 {
         return Err(Error::bad("invalid_image_size"));
     }
     let mut tx = app.db.begin().await?;
     let node = files::access(&mut tx, id, user.id, 1, false).await?;
     let row = sqlx::query(
-        "SELECT CASE WHEN $3=256 THEN thumbnail ELSE preview END AS content,error FROM derivatives WHERE node_id=$1 AND version_id=$2",
+        "SELECT preview AS content,error FROM derivatives WHERE node_id=$1 AND version_id=$2",
     )
     .bind(id)
     .bind(node.current_version)
-    .bind(size as i32)
     .fetch_optional(&mut *tx)
     .await?;
     let mut response = if let Some(row) = row {
@@ -189,9 +178,10 @@ pub async fn get(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
     #[test]
     fn variants_preserve_original_ratio_and_never_upscale() {
-        for (width, height) in [(2000, 1000), (40, 80)] {
+        for (width, height) in [(2000, 1000), (40, 80), (6000, 3000)] {
             let original = image::DynamicImage::new_rgb8(width, height);
             let mut source = Cursor::new(Vec::new());
             original
@@ -199,8 +189,8 @@ mod tests {
                 .unwrap();
             let bytes = source.into_inner();
             let retained = bytes.clone();
-            let (thumbnail, preview) = encode(bytes).unwrap();
-            for (size, bytes) in [(256, thumbnail), (1280, preview)] {
+            let preview = encode(Cursor::new(bytes)).unwrap();
+            for (size, bytes) in [(1280, preview)] {
                 assert_eq!(&bytes[0..4], b"RIFF");
                 assert!(!bytes.windows(4).any(|w| matches!(w, b"EXIF" | b"XMP ")));
                 let result = image::load_from_memory(&bytes).unwrap();
@@ -210,6 +200,6 @@ mod tests {
             }
             assert_eq!(image::load_from_memory(&retained).unwrap().width(), width);
         }
-        assert!(encode(b"not an image".to_vec()).is_err());
+        assert!(encode(Cursor::new(b"not an image")).is_err());
     }
 }

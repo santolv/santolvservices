@@ -82,7 +82,11 @@ impl Frontend {
         self
     }
     fn with_shell(html: &str) -> Arc<str> {
-        html.replacen(
+        html.replace(
+            "<!-- SANTOLV_SHELL -->",
+            include_str!("../../frontend/shell.html"),
+        )
+        .replacen(
             "<head>",
             &format!(
                 "<head><style>{}</style><script>{}</script>",

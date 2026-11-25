@@ -2,6 +2,8 @@
 (() => {
   'use strict';
   const key = 'santolv.theme';
+  const API_ORIGIN=location.protocol==='https:'?location.origin:'http://localhost:8443';
+  let account;
   const media = window.matchMedia('(prefers-color-scheme: dark)');
   const valid = value => ['light', 'dark', 'system'].includes(value) ? value : 'light';
   function saved() {
@@ -26,12 +28,56 @@
   }
   window.SantolvShell = {
     setTheme,
+    account(name, handlers) {
+      account = handlers;
+      const trigger = document.querySelector('.shell-profile');
+      if (!trigger) return;
+      trigger.hidden = !name;
+      document.getElementById('shell-username').textContent = name || '';
+      document.getElementById('shell-initials').textContent = (name || '').slice(0, 2).toUpperCase();
+      document.querySelector('[data-shell-account="profile"]').hidden = !handlers?.profile;
+      if (!name) document.getElementById('shell-account-menu').hidePopover();
+    },
     toggleTheme() { setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); },
     preference() { return preference; }
   };
   function bind() {
     for (const button of document.querySelectorAll('[data-shell-theme]')) {
       button.addEventListener('click', window.SantolvShell.toggleTheme);
+    }
+    document.getElementById?.('shell-apps-menu')?.addEventListener('beforetoggle', async event => {
+      if (event.newState !== 'open') return;
+      const status = document.getElementById('shell-apps-status');
+      const links = [...document.querySelectorAll('[data-shell-service]')];
+      for (const link of links) link.hidden = true;
+      status.hidden = false;
+      status.textContent = 'Cargando aplicaciones…';
+      try {
+        const response = await fetch(API_ORIGIN + '/api/v1/services', {credentials: 'include'});
+        if (!response.ok) throw new Error();
+        const {items} = await response.json();
+        for (const link of links) link.hidden = !items.some(item => item.enabled && item.id === link.dataset.shellService);
+        status.hidden = links.some(link => !link.hidden);
+        status.textContent = 'No hay aplicaciones activas.';
+      } catch { status.textContent = 'No se pudieron consultar las aplicaciones.'; }
+    });
+    for (const button of document.querySelectorAll('[data-shell-account]')) {
+      button.addEventListener('click', async () => {
+        const action = account?.[button.dataset.shellAccount];
+        if (!action) return;
+        const menu = document.getElementById('shell-account-menu');
+        const error = document.getElementById('shell-account-error');
+        error.hidden = true;
+        button.disabled = true;
+        try {
+          if (button.dataset.shellAccount === 'profile') menu.hidePopover();
+          await action();
+          menu.hidePopover();
+        } catch (failure) {
+          error.textContent = failure.message || 'No se pudo completar la operación.';
+          error.hidden = false;
+        } finally { button.disabled = false; }
+      });
     }
     apply();
   }

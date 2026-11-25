@@ -6,7 +6,21 @@
 :root[data-theme="dark"] .shell-sun{display:none}:root[data-theme="dark"] .shell-moon{display:block}
 :root[data-theme="dark"] .shell-button{background:#29292f;color:#d4d4de;border-color:#42424b}
 :root[data-theme="dark"] .shell-button:hover{background:#383842}
-.shell-account{display:inline-flex;align-items:center;gap:7px;max-width:160px;border:0;border-radius:8px;padding:4px 7px;background:transparent;color:inherit;font:inherit;cursor:pointer}
-.shell-account:hover{background:var(--fill,#ededf2)}.shell-account svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.5}
-.shell-account-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px;font-size:12px}
-@media(max-width:620px){.shell-controls{gap:6px}.shell-account-name{display:none}.shell-account{padding:2px}.shell-button{width:32px;height:32px}}
+.shell-home{width:auto;height:36px;gap:7px;padding:0 13px;font:600 13px system-ui,sans-serif;background:#eaf3ff;color:#135caa;border-color:#d4e7ff}
+.shell-home:hover{background:#dcecff}
+:root[data-theme="dark"] .shell-home{background:#263a53;color:#b9d9ff;border-color:#395674}
+.toolbar .shell-home{display:none}
+.shell-profile{border-radius:50%;font:650 11px system-ui,sans-serif}
+.shell-create{margin-inline-start:auto;margin-inline-end:8px}
+.shell-controls [hidden]{display:none!important}
+.shell-menu{position:fixed;inset:58px 14px auto auto;margin:0;width:min(230px,calc(100vw - 28px));padding:8px;border:1px solid #dedee5;border-radius:12px;background:#fff;color:#22232b;box-shadow:0 10px 32px #17192424;font:13px system-ui,sans-serif}
+.shell-menu strong{display:block;padding:8px 9px;overflow-wrap:anywhere}
+.shell-menu a,.shell-menu button{display:flex;align-items:center;gap:9px;width:100%;min-height:36px;padding:7px 9px;border:0;border-radius:7px;background:transparent;color:inherit;text-decoration:none;text-align:left;font:inherit;cursor:pointer}
+.shell-menu a:hover,.shell-menu button:hover{background:#edf3fa}
+.shell-menu p{margin:0;padding:8px 9px;color:inherit;font:inherit}
+.shell-app-mark{height:9px;width:9px;border-radius:50%;background:#ab5be0}
+.shell-drive-mark{background:#2684ed}.shell-photos-mark{background:#e86296}
+:root[data-theme="dark"] .shell-menu{background:#26262d;color:#efeff5;border-color:#42424b}
+:root[data-theme="dark"] .shell-menu a:hover,:root[data-theme="dark"] .shell-menu button:hover{background:#373743}
+@media(max-width:620px){.shell-controls{gap:5px}.shell-home{padding:0 8px}.shell-create{margin-inline-end:4px}.app-header .brand{gap:4px}}
+@media(max-width:390px){.shell-home span{display:none}.shell-home{width:34px;padding:0}.app-header .shell-create{margin-inline-start:auto}}

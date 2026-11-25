@@ -17,10 +17,12 @@ correspondiente con CSP y las tres interfaces se incluyen en el ejecutable al
 compilar. Comparten cookies HttpOnly, sesiones y protección CSRF; no guardan
 tokens en localStorage ni en enlaces. Cerrar sesión revoca el acceso común.
 
-La barra superior reúne tema global, aplicaciones (cuatro puntos para volver a
-Inicio) y cuenta. Claro/oscuro se guarda con una única preferencia del navegador
-y se sincroniza entre servicios y pestañas. Fotos permite también elegir el tema
-del sistema desde Ajustes; esa elección se aplica a todos los servicios.
+La barra superior reúne el tema global, el menú de aplicaciones de cuatro
+puntos y la cuenta. Desde Drive y Fotos, el botón Inicio vuelve al selector.
+El menú muestra los servicios activos. Cambiar de cuenta cierra la sesión
+actual y vuelve al formulario de acceso. Claro/oscuro se guarda en el navegador
+y se sincroniza entre servicios y pestañas. Fotos permite elegir el tema del
+sistema desde Ajustes y aplica esa elección a todos los servicios.
 
 ## Almacenamiento
 

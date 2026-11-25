@@ -42,23 +42,23 @@
 :root[data-theme="dark"] .shell-menu{background:#26262d;color:#efeff5;border-color:#42424b}
 :root[data-theme="dark"] .shell-menu a:hover,:root[data-theme="dark"] .shell-menu button:hover{background:#373743}
 .sidebar-top{height:46px;display:flex;align-items:center;padding-left:3px;margin-bottom:9px;flex:none}
-.app .shell-sidebar-toggle{display:grid;place-items:center;flex:none;width:30px;height:30px;padding:0;border:0;border-radius:7px;background:transparent;color:var(--blue);cursor:pointer}
-.app .shell-sidebar-toggle svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
-.app .side .shell-sidebar-toggle svg{width:21.6px;height:21.6px}
-.app .side{padding:0 10px 14px}
-.app .side nav{gap:2px}
-.app .side :is(.nav,.album-link,.space-link){display:flex;align-items:center;gap:9px;box-sizing:border-box;height:34px;min-height:34px;padding:5px 10px;border-radius:6px;font-size:15.6px;font-weight:500;line-height:24px;white-space:nowrap;overflow:hidden}
+.app .shell-sidebar-toggle{display:grid;place-items:center;flex:none;width:32.1px;height:32.1px;padding:0;border:0;border-radius:7.49px;background:transparent;color:var(--blue);cursor:pointer}
+.app .shell-sidebar-toggle svg{width:19.26px;height:19.26px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+.app .side .shell-sidebar-toggle svg{width:23.112px;height:23.112px}
+.app .side{padding:0 10.7px 14.98px}
+.app .side nav{gap:2.14px}
+.app .side :is(.nav,.album-link,.space-link){display:flex;align-items:center;gap:9.63px;box-sizing:border-box;height:36.38px;min-height:36.38px;padding:5.35px 10.7px;border-radius:6.42px;font-size:16.692px;font-weight:500;line-height:25.68px;white-space:nowrap;overflow:hidden}
 .app .side :is(.nav,.album-link,.space-link):is(:hover,[aria-current="page"],.active){font-weight:500;transform:none}
-.app .side :is(.nav,.album-link,.space-link)>svg{width:21.6px;height:21.6px;flex:none}
+.app .side :is(.nav,.album-link,.space-link)>svg{width:23.112px;height:23.112px;flex:none}
 .app .side :is(.nav,.album-link,.space-link)>span:not(.count){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.app .side :is(.count,.side-note,.storage){font-size:14.4px}
+.app .side :is(.count,.side-note,.storage){font-size:15.408px}
 .app .shell-sidebar-toggle:hover{background:var(--fill)}
-.app .shell-sidebar-toggle:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-.app .shell-upload-button{display:grid;place-items:center;flex:none;width:32px;height:32px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--blue);cursor:pointer}
-.app .shell-upload-button svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.55;stroke-linecap:round;stroke-linejoin:round}
+.app .shell-sidebar-toggle:focus-visible{outline:2.14px solid var(--blue);outline-offset:2.14px}
+.app .shell-upload-button{display:grid;place-items:center;flex:none;width:34.24px;height:34.24px;padding:0;border:0;border-radius:8.56px;background:transparent;color:var(--blue);cursor:pointer}
+.app .shell-upload-button svg{width:20.33px;height:20.33px;fill:none;stroke:currentColor;stroke-width:1.55;stroke-linecap:round;stroke-linejoin:round}
 .app .shell-upload-button:not(:disabled):hover{background:var(--fill)}
 .app .shell-upload-button:disabled{opacity:.3;cursor:default}
-.app .shell-upload-button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.app .shell-upload-button:focus-visible{outline:2.14px solid var(--blue);outline-offset:2.14px}
 @media(max-width:620px){.app .shell-upload-button{width:29px;height:33px}.app .shell-upload-button svg{width:18px;height:18px}}
 .app .shell-sidebar-toggle[data-shell-sidebar="show"]{display:none}
 .app.sidebar-hidden .shell-sidebar-toggle[data-shell-sidebar="show"]{display:grid}

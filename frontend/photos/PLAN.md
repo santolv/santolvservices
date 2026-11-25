@@ -13,6 +13,7 @@ referencia; sus restricciones de demo y repositorio independiente están superad
 - [x] Control lateral de la fototeca compartido con Drive, en el panel y la barra de herramientas.
 - [x] Barras laterales de Drive y Fotos con texto e iconos un 20 % mayores y un 7 % más de ancho.
 - [x] Medidas compartidas con Drive y etiquetas de una sola línea con altura estable al seleccionar.
+- [x] Contenido de las páginas ampliado un 7 %, conservando las medidas de la barra superior global.
 - [x] Página de cuenta compartida para editar el nombre visible y el avatar de cada usuario.
 - [x] Botón de subida compartido con Drive y carpeta protegida en Mi unidad.
 - [x] Dependencia de Drive para abrir Fotos y ejecutar sus tareas internas.

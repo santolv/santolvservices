@@ -156,10 +156,10 @@ main{grid-row:2;padding:79.18px 23.54px 0;background:var(--bg);scroll-padding-to
 .app .empty{padding-top:59.92px}
 .photo-day{padding:16.05px 25.68px 7.49px;font-size:17.12px;font-weight:650;letter-spacing:-.01em}
 .photo-day span{margin-inline-start:8.56px;color:var(--sub);font-size:12.84px;font-weight:500}
-.app .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,calc(var(--thumb) * 16 / 9)),1fr));gap:2.14px;padding:0 2.14px}
+.app .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,calc(var(--thumb) * 9 / 16)),1fr));gap:2.14px;padding:0 2.14px}
 .photo-loading-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--thumb)),1fr));grid-auto-rows:var(--thumb);gap:2.14px;padding:14.98px 2.14px 0}
 .photo-loading-grid span{background:var(--fill)}
-.app .photo-card{aspect-ratio:16/9;height:auto;border-radius:0}
+.app .photo-card{aspect-ratio:9/16;height:auto;border-radius:0}
 .app .photo-open{height:100%;aspect-ratio:auto;border-radius:0}
 .app .photo-open img{width:100%;height:100%;object-fit:cover}
 .app .photo-card.is-selected{border-radius:7.49px}

@@ -12,6 +12,23 @@ assert.deepEqual([...pendingImage.classes],[]);
 pendingImage.listeners.load();
 assert.deepEqual([...pendingImage.classes],['is-loaded','is-arriving']);
 assert.deepEqual([...cachedImage.classes],['is-loaded']);
+const thumbnailCode=html.slice(html.indexOf('function restoreThumbnailSize'),html.indexOf("document.addEventListener('click',async event=>",html.indexOf('function restoreThumbnailSize')));
+let savedThumbnail='240',renderedThumbnail;
+const thumbnailInput={value:'150'};
+const thumbnailContext=vm.createContext({
+ $:id=>id==='thumbnail-size'?thumbnailInput:{querySelectorAll:()=>[]},
+ document:{documentElement:{style:{setProperty(_,value){renderedThumbnail=value}}}},
+ localStorage:{getItem(){return savedThumbnail},setItem(_,value){savedThumbnail=value}},
+ reducedMotion:{matches:true}
+});
+vm.runInContext(thumbnailCode+';restoreThumbnailSize()',thumbnailContext);
+assert.equal(renderedThumbnail,'240px');
+vm.runInContext('thumbnailSize(220)',thumbnailContext);
+assert.equal(savedThumbnail,'220');
+thumbnailInput.value='150';vm.runInContext('restoreThumbnailSize()',thumbnailContext);
+assert.equal(thumbnailInput.value,'220');
+savedThumbnail='invalid';vm.runInContext('restoreThumbnailSize()',thumbnailContext);
+assert.equal(thumbnailInput.value,'220');
 assert(!html.includes('data-route="imports"')&&!html.includes('Importaciones'));
 assert(html.includes('<div class="photo-tools-middle"><!-- SANTOLV_UPLOAD_PHOTO --></div>'));
 for(const id of ['viewer','viewer-image','info-dialog','file-input','photo-inspector'])assert(html.includes(`id="${id}"`),id);
@@ -20,7 +37,7 @@ const requests=[],photos=[{id:'photo',revision:4,favorite:false}],elements=new M
 const $=id=>{if(!elements.has(id))elements.set(id,{hidden:true,value:'',addEventListener(){}});return elements.get(id)};
 let reply={ok:true,status:200,data:{revision:5,favorite:true}};
 const context=vm.createContext({Headers,Blob,ArrayBuffer,Uint8Array,URL,crypto:require('node:crypto').webcrypto,console,setTimeout,photos,albums:[],
- state:{route:'photos',selected:new Set()},$,render(){},updateViewer(){},notify(){},route(){},
+ state:{route:'photos',selected:new Set()},$,render(){},updateViewer(){},notify(){},route(){},restoreThumbnailSize(){},
  location:{protocol:'http:',hash:'',assign(){}},window:{addEventListener(){}},
  IntersectionObserver:class{observe(){}unobserve(){}disconnect(){}},
  fetch:async(url,options)=>{requests.push({url,options});return {...reply,json:async()=>reply.data}}

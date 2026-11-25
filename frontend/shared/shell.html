@@ -10,7 +10,7 @@
   <button class="shell-button" type="button" data-shell-theme aria-label="Cambiar todo a modo oscuro" aria-pressed="false">
     <svg viewBox="0 0 24 24" aria-hidden="true"><g class="shell-sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19m-14 0 1.5-1.5m11-11L19 5"/></g><path class="shell-moon" d="M20.8 13A9 9 0 0 1 11 3.2 9 9 0 1 0 20.8 13Z"/></svg>
   </button>
-  <button class="shell-button shell-profile" type="button" popovertarget="shell-account-menu" aria-label="Mi cuenta" title="Mi cuenta" hidden><span id="shell-initials"></span></button>
+  <button class="shell-button shell-profile account-avatar" type="button" popovertarget="shell-account-menu" aria-label="Mi cuenta" title="Mi cuenta" hidden></button>
   <nav id="shell-apps-menu" class="shell-menu" popover aria-label="Aplicaciones de Santolv">
     <strong>Aplicaciones</strong>
     <a href="/drive/" data-shell-service="drive" hidden><span aria-hidden="true" class="shell-app-mark shell-drive-mark"></span>Drive</a>
@@ -19,7 +19,7 @@
   </nav>
   <section id="shell-account-menu" class="shell-menu" popover aria-label="Mi cuenta">
     <strong id="shell-username"></strong>
-    <button type="button" data-shell-account="profile" hidden>Gestionar mi cuenta</button>
+    <a href="/account/">Gestionar mi cuenta</a>
     <button type="button" data-shell-account="switch">Cambiar de cuenta</button>
     <button type="button" data-shell-account="logout">Cerrar sesión</button>
     <p id="shell-account-error" role="status" hidden></p>

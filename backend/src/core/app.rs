@@ -165,6 +165,10 @@ pub fn router(s: App) -> Router {
         .route("/api/v1/auth/password", post(auth::change_password))
         .route("/api/v1/me", get(auth::me))
         .route(
+            "/api/v1/me/profile",
+            axum::routing::put(auth::update_profile),
+        )
+        .route(
             "/api/v1/openapi.json",
             get(|_: auth::User| async { axum::Json(crate::openapi::document()) }),
         )

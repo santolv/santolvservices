@@ -440,13 +440,14 @@ pub async fn logout(State(s): State<App>, u: Principal) -> Result<Response> {
     Ok(r)
 }
 pub async fn me(State(s): State<App>, u: Principal, headers: HeaderMap) -> Result<Json<Value>> {
-    let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
-        .bind(u.id)
-        .fetch_one(&s.db)
-        .await?;
+    let (username, display_name, avatar_color): (String, Option<String>, String) =
+        sqlx::query_as("SELECT username, display_name, avatar_color FROM users WHERE id=$1")
+            .bind(u.id)
+            .fetch_one(&s.db)
+            .await?;
     let session=sqlx::query("SELECT csrf_hash,extract(epoch FROM expires_at)::bigint AS expires_at FROM sessions WHERE token_hash=$1 AND expires_at>now()")
         .bind(&u.session).fetch_optional(&s.db).await?.ok_or_else(Error::auth)?;
-    let mut body = json!({"id":u.id,"username":username,"account_type":u.account_type,"must_change_password":u.must_change_password,"expires_at":session.get::<i64,_>("expires_at")});
+    let mut body = json!({"id":u.id,"username":username,"display_name":display_name,"avatar_color":avatar_color,"account_type":u.account_type,"must_change_password":u.must_change_password,"expires_at":session.get::<i64,_>("expires_at")});
     if let Some(raw) = cookie_session(&headers)? {
         let csrf = csrf_for(raw);
         if hash(&csrf) != session.get::<String, _>("csrf_hash") {
@@ -456,6 +457,41 @@ pub async fn me(State(s): State<App>, u: Principal, headers: HeaderMap) -> Resul
         body["csrf_token"] = csrf.into();
     }
     Ok(Json(body))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileUpdate {
+    display_name: Option<String>,
+    avatar_color: String,
+}
+pub async fn update_profile(
+    State(s): State<App>,
+    u: User,
+    Json(profile): Json<ProfileUpdate>,
+) -> Result<Json<Value>> {
+    let name = profile
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty());
+    if name.is_some_and(|name| name.chars().count() > 48 || name.chars().any(char::is_control)) {
+        return Err(Error::bad("invalid_display_name"));
+    }
+    if !matches!(
+        profile.avatar_color.as_str(),
+        "blue" | "teal" | "plum" | "rose" | "slate"
+    ) {
+        return Err(Error::bad("invalid_avatar_color"));
+    }
+    sqlx::query("UPDATE public.users SET display_name=$1, avatar_color=$2 WHERE id=$3")
+        .bind(name)
+        .bind(&profile.avatar_color)
+        .bind(u.id)
+        .execute(&s.db)
+        .await?;
+    Ok(Json(
+        json!({"display_name":name,"avatar_color":profile.avatar_color}),
+    ))
 }
 #[derive(Deserialize)]
 pub struct PasswordChange {

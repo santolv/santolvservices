@@ -1,4 +1,4 @@
-// Shared by Inicio, Drive and Fotos, including other open tabs on this origin.
+// Shared by Inicio, Drive, Fotos and Cuenta.
 (() => {
   'use strict';
   const key = 'santolv.theme';
@@ -31,8 +31,15 @@
     try { localStorage.setItem(key, preference); } catch {}
     apply();
   }
+  function avatar(element, profile) {
+    const words = (profile.display_name || profile.username).trim().split(/\s+/u);
+    const letters = words.length > 1 ? [Array.from(words[0])[0], Array.from(words.at(-1))[0]] : Array.from(words[0]).slice(0, 2);
+    element.textContent = letters.join('').toLocaleUpperCase('es');
+    element.dataset.avatarColor = profile.avatar_color || 'blue';
+  }
   window.SantolvShell = {
     setTheme,
+    avatar,
     session(expiresAt) {
       if (!Number.isFinite(expiresAt)) return;
       clearTimeout(sessionTimer);
@@ -41,15 +48,15 @@
     sessionEnded() {
       try { localStorage.setItem(sessionKey, String(Date.now())); } catch {}
     },
-    account(name, handlers) {
+    account(profile, handlers) {
       account = handlers;
       const trigger = document.querySelector('.shell-profile');
       if (!trigger) return;
-      trigger.hidden = !name;
-      document.getElementById('shell-username').textContent = name || '';
-      document.getElementById('shell-initials').textContent = (name || '').slice(0, 2).toUpperCase();
-      document.querySelector('[data-shell-account="profile"]').hidden = !handlers?.profile;
-      if (!name) document.getElementById('shell-account-menu').hidePopover();
+      trigger.hidden = !profile;
+      if (profile) {
+        document.getElementById('shell-username').textContent = profile.display_name || profile.username;
+        avatar(trigger, profile);
+      }
     },
     toggleTheme() { setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); },
     preference() { return preference; }
@@ -100,7 +107,6 @@
         error.hidden = true;
         button.disabled = true;
         try {
-          if (button.dataset.shellAccount === 'profile') menu.hidePopover();
           await action();
           menu.hidePopover();
         } catch (failure) {

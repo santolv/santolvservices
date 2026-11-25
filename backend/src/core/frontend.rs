@@ -12,6 +12,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct Frontend {
     html: Arc<str>,
+    account: Arc<str>,
     modules: Vec<(crate::core::manager::Service, Arc<str>)>,
     app: crate::App,
     authority: String,
@@ -43,6 +44,7 @@ impl Frontend {
         api.set_host(Some("localhost"))?;
         Ok(Self {
             html: Self::with_shell(include_str!("../../../frontend/home/index.html")),
+            account: Self::with_shell(include_str!("../../../frontend/account/index.html")),
             modules: crate::modules::REGISTERED
                 .iter()
                 .map(|service| (*service, Self::with_shell(service.html)))
@@ -89,7 +91,9 @@ impl Frontend {
 pub fn router(s: Frontend) -> Router {
     let mut router = Router::new()
         .route("/", get(index))
-        .route("/index.html", get(index));
+        .route("/index.html", get(index))
+        .route("/account", get(index))
+        .route("/account/", get(index));
     for (service, _) in &s.modules {
         for path in [
             service.page.to_owned(),
@@ -151,7 +155,11 @@ async fn index(State(s): State<Frontend>, request: Request) -> Response {
         Ok(allowed) => allowed,
         Err(error) => return no_store(error.into_response()),
     };
-    let template = module.map_or(s.html.as_ref(), |(_, html)| html.as_ref());
+    let template = if matches!(parts.uri.path(), "/account" | "/account/") {
+        &s.account
+    } else {
+        module.map_or(&s.html, |(_, html)| html)
+    };
     // Each service link is on its own line in the templates.
     let html = template
         .lines()

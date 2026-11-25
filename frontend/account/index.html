@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mi cuenta · Santolv</title>
+<style>
+:root{color-scheme:light;--canvas:#f3f3f6;--surface:#fff;--field:#f4f4f7;--line:#e5e5ec;--text:#22232a;--muted:#646573;--accent:#155cb8;--good:#146253;--error:#a62733}
+:root[data-theme="dark"]{color-scheme:dark;--canvas:#18181b;--surface:#232329;--field:#2e2e35;--line:#3b3b44;--text:#f2f2f6;--muted:#b4b4c0;--accent:#9bc8ff;--good:#8bd5be;--error:#ffabb3}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--canvas);color:var(--text);font:14px/1.45 system-ui,sans-serif}
+.skip{position:absolute;left:12px;top:-70px;z-index:30;padding:8px 12px;background:var(--surface);color:var(--accent);border-radius:8px}
+.skip:focus{top:8px}
+main{max-width:900px;margin:auto;padding:46px 24px 64px}
+h1,h2,p{margin:0}
+h1{margin-bottom:24px;font-size:32px;line-height:1.15;letter-spacing:-.04em}
+h2{font-size:16px;letter-spacing:-.015em}
+.account-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px;align-items:start}
+.account-stack{display:grid;gap:16px}
+.card{min-width:0;padding:22px;background:var(--surface);border:1px solid var(--line);border-radius:18px}
+.identity{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.avatar-preview{display:grid;place-items:center;flex:none;width:64px;height:64px;border-radius:50%;background:var(--field);font-size:22px;font-weight:650;letter-spacing:-.03em}
+.identity div{min-width:0}
+#preview-name{font-size:19px;line-height:1.25;overflow-wrap:anywhere}
+.muted{color:var(--muted);font-size:13px}
+legend,label{font-weight:600}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+.form-fields{display:grid;gap:15px}
+.field{display:grid;gap:7px}
+input:not([type="radio"]),select{width:100%;min-height:42px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;background:var(--field);color:var(--text);font:inherit}
+input:focus-visible,select:focus-visible,summary:focus-visible,.swatch input:focus-visible+span,.account-action:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.swatches{display:flex;gap:10px;flex-wrap:wrap;margin-top:9px}
+.swatch{position:relative;display:grid;place-items:center;width:42px;height:42px;cursor:pointer}
+.swatch input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.swatch span{width:30px;height:30px;border-radius:50%}
+.swatch input:checked+span{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--accent)}
+.account-action{min-height:38px;padding:0 14px;border:0;border-radius:9px;background:var(--field);color:var(--text);cursor:pointer;font:600 13px system-ui,sans-serif}
+.account-action:hover{filter:brightness(.97)}
+.account-action:disabled{opacity:.5;cursor:default}
+.primary{background:#1962c3;color:#fff}
+.button-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.status{font-size:13px;color:var(--good)}
+.status[data-error]{color:var(--error)}
+.appearance label{margin-top:12px}
+.security{padding:0}
+.security summary{padding:20px 22px;font-weight:650;font-size:15px;cursor:pointer;border-radius:18px}
+.security-body{padding:0 22px 22px}
+.security-body>p{margin-bottom:12px}
+.account-id{margin-top:15px;padding-top:15px;border-top:1px solid var(--line)}
+.account-id code{font-size:12px;overflow-wrap:anywhere}
+@media(max-width:660px){main{padding:34px 18px}.account-layout{grid-template-columns:1fr}h1{font-size:28px}}
+@media(pointer:coarse){.account-action,.swatch{min-height:44px;min-width:44px}input:not([type="radio"]),select{font-size:16px;min-height:44px}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Saltar al contenido</a>
+<!-- SANTOLV_SHELL -->
+<main id="main" tabindex="-1">
+  <h1>Mi cuenta</h1>
+  <p id="load-status" role="status">Cargando tu cuenta…</p>
+  <div id="settings" class="account-layout" hidden>
+    <section class="card" aria-labelledby="profile-title">
+      <div class="identity">
+        <span id="preview-avatar" class="avatar-preview account-avatar" aria-hidden="true"></span>
+        <div>
+          <h2 id="preview-name"></h2>
+          <p id="username" class="muted"></p>
+        </div>
+      </div>
+      <h2 id="profile-title" hidden>Perfil</h2>
+      <form id="profile-form" method="post">
+        <fieldset id="profile-fields" class="form-fields">
+          <label class="field">Nombre visible
+            <input id="display-name" autocomplete="off" maxlength="96" aria-describedby="name-help">
+            <span id="name-help" class="muted">Si lo dejas vacío, se mostrará tu usuario.</span>
+          </label>
+          <fieldset>
+            <legend>Color del avatar</legend>
+            <div class="swatches">
+              <label class="swatch"><input type="radio" name="avatar" value="blue" aria-label="Azul" checked><span class="account-avatar" data-avatar-color="blue"></span></label>
+              <label class="swatch"><input type="radio" name="avatar" value="teal" aria-label="Verde"><span class="account-avatar" data-avatar-color="teal"></span></label>
+              <label class="swatch"><input type="radio" name="avatar" value="plum" aria-label="Violeta"><span class="account-avatar" data-avatar-color="plum"></span></label>
+              <label class="swatch"><input type="radio" name="avatar" value="rose" aria-label="Rosa"><span class="account-avatar" data-avatar-color="rose"></span></label>
+              <label class="swatch"><input type="radio" name="avatar" value="slate" aria-label="Gris"><span class="account-avatar" data-avatar-color="slate"></span></label>
+            </div>
+          </fieldset>
+          <div class="button-row">
+            <button type="submit" class="account-action primary">Guardar perfil</button>
+            <p id="profile-status" class="status" role="status"></p>
+          </div>
+        </fieldset>
+      </form>
+    </section>
+    <div class="account-stack">
+      <section class="card appearance" aria-labelledby="appearance-title">
+        <h2 id="appearance-title">Apariencia</h2>
+        <label class="field">Tema en este navegador
+          <select id="theme" data-shell-theme-select>
+            <option value="light">Claro</option><option value="dark">Oscuro</option><option value="system">Sistema</option>
+          </select>
+        </label>
+      </section>
+      <details class="card security">
+        <summary>Seguridad de la cuenta</summary>
+        <div class="security-body">
+          <p class="muted">Al cambiar tu contraseña se cerrarán tus sesiones.</p>
+          <form id="password-form" method="post">
+            <fieldset id="password-fields" class="form-fields">
+              <label class="field">Contraseña actual<input id="current-password" type="password" autocomplete="current-password" maxlength="1024" required></label>
+              <label class="field">Nueva contraseña<input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></label>
+              <label class="field">Repite la nueva contraseña<input id="repeat-password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></label>
+              <div class="button-row"><button type="submit" class="account-action">Cambiar contraseña</button><p id="password-status" class="status" role="status"></p></div>
+            </fieldset>
+          </form>
+          <div class="account-id form-fields">
+            <div class="field"><strong>Identificador de cuenta</strong><code id="account-id"></code></div>
+            <div class="button-row">
+              <button type="button" id="copy-user" class="account-action">Copiar usuario</button>
+              <button type="button" id="copy-id" class="account-action">Copiar identificador</button>
+              <p id="copy-status" class="status" role="status"></p>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+</main>
+<script>
+'use strict';
+const API_ORIGIN=location.protocol==='https:'?location.origin:'http://localhost:8443';
+const get=id=>document.getElementById(id);
+const shell=window.SantolvShell;
+let me;
+
+function status(id,message,error=false){
+  const target=get(id);
+  target.textContent=message;
+  target.toggleAttribute('data-error',error);
+}
+function returnHome(){
+  document.body.hidden=true;
+  location.replace('/');
+}
+async function api(path,method='GET',body){
+  const headers={};
+  if(method!=='GET')headers['X-CSRF-Token']=me.csrf_token;
+  if(body!==undefined)headers['Content-Type']='application/json';
+  const response=await fetch(API_ORIGIN+'/api/v1'+path,{method,headers,credentials:'include',body:body===undefined?undefined:JSON.stringify(body)});
+  if(response.ok)return response.status===204?null:response.json();
+  if(response.status===401&&path!=='/auth/password')returnHome();
+  const data=await response.json().catch(()=>null);
+  const messages={
+    invalid_display_name:'Introduce un nombre de hasta 48 caracteres, en una sola línea.',
+    invalid_avatar_color:'Elige un color de la lista.',
+    authentication_required:path==='/auth/password'?'Comprueba tu contraseña actual.':'La sesión ha caducado.',
+    invalid_password_change:'Elige una contraseña distinta de la actual.',
+    password_length_12_to_1024_bytes:'Usa una contraseña de al menos 12 caracteres.',
+    rate_limited:'Espera unos minutos antes de volver a intentarlo.'
+  };
+  throw new Error(messages[data?.error?.code]||'No se pudo completar la operación.');
+}
+function draft(){
+  return {username:me.username, display_name:get('display-name').value.trim(), avatar_color:get('profile-form').querySelector('[name="avatar"]:checked').value};
+}
+function preview(){
+  const profile=draft();
+  get('preview-name').textContent=profile.display_name||profile.username;
+  shell.avatar(get('preview-avatar'),profile);
+}
+function showProfile(){
+  get('display-name').value=me.display_name||'';
+  for(const radio of get('profile-form').querySelectorAll('[name="avatar"]'))radio.checked=radio.value===me.avatar_color;
+  preview();
+  shell.account(me,{logout:endSession,switch:endSession});
+}
+async function endSession(){
+  await api('/auth/logout','POST');
+  shell.sessionEnded();
+  returnHome();
+}
+async function submit(fields,message,action){
+  get(fields).disabled=true;
+  status(message,'');
+  try{await action()}catch(error){status(message,error.message,true)}finally{get(fields).disabled=false}
+}
+get('profile-form').addEventListener('input',()=>{preview();status('profile-status','')});
+get('profile-form').addEventListener('submit',event=>{
+  event.preventDefault();
+  const {display_name,avatar_color}=draft();
+  if(Array.from(display_name).length>48){status('profile-status','Introduce un nombre de hasta 48 caracteres.',true);return}
+  submit('profile-fields','profile-status',async()=>{
+    Object.assign(me,await api('/me/profile','PUT',{display_name,avatar_color}));
+    showProfile();
+    status('profile-status','Perfil guardado.');
+  });
+});
+get('theme').addEventListener('change',event=>shell.setTheme(event.target.value));
+get('password-form').addEventListener('submit',event=>{
+  event.preventDefault();
+  const newPassword=get('new-password').value;
+  if(newPassword!==get('repeat-password').value){status('password-status','Las contraseñas no coinciden.',true);return}
+  submit('password-fields','password-status',async()=>{
+    await api('/auth/password','POST',{current_password:get('current-password').value,new_password:newPassword});
+    get('password-form').reset();
+    shell.sessionEnded();
+    returnHome();
+  });
+});
+for(const [id,key] of [['copy-user','username'],['copy-id','id']])get(id).addEventListener('click',async()=>{
+  try{await navigator.clipboard.writeText(me[key]);status('copy-status','Copiado.')}
+  catch{status('copy-status','No se pudo copiar.',true)}
+});
+api('/me').then(profile=>{
+  if(profile.must_change_password){returnHome();return}
+  me=profile;
+  shell.session(me.expires_at);
+  get('username').textContent='@'+me.username;
+  get('account-id').textContent=me.id;
+  showProfile();
+  get('settings').hidden=false;
+  get('load-status').hidden=true;
+}).catch(()=>status('load-status','No se pudo cargar tu cuenta. Recarga la página para reintentar.',true));
+</script>
+</body>
+</html>

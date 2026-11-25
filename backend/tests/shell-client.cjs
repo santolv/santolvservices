@@ -33,9 +33,13 @@ for(const app of [drive,photos]){
  app.sidebar.show.click();assert(app.classes.has('mobile-sidebar'));assert.equal(app.focused,'hide');
  app.sidebar.hide.click();assert(!app.classes.has('mobile-sidebar'));assert.equal(app.focused,'show');
 }
-for(const file of ['frontend/home/index.html','frontend/drive/index.html','frontend/photos/index.html']){
+for(const file of ['frontend/home/index.html','frontend/drive/index.html','frontend/photos/index.html','frontend/account/index.html']){
  const html=fs.readFileSync(path.join(__dirname,'../..',file),'utf8');
  assert(html.includes('<!-- SANTOLV_SHELL -->'),file);
- if(!file.includes('/home/'))for(const action of ['HIDE','SHOW'])assert(html.includes(`<!-- SANTOLV_SIDEBAR_${action} -->`),file);
+ if(file.includes('/drive/')||file.includes('/photos/'))for(const action of ['HIDE','SHOW'])assert(html.includes(`<!-- SANTOLV_SIDEBAR_${action} -->`),file);
 }
+const avatar={textContent:'',dataset:{}};
+home.window.SantolvShell.avatar(avatar,{username:'prueba',display_name:'Ana Gómez',avatar_color:'plum'});
+assert.equal(avatar.textContent,'AG');
+assert.equal(avatar.dataset.avatarColor,'plum');
 console.log('PASS tema global, pestañas, sistema y panel compartido en escritorio y móvil.');

@@ -8,6 +8,7 @@ las interfaces HTML/CSS/JavaScript se mantienen separadas:
 | `/` y `/index.html` | `frontend/home/index.html` | Acceso, cuenta y selector de servicios |
 | `/drive/` | `frontend/drive/index.html` | Archivos, carpetas, compartidos y papelera |
 | `/photos/` | `frontend/photos/index.html` | Fototeca, álbumes, favoritos, subidas y papelera |
+| `/account/` | `frontend/account/index.html` | Perfil personal, apariencia y seguridad |
 
 ## Dónde editar
 

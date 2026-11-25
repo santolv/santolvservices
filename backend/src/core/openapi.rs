@@ -50,6 +50,12 @@ pub fn document() -> Value {
         ),
         ("/api/v1/me", "get", "Current account", ""),
         (
+            "/api/v1/me/profile",
+            "put",
+            "Update the current account profile",
+            "display_name,avatar_color",
+        ),
+        (
             "/api/v1/recent",
             "get",
             "Up to 200 recently used nodes for the authenticated user; cursor is timestamp:UUID",

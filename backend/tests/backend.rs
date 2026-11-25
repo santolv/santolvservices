@@ -98,6 +98,137 @@ async fn modular_migration_preserves_existing_photo_metadata_and_file_links(pool
 }
 
 #[sqlx::test]
+async fn account_profile_is_private_mutable_and_protected_by_csrf(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    let alice = h.account("account-alice").await;
+    let bob = h.account("account-bob").await;
+    let path = "/api/v1/me/profile";
+    let profile = json!({"display_name":"  Ana Gómez  ","avatar_color":"plum"});
+    assert_eq!(
+        h.json("PUT", path, None, &[], profile.clone()).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (login, headers, body) = h
+        .req(
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            &[
+                ("origin", "http://localhost:5500"),
+                ("content-type", "application/json"),
+            ],
+            Body::from(
+                json!({"username":alice.username,"password":"very strong test password"})
+                    .to_string(),
+            ),
+        )
+        .await;
+    assert_eq!(login, StatusCode::OK);
+    let cookie = headers["set-cookie"]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap();
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    let csrf = body["csrf_token"].as_str().unwrap();
+    assert_eq!(
+        h.json("PUT", path, None, &[("cookie", cookie)], profile.clone())
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+
+    let (updated, saved) = h
+        .json(
+            "PUT",
+            path,
+            None,
+            &[("cookie", cookie), ("x-csrf-token", csrf)],
+            profile,
+        )
+        .await;
+    assert_eq!(updated, StatusCode::OK);
+    assert_eq!(
+        saved,
+        json!({"display_name":"Ana Gómez","avatar_color":"plum"})
+    );
+    let (_, me) = h
+        .json("GET", "/api/v1/me", Some(&alice.token), &[], json!(null))
+        .await;
+    assert_eq!(me["display_name"], "Ana Gómez");
+    assert_eq!(me["username"], alice.username);
+    let (_, me) = h
+        .json("GET", "/api/v1/me", Some(&bob.token), &[], json!(null))
+        .await;
+    assert_eq!(me["display_name"], Value::Null);
+    assert_eq!(me["avatar_color"], "blue");
+    assert_eq!(
+        h.json(
+            "PUT",
+            path,
+            Some(&alice.token),
+            &[],
+            json!({"display_name":"Ana","avatar_color":"url(http://example.com)"})
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        h.json(
+            "PUT",
+            path,
+            Some(&alice.token),
+            &[],
+            json!({"id":bob.id,"display_name":"Ana","avatar_color":"plum"})
+        )
+        .await
+        .0,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    let (reset, saved) = h
+        .json(
+            "PUT",
+            path,
+            Some(&alice.token),
+            &[],
+            json!({"display_name":"  ","avatar_color":"blue"}),
+        )
+        .await;
+    assert_eq!(reset, StatusCode::OK);
+    assert_eq!(saved["display_name"], Value::Null);
+
+    let web = santolvdrive::frontend::router(
+        santolvdrive::frontend::Frontend::bundled(
+            "http://localhost:5500",
+            "http://127.0.0.1:8080",
+            h.app,
+        )
+        .unwrap(),
+    );
+    let page = |cookie: &str| {
+        web.clone().oneshot(
+            Request::builder()
+                .uri("/account/")
+                .header("host", "localhost:5500")
+                .header("cookie", cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+    };
+    let anonymous = page("").await.unwrap();
+    assert_eq!(anonymous.status(), StatusCode::SEE_OTHER);
+    assert_eq!(anonymous.headers()["location"], "/");
+    let signed_in = page(cookie).await.unwrap();
+    assert_eq!(signed_in.status(), StatusCode::OK);
+    assert!(
+        String::from_utf8_lossy(&to_bytes(signed_in.into_body(), 1024 * 1024).await.unwrap())
+            .contains("id=\"profile-form\"")
+    );
+}
+
+#[sqlx::test]
 async fn only_authenticated_users_get_pages_and_only_allowed_modules_can_be_used(pool: PgPool) {
     use santolvdrive::{admin, core::manager, frontend};
     let h = Harness::new(pool).await;

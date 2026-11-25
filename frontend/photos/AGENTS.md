@@ -1,5 +1,9 @@
 # Instrucciones del proyecto
 
+- Leer `../../docs/areas/fotos/README.md` y la guía de colaboración de la raíz.
+  Usar una carpeta y rama propias para cada chat; coordinar cambios al Core,
+  file_store, migraciones y componentes compartidos.
+
 - El backend debe escribirse en Rust, siguiendo la base técnica de santolvdrive.
 - El usuario ha autorizado el mismo sistema de frontend que santolvdrive:
   HTML, CSS y JavaScript propios, sin framework ni compilación WASM.

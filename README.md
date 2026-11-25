@@ -5,12 +5,20 @@ las interfaces HTML/CSS/JavaScript se mantienen separadas:
 
 | Dirección | Interfaz | Contenido |
 | --- | --- | --- |
-| `/` y `/index.html` | `frontend/home/index.html` | Acceso, cuenta y selector de servicios |
+| `/` y `/index.html` | `frontend/home/index.html` y `login.html` | Acceso único y selector de servicios |
 | `/drive/` | `frontend/drive/index.html` | Archivos, carpetas, compartidos y papelera |
 | `/photos/` | `frontend/photos/index.html` | Fototeca, álbumes, favoritos, subidas y papelera |
 | `/account/` | `frontend/account/index.html` | Perfil personal, apariencia y seguridad |
 
 ## Dónde editar
+
+Para trabajar en varios chats o entre dos personas, usa una carpeta y rama
+independientes por tarea. La guía está en [Colaboración](docs/COLABORACION.md),
+con fichas para [Inicio](docs/areas/inicio/README.md),
+[Cuenta](docs/areas/cuenta/README.md), [Drive](docs/areas/drive/README.md),
+[Fotos](docs/areas/fotos/README.md), [Core](docs/areas/core/README.md) y
+[Compartido](docs/areas/compartido/README.md). `main` reúne los cambios mediante
+pull requests; las copias locales de trabajo viven en `.worktrees/` y no se suben.
 
 | Si cambias… | Carpeta |
 | --- | --- |

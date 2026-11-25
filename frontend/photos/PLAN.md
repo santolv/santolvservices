@@ -15,6 +15,7 @@ referencia; sus restricciones de demo y repositorio independiente están superad
 - [x] Medidas compartidas con Drive y etiquetas de una sola línea con altura estable al seleccionar.
 - [x] Contenido de las páginas ampliado un 7 %, conservando las medidas de la barra superior global.
 - [x] Tamaño de miniaturas guardado en el navegador, acceso Papelera y barra de herramientas con el fondo de la fototeca.
+- [x] Fondo oscuro gris compartido visualmente con Drive.
 - [x] Página de cuenta compartida para editar el nombre visible y el avatar de cada usuario.
 - [x] Botón de subida compartido con Drive y carpeta protegida en Mi unidad.
 - [x] Dependencia de Drive para abrir Fotos y ejecutar sus tareas internas.

@@ -45,6 +45,13 @@
 .app .shell-sidebar-toggle{display:grid;place-items:center;flex:none;width:30px;height:30px;padding:0;border:0;border-radius:7px;background:transparent;color:var(--blue);cursor:pointer}
 .app .shell-sidebar-toggle svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
 .app .side .shell-sidebar-toggle svg{width:21.6px;height:21.6px}
+.app .side{padding:0 10px 14px}
+.app .side nav{gap:2px}
+.app .side :is(.nav,.album-link,.space-link){display:flex;align-items:center;gap:9px;box-sizing:border-box;height:34px;min-height:34px;padding:5px 10px;border-radius:6px;font-size:15.6px;font-weight:500;line-height:24px;white-space:nowrap;overflow:hidden}
+.app .side :is(.nav,.album-link,.space-link):is(:hover,[aria-current="page"],.active){font-weight:500;transform:none}
+.app .side :is(.nav,.album-link,.space-link)>svg{width:21.6px;height:21.6px;flex:none}
+.app .side :is(.nav,.album-link,.space-link)>span:not(.count){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .side :is(.count,.side-note,.storage){font-size:14.4px}
 .app .shell-sidebar-toggle:hover{background:var(--fill)}
 .app .shell-sidebar-toggle:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .app .shell-upload-button{display:grid;place-items:center;flex:none;width:32px;height:32px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--blue);cursor:pointer}

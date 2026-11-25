@@ -14,9 +14,8 @@ Notas y tareas serán un único servicio y módulo, con rutas y tablas propias.
 Core seguirá siendo responsable de autenticación, permisos, configuración y
 activación. El servicio no podrá ser instalado ni activado por usuarios comunes.
 
-## Contrato v1 propuesto
+## Contrato v1 aprobado
 
-La propuesta queda pendiente de aprobación del modelo, los permisos y la API.
 El backend reutilizará `axum`, `tokio`, `sqlx`, `serde`, `uuid` y `time` del
 proyecto. La lógica irá en archivos `.rs`, el esquema en una migración `.sql`
 y la página usará HTML, CSS y JavaScript. La API intercambiará JSON. Las notas
@@ -69,7 +68,9 @@ Las rutas cuelgan de `/api/v1/notes-tasks`. Las escrituras requieren JSON.
   parámetros y escapan los comodines para que `%` y `_` sean literales.
 - El título recortado admite de 1 a 200 caracteres. El contenido admite de 0
   a 50 000 caracteres y la búsqueda hasta 200. Un `q` vacío tras recortarlo
-  equivale a omitirlo. Los valores inválidos devuelven `400`.
+  equivale a omitirlo. Los valores inválidos devuelven `400`. Los cuerpos que
+  superan el límite de lectura devuelven `413`, y las escrituras que esperan
+  un cuerpo JSON devuelven `415` si el tipo de contenido es incompatible.
 
 ### Permisos
 
@@ -84,11 +85,12 @@ el control administrativo de Core.
 
 ## Integración
 
-Cuando el contrato esté aprobado, reservar el siguiente número de migración
-con Core. Preparar el descriptor `Service` con identificador `notes-tasks`,
-esquema `notes_tasks`, página `/notes-tasks`, `requires: None` y
-`uses_file_store: false`. Coordinar con Core el registro en
-`backend/src/modules/mod.rs` y la gestión del estado instalado y desactivado.
+La migración `0019_notes_tasks.sql` prepara el esquema. El descriptor `Service`
+declara el identificador `notes-tasks`, el esquema `notes_tasks`, la página
+`/notes-tasks`, `requires: None` y `uses_file_store: false`. La integración debe
+confirmar la numeración de la migración y coordinar con Core el registro en
+`backend/src/modules/mod.rs`, los enlaces de navegación y la instalación del
+módulo en estado desactivado.
 
 No modificar migraciones ya aplicadas. No cambiar API, shell, gestor o motor de
 archivos desde esta área sin coordinar su PR con el área responsable.
@@ -97,13 +99,16 @@ archivos desde esta área sin coordinar su PR con el área responsable.
 
 ```sh
 cargo fmt --manifest-path backend/Cargo.toml --check
+rustfmt --edition 2024 --check backend/src/modules/notes_tasks/mod.rs
 cargo clippy --manifest-path backend/Cargo.toml --locked --all-targets -- -D warnings
 cargo test --manifest-path backend/Cargo.toml --locked
 git diff --check
 ```
 
-El módulo debe quedar desactivado por defecto hasta que Core registre su
-instalación y el administrador lo active.
+Las pruebas del módulo se compilan cuando `modules/mod.rs` declara `notes_tasks`.
+Hasta la integración, probarlas en una copia aislada con el descriptor añadido
+a `REGISTERED` y una base PostgreSQL de pruebas. La migración no instala el
+servicio. Las pruebas insertan el estado de instalación en su propia base.
 
 Probar en un PostgreSQL aislado la migración desde una base vacía y desde la
 versión anterior. Las pruebas de API deben cubrir creación, edición, archivado,

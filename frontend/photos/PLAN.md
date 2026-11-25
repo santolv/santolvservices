@@ -19,6 +19,7 @@ referencia; sus restricciones de demo y repositorio independiente están superad
 - [x] Almacenamiento usuarios/<UUID>/drive/Photos y acceso protegido desde Mi unidad.
 - [x] Visor centrado que conserva las proporciones y el tamaño original de las fotos pequeñas.
 - [x] Marcadores durante la carga de la biblioteca y aparición gradual de las imágenes al estar listas.
+- [x] Controles con superficies sólidas de estilo Apple, sin Liquid Glass ni reflejos siguiendo el cursor.
 - [x] Subida real por bloques con integridad y confirmación durable.
 - [x] Biblioteca paginada, originales autenticados, favoritos y álbumes persistentes.
 - [x] Papelera y restauración mediante el motor de Drive.

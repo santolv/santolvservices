@@ -4,7 +4,7 @@ Servicio unificado para notas personales y tareas. Su código pertenecerá a:
 
 - Backend Rust: `backend/src/modules/notes_tasks/`
 - Frontend: `frontend/notes-tasks/`
-- Migración PostgreSQL: siguiente número disponible en `backend/migrations/`
+- Migración PostgreSQL: `backend/migrations/0020_notes_tasks.sql`
 - Chat: `SantolvDrive · Notas y Tareas`
 - Rama del chat: `codex/chat-notas-tareas`
 
@@ -85,12 +85,16 @@ el control administrativo de Core.
 
 ## Integración
 
-La migración `0019_notes_tasks.sql` prepara el esquema. El descriptor `Service`
-declara el identificador `notes-tasks`, el esquema `notes_tasks`, la página
-`/notes-tasks`, `requires: None` y `uses_file_store: false`. La integración debe
-confirmar la numeración de la migración y coordinar con Core el registro en
-`backend/src/modules/mod.rs`, los enlaces de navegación y la instalación del
-módulo en estado desactivado.
+La migración `0020_notes_tasks.sql` prepara el esquema e instala el módulo
+desactivado. El descriptor `Service` declara el identificador `notes-tasks`,
+el esquema `notes_tasks`, la página `/notes-tasks`, `requires: None` y
+`uses_file_store: false`. Core muestra el acceso en Inicio para los usuarios
+con permiso cuando el servicio está activo.
+
+Después de actualizar el servidor, el administrador puede activarlo con
+`services enable notes-tasks` desde la consola local del servidor. Desde
+`backend/` en Windows, el comando para la instalación central es
+`.\servidor\santolvdrive.exe services enable notes-tasks`.
 
 No modificar migraciones ya aplicadas. No cambiar API, shell, gestor o motor de
 archivos desde esta área sin coordinar su PR con el área responsable.
@@ -105,10 +109,9 @@ cargo test --manifest-path backend/Cargo.toml --locked
 git diff --check
 ```
 
-Las pruebas del módulo se compilan cuando `modules/mod.rs` declara `notes_tasks`.
-Hasta la integración, probarlas en una copia aislada con el descriptor añadido
-a `REGISTERED` y una base PostgreSQL de pruebas. La migración no instala el
-servicio. Las pruebas insertan el estado de instalación en su propia base.
+Las pruebas ejecutan el registro y la navegación de Core con su propia base
+PostgreSQL. Comprueban la instalación desactivada y la visibilidad según el
+estado del módulo y los permisos del usuario.
 
 Probar en un PostgreSQL aislado la migración desde una base vacía y desde la
 versión anterior. Las pruebas de API deben cubrir creación, edición, archivado,

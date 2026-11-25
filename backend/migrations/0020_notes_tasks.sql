@@ -35,3 +35,5 @@ CREATE INDEX notes_tasks_tasks_page
 CREATE INDEX notes_tasks_tasks_note_page
     ON notes_tasks.tasks (owner_id, note_id, created_at DESC, id DESC)
     WHERE note_id IS NOT NULL;
+
+INSERT INTO public.service_settings (id, enabled) VALUES ('notes-tasks', false);

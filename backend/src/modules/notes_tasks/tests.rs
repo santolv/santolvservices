@@ -11,7 +11,7 @@ use tokio::sync::Semaphore;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use crate::{App, auth, core::manager, router};
+use crate::{App, auth, core::manager, frontend, router};
 
 const NOTES: &str = "/api/v1/notes-tasks/notes";
 const TASKS: &str = "/api/v1/notes-tasks/tasks";
@@ -80,12 +80,10 @@ async fn call(
     }
 }
 
-#[sqlx::test]
-async fn routes_use_core_permissions_and_keep_records_private(db: PgPool) {
-    let root = tempfile::tempdir().unwrap();
-    let app = App {
+fn app_state(db: PgPool, root: &tempfile::TempDir) -> App {
+    App {
         journal: App::journal_pool(&db),
-        db: db.clone(),
+        db,
         root: root.path().into(),
         origin: "http://localhost:8443".into(),
         frontend_origin: "http://localhost:5500".into(),
@@ -96,8 +94,13 @@ async fn routes_use_core_permissions_and_keep_records_private(db: PgPool) {
         quota: 10 * 1024 * 1024,
         requests: Arc::new(Semaphore::new(128)),
         retention_days: 30,
-    };
-    let api = router(app);
+    }
+}
+
+#[sqlx::test]
+async fn routes_use_core_permissions_and_keep_records_private(db: PgPool) {
+    let root = tempfile::tempdir().unwrap();
+    let api = router(app_state(db.clone(), &root));
     let (alice_id, alice) = user(&db, "notes-alice").await;
     let (bob_id, bob) = user(&db, "notes-bob").await;
     let alice = Some(alice.as_str());
@@ -113,16 +116,6 @@ async fn routes_use_core_permissions_and_keep_records_private(db: PgPool) {
         StatusCode::UNAUTHORIZED,
     )
     .await;
-    let missing = call(
-        &api,
-        "GET",
-        NOTES,
-        alice,
-        empty.clone(),
-        StatusCode::NOT_FOUND,
-    )
-    .await;
-    assert_eq!(missing["error"]["code"], "service_not_installed");
     call(
         &api,
         "POST",
@@ -133,11 +126,7 @@ async fn routes_use_core_permissions_and_keep_records_private(db: PgPool) {
     )
     .await;
 
-    sqlx::query("INSERT INTO public.service_settings (id, enabled) VALUES ('notes-tasks', false)")
-        .execute(&db)
-        .await
-        .unwrap();
-    call(
+    let disabled = call(
         &api,
         "GET",
         NOTES,
@@ -146,6 +135,7 @@ async fn routes_use_core_permissions_and_keep_records_private(db: PgPool) {
         StatusCode::SERVICE_UNAVAILABLE,
     )
     .await;
+    assert_eq!(disabled["error"]["code"], "service_disabled");
     manager::set_enabled(&db, "notes-tasks", true)
         .await
         .unwrap();
@@ -410,13 +400,94 @@ async fn routes_use_core_permissions_and_keep_records_private(db: PgPool) {
     call(&api, "GET", NOTES, alice, empty, StatusCode::FORBIDDEN).await;
 }
 
+#[sqlx::test]
+async fn navigation_and_catalog_follow_core_activation_and_denials(db: PgPool) {
+    let root = tempfile::tempdir().unwrap();
+    let app = app_state(db.clone(), &root);
+    let api = router(app.clone());
+    let pages = frontend::router(
+        frontend::Frontend::bundled(&app.frontend_origin, &app.origin, app.clone()).unwrap(),
+    );
+    let (owner, token) = user(&db, "notes-navigation").await;
+    let (_, other) = user(&db, "notes-other").await;
+    let card = "class=\"service\" href=\"/notes-tasks/\"";
+
+    let page = |path: &'static str, token: Option<&str>| {
+        let pages = pages.clone();
+        let mut request = Request::builder()
+            .uri(path)
+            .header("host", "localhost:5500");
+        if let Some(token) = token {
+            request = request.header("cookie", format!("drive_session={token}"));
+        }
+        async move {
+            let response = pages
+                .oneshot(request.body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), 2 * 1024 * 1024)
+                .await
+                .unwrap();
+            (status, String::from_utf8(body.to_vec()).unwrap())
+        }
+    };
+
+    assert_eq!(page("/notes-tasks/", None).await.0, StatusCode::SEE_OTHER);
+    assert_eq!(
+        page("/notes-tasks/", Some(&token)).await.0,
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    let home = page("/", Some(&token)).await.1;
+    assert!(!home.contains(card));
+
+    let args = ["enable".to_owned(), "notes-tasks".to_owned()];
+    manager::console(&app, &args).await.unwrap();
+    let catalog = call(
+        &api,
+        "GET",
+        "/api/v1/services",
+        Some(&token),
+        Value::Null,
+        StatusCode::OK,
+    )
+    .await;
+    assert!(
+        catalog["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| { entry["id"] == "notes-tasks" && entry["enabled"] == true })
+    );
+    let home = page("/", Some(&token)).await.1;
+    assert!(home.contains(card));
+    let (status, body) = page("/notes-tasks/", Some(&token)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("<h1>Notas y tareas</h1>"));
+
+    sqlx::query(
+        "INSERT INTO public.service_user_denials (user_id, service_id) VALUES ($1, 'notes-tasks')",
+    )
+    .bind(owner)
+    .execute(&db)
+    .await
+    .unwrap();
+    assert_eq!(
+        page("/notes-tasks/", Some(&token)).await.0,
+        StatusCode::FORBIDDEN
+    );
+    let home = page("/", Some(&token)).await.1;
+    assert!(!home.contains(card));
+    assert_eq!(page("/notes-tasks/", Some(&other)).await.0, StatusCode::OK);
+}
+
 #[sqlx::test(migrations = false)]
 async fn migration_preserves_existing_accounts_and_service_settings(db: PgPool) {
     let full = sqlx::migrate!("./migrations");
     let previous = Migrator {
         migrations: Cow::Owned(
             full.iter()
-                .filter(|migration| migration.version < 19)
+                .filter(|migration| migration.version < 20)
                 .cloned()
                 .collect(),
         ),
@@ -424,6 +495,13 @@ async fn migration_preserves_existing_accounts_and_service_settings(db: PgPool) 
     };
     previous.run(&db).await.unwrap();
     let (owner, _) = user(&db, "notes-existing").await;
+    let load_settings = || {
+        sqlx::query_as::<_, (String, bool)>(
+            "SELECT id, enabled FROM public.service_settings WHERE id <> 'notes-tasks' ORDER BY id",
+        )
+        .fetch_all(&db)
+    };
+    let previous_settings = load_settings().await.unwrap();
     full.run(&db).await.unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, Uuid>(
@@ -434,12 +512,14 @@ async fn migration_preserves_existing_accounts_and_service_settings(db: PgPool) 
         .unwrap(),
         owner
     );
-    assert_eq!(
-        sqlx::query_scalar::<_, String>("SELECT id FROM public.service_settings ORDER BY id")
-            .fetch_all(&db)
-            .await
-            .unwrap(),
-        ["drive", "photos"]
+    assert_eq!(load_settings().await.unwrap(), previous_settings);
+    assert!(
+        !sqlx::query_scalar::<_, bool>(
+            "SELECT enabled FROM public.service_settings WHERE id = 'notes-tasks'"
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap()
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM notes_tasks.notes")

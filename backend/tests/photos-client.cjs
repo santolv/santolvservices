@@ -2,6 +2,16 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
 const html=fs.readFileSync(path.join(__dirname,'../../frontend/photos/index.html'),'utf8');
 for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
+const pendingImage={complete:true,classes:new Set(),listeners:{},dataset:{media:'pending'},
+ closest(){return null},hasAttribute(){return false},addEventListener(type,listener){this.listeners[type]=listener}};
+const cachedImage={...pendingImage,classes:new Set(),hasAttribute(){return true},naturalWidth:300};
+for(const image of [pendingImage,cachedImage])image.classList={add:name=>image.classes.add(name)};
+vm.runInNewContext(html.slice(html.indexOf('function showImageFailure'), html.indexOf('let tooltipTimer'))+'\nprepareImages();',
+ {$:()=>({querySelectorAll:()=>[pendingImage,cachedImage]})});
+assert.deepEqual([...pendingImage.classes],[]);
+pendingImage.listeners.load();
+assert.deepEqual([...pendingImage.classes],['is-loaded','is-arriving']);
+assert.deepEqual([...cachedImage.classes],['is-loaded']);
 assert(!html.includes('data-route="imports"')&&!html.includes('Importaciones'));
 assert(html.includes('<div class="photo-tools-middle"><!-- SANTOLV_UPLOAD_PHOTO --></div>'));
 for(const id of ['viewer','viewer-image','info-dialog','file-input','photo-inspector'])assert(html.includes(`id="${id}"`),id);

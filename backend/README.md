@@ -1,44 +1,52 @@
-> Este backend es compartido por Santolv Services y ahora está en backend/ de
-> santolv/santolvservices. La guía actual de rutas, migración, Fotos y Git está
-> en [../README.md](../README.md). Las rutas por nombre de usuario descritas en
-> las secciones históricas inferiores se migran a usuarios/<UUID>/drive.
-> El servidor incluye Inicio, Drive y Fotos por defecto en el ejecutable.
+# Santolv Services
 
-# SantolvDrive: backend local en Rust
-
-La interfaz incluye un inicio central con accesos a aplicaciones y los recientes reales de la cuenta de Drive. Drive puede abrirse en la pestaña actual o en una nueva. Fotos es un proyecto independiente: «Configurar acceso a Fotos» permite indicar su URL HTTP/HTTPS, guardada por cuenta durante la sesión de la pestaña. Ese enlace no comparte cookies, credenciales ni historial entre aplicaciones. Actualmente SantolvPhotos solo tiene una demo de frontend, sin backend ni servidor HTTP configurado. Documentos y las otras aplicaciones aparecen como próximas; no se simulan datos ni servicios disponibles.
-
-Revisión de seguridad vigente: [INFORME_SEGURIDAD_03.md](INFORME_SEGURIDAD_03.md). Se exige Host autorizado, se rechazan cabeceras de proxy no configurado y se ha deshabilitado el acceso desde origen opaco. La instalación sigue siendo local; el MFA de Pangolin se configurará cuando se prepare su despliegue público.
-
-Protección de login: espera progresiva de hasta 8 segundos por IP/cuenta tras errores, límite de 50 intentos por par IP/cuenta en 15 minutos que se limpia al autenticar correctamente, máximo de 10 sesiones por usuario y 32 cargas pendientes por usuario entre todos sus espacios. Cada usuario tiene un máximo de dos transferencias simultáneas por proceso, dentro de las ocho globales. Las sesiones duran dos horas; las iniciales pendientes de cambio de contraseña duran quince minutos. La primera publicación dispone de un journal durable con conexiones SQL reservadas para reanudar después de mover los bytes y antes de confirmar la ubicación.
-
-Axum + Tokio + Tower + Rustls. El backend y el instalador están escritos en Rust. La única dependencia externa es PostgreSQL, que se prepara automáticamente si falta. La API usa **http://localhost:8443** y la interfaz con cookies se abre en **http://localhost:5500**, desde el mismo equipo. No requiere dominio, túneles ni cuentas de servicios externos. No utiliza Docker.
+Un servidor nativo en Rust para Inicio, Drive y Fotos, con PostgreSQL y una
+sola cuenta. El código y la instalación están en `backend/`.
 
 ## Instalación local
 
-En Windows, ejecutar desde la carpeta del instalador:
+Desde `backend/`, copia el instalador de tu plataforma a `dist/`. El flujo
+**Single-file installers** de GitHub compila binarios para Windows x64 y
+Linux x64/ARM64. Descarga el artefacto correspondiente y extrae su contenido.
+
+**Windows x64**
 
 ```powershell
-.\santolvdrive-windows-x64.exe install --directory .\servidor
-.\servidor\santolvdrive.exe serve --config .\servidor\server.json
+.\dist\santolvdrive-windows-x64.exe install --directory .\servidor
+.\servidor\santolvdrive.exe serve
 ```
 
-En Linux/macOS, usar el binario correspondiente:
+**Linux x64 o ARM64**
 
-```text
-./santolvdrive install --directory ./servidor
-./servidor/santolvdrive serve --config ./servidor/server.json
+```bash
+chmod +x ./dist/santolvdrive-linux-x64
+./dist/santolvdrive-linux-x64 install --directory ./servidor
+./servidor/santolvdrive serve
 ```
 
-El instalador solo pide las credenciales iniciales del administrador Drive. Prepara PostgreSQL, un clúster privado, contraseñas aleatorias, el rol limitado de aplicación, las migraciones y `server.json`. No solicita URL SQL, dominio ni certificados. El ejecutable instalado se conserva al reanudar; una versión diferente requiere reemplazarlo explícitamente con el servidor detenido.
+En ARM64 usa `santolvdrive-linux-arm64` en las dos primeras líneas.
+Ejecuta el servidor e instalador con un usuario normal. El instalador reutiliza
+PostgreSQL si está instalado. Si falta, Windows x64 descarga una copia portable
+verificada. Linux con apt o dnf instala el paquete del sistema y puede pedir
+permisos administrativos. En las demás distribuciones instala PostgreSQL con
+su gestor y, si sus binarios no están en el PATH, exporta
+`POSTGRES_BIN=/ruta/al/directorio/bin` antes de instalar.
 
-La API se inicia con `serve --config ...` y escucha en http://localhost:8443. Para conservar la sesión al recargar, iniciar además el listener estático independiente de Rust:
+Si partes del código fuente, ejecuta `cargo run --release --locked -- install --directory servidor`
+desde `backend/` y usa el mismo comando de arranque de tu plataforma.
 
-```powershell
-.\dist\santolvdrive-windows-x64.exe serve --config .\servidor\server.json
-```
+El instalador solicita las credenciales iniciales del administrador y prepara
+`backend/servidor/` con el ejecutable, `server.json`, los archivos
+(`data/`) y el clúster PostgreSQL (`postgres/`). Abre
+[localhost:5500](http://localhost:5500/) en el mismo equipo. La API local
+escucha en [localhost:8443](http://localhost:8443/). Los comandos se pueden
+ejecutar desde cualquier carpeta usando el ejecutable instalado, que carga
+`server.json` de su propia carpeta. `--config RUTA` elige otra configuración.
 
-Abrir **http://localhost:5500/**. La API nunca entrega HTML: `/` sigue devolviendo JSON y `/index.html` no existe en el puerto de la API. El listener de 5500 solo entrega el HTML elegido, leído una vez al arrancar; tras editarlo hay que reiniciar el servidor. Abrir el archivo con doble clic muestra el enlace a esta interfaz; no guarda tokens para simular cookies en un origen opaco.
+Para actualizar, detén el servidor, guarda una copia consistente de PostgreSQL
+y del almacenamiento, y sustituye el ejecutable de `servidor/`. Reutiliza su
+configuración, sus cuentas y sus datos. Consulta las [rutas y el esquema
+modular](../README.md#almacenamiento).
 
 Las sesiones normales duran dos horas y las iniciales pendientes de cambio de contraseña quince minutos. Cookie `HttpOnly`, `SameSite=Strict`, ámbito `/api/v1`, `Secure` al usar HTTPS. `/api/v1/me` recupera el CSRF al recargar sin exponer el identificador de sesión. No se guardan credenciales en almacenamiento del navegador. El cierre de sesión y el cambio/restablecimiento de contraseña revocan el acceso en el servidor. Consultar **INFORME_SEGURIDAD.md** para los riesgos pendientes y los requisitos antes de publicar mediante Pangolin.
 
@@ -72,12 +80,12 @@ La administración se realiza desde la terminal del propio servidor, con acceso 
 Desde backend, usando la configuración existente:
 
 ```powershell
-.\dist\santolvdrive-windows-x64.exe users list --config .\servidor\server.json
-.\dist\santolvdrive-windows-x64.exe users create --config .\servidor\server.json
-.\dist\santolvdrive-windows-x64.exe users disable nombre --config .\servidor\server.json
-.\dist\santolvdrive-windows-x64.exe users enable nombre --config .\servidor\server.json
-.\dist\santolvdrive-windows-x64.exe users reset-password --config .\servidor\server.json
-.\dist\santolvdrive-windows-x64.exe users audit --config .\servidor\server.json
+.\servidor\santolvdrive.exe users list
+.\servidor\santolvdrive.exe users create
+.\servidor\santolvdrive.exe users disable nombre
+.\servidor\santolvdrive.exe users enable nombre
+.\servidor\santolvdrive.exe users reset-password
+.\servidor\santolvdrive.exe users audit
 ```
 
 Create y reset-password piden el usuario y una contraseña temporal oculta, con repetición. Para automatización aceptan --stdin antes de --config y un objeto JSON {username,password} por la entrada estándar, con límite de 4096 bytes; nunca pasar contraseñas como argumentos. List y audit aceptan un cursor después del nombre de la acción, devuelto como next_cursor. Desactivar una cuenta revoca sus sesiones y bloquea las publicaciones pendientes, conservando sus archivos. Reactivarla no recupera las sesiones anteriores. Restablecer su contraseña exige cambiarla al entrar y no reactiva cuentas desactivadas.

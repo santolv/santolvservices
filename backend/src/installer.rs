@@ -32,6 +32,15 @@ impl Config {
         c.validate()?;
         Ok(c)
     }
+    pub fn from_installation_or_env() -> Result<Self> {
+        if env::var_os("DATABASE_URL").is_none() {
+            let path = env::current_exe()?.with_file_name("server.json");
+            if path.try_exists()? {
+                return Self::load(&path);
+            }
+        }
+        Self::from_env()
+    }
     fn read(path: &Path) -> Result<Self> {
         let bytes = fs::read(path)?;
         if bytes.len() > 64 * 1024 {
@@ -224,7 +233,7 @@ async fn automatic_config(root: &Path, app_origin: String, bin: PathBuf) -> Resu
         app_origin,
         frontend_origin: crate::web::default_frontend_origin(),
         bind: format!("127.0.0.1:{port}").parse()?,
-        storage_root: root.join("data"),
+        storage_root: PathBuf::from("data"),
         tls_cert_file: None,
         tls_key_file: None,
         default_quota_bytes: 10737418240,
@@ -234,10 +243,13 @@ async fn automatic_config(root: &Path, app_origin: String, bin: PathBuf) -> Resu
     c.validate()?;
     let state = crate::postgres::prepare(root, bin)?;
     c.database_url = crate::postgres::ensure(&state).await?;
+    c.managed_postgres = Some(PathBuf::from("postgres-state.json"));
+    let bytes = serde_json::to_vec_pretty(&c)?;
+    c.storage_root = root.join(&c.storage_root);
     c.managed_postgres = Some(state);
     let app = c.connect().await?;
     app.db.close().await;
-    write_new(&root.join("server.json"), &serde_json::to_vec_pretty(&c)?)?;
+    write_new(&root.join("server.json"), &bytes)?;
     Ok(c)
 }
 
@@ -312,18 +324,24 @@ pub async fn install(args: &[String]) -> Result<()> {
         );
         return Ok(());
     }
-    let mut root = env::current_dir()?.join("santolvdrive-server");
+    let mut root = None;
     let mut origin = None;
     let mut dependencies_only = false;
+    let mut read_stdin = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--dependencies-only" => {
                 dependencies_only = true;
             }
+            "--stdin" => {
+                read_stdin = true;
+            }
             "--directory" => {
                 i += 1;
-                root = args.get(i).ok_or("--directory requires a path")?.into();
+                root = Some(PathBuf::from(
+                    args.get(i).ok_or("--directory requires a path")?,
+                ));
             }
             "--origin" => {
                 i += 1;
@@ -331,16 +349,25 @@ pub async fn install(args: &[String]) -> Result<()> {
             }
             _ => {
                 return Err(
-                    "usage: install [--directory PATH] [--origin http://127.0.0.1:8443] | --check"
+                    "usage: install [--directory PATH] [--origin http://127.0.0.1:8443] [--dependencies-only | --stdin] | install --check"
                         .into(),
                 );
             }
         }
         i += 1;
     }
-    if !root.is_absolute() {
-        root = env::current_dir()?.join(root);
+    if dependencies_only && read_stdin {
+        return Err("--dependencies-only and --stdin cannot be combined".into());
     }
+    let cwd = env::current_dir()?;
+    let legacy = cwd.join("santolvdrive-server");
+    let root = cwd.join(root.unwrap_or_else(|| {
+        if legacy.join(".santolvdrive-native").is_file() {
+            legacy
+        } else {
+            PathBuf::from("servidor")
+        }
+    }));
     if root.parent().is_none() {
         return Err("installation directory cannot be a filesystem root".into());
     }
@@ -402,7 +429,12 @@ pub async fn install(args: &[String]) -> Result<()> {
             .fetch_one(&app.db)
             .await?;
     if !initialized {
-        crate::admin::bootstrap(&app, credentials()?).await?;
+        let credentials = if read_stdin {
+            stdin_credentials()?
+        } else {
+            credentials()?
+        };
+        crate::admin::bootstrap(&app, credentials).await?;
     }
     let binary = root.join(if cfg!(windows) {
         "santolvdrive.exe"
@@ -419,10 +451,9 @@ pub async fn install(args: &[String]) -> Result<()> {
         fs::set_permissions(&binary, fs::Permissions::from_mode(0o700))?;
     }
     println!(
-        "Instalación nativa preparada con sus dependencias necesarias. Inicia {} serve --config {}. Acceso local: {}.",
+        "Santolv Services instalado. Ejecuta \"{}\" serve. Web: {}.",
         binary.display(),
-        config_path.display(),
-        config.app_origin
+        config.frontend_origin
     );
 
     Ok(())

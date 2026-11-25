@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .is_some_and(|v| matches!(v.as_str(), "--help" | "help"))
     {
         println!(
-            "santolvdrive [serve [--frontend PATH_TO_INDEX_HTML] | services [list | enable ID | disable ID] | users [list [AFTER_UUID] | create | disable USERNAME | enable USERNAME | reset-password | audit [AFTER_ID]] | install [--directory PATH] [--origin http://localhost:8443] [--dependencies-only] | install --check | configure-local | bootstrap-admin [--stdin] | reset-admin | admin-initialized | database-stop] [--config server.json]"
+            "santolvdrive [serve [--frontend PATH_TO_INDEX_HTML] | services [list | enable ID | disable ID] | users [list [AFTER_UUID] | create | disable USERNAME | enable USERNAME | reset-password | audit [AFTER_ID]] | install [--directory PATH] [--origin http://localhost:8443] [--dependencies-only | --stdin] | install --check | configure-local | bootstrap-admin [--stdin] | reset-admin | admin-initialized | database-stop] [--config server.json]"
         );
         return Ok(());
     }
@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = if let Some(path) = config_path {
         santolvdrive::installer::Config::load(&path)?
     } else {
-        santolvdrive::installer::Config::from_env()?
+        santolvdrive::installer::Config::from_installation_or_env()?
     };
     if command == "database-stop" {
         santolvdrive::postgres::stop(

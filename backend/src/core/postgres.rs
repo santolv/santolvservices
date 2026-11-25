@@ -20,6 +20,17 @@ struct State {
     owner_password: String,
     app_password: String,
 }
+impl State {
+    fn load(path: &Path) -> Result<Self> {
+        let mut state: Self = serde_json::from_slice(&fs::read(path)?)?;
+        let parent = path
+            .parent()
+            .ok_or("managed PostgreSQL state needs a directory")?;
+        state.bin = parent.join(state.bin);
+        state.data = parent.join(state.data);
+        Ok(state)
+    }
+}
 fn executable(bin: &Path, name: &str) -> PathBuf {
     bin.join(if cfg!(windows) {
         format!("{name}.exe")
@@ -112,9 +123,10 @@ pub fn prepare(root: &Path, bin: PathBuf) -> Result<PathBuf> {
     let socket = TcpListener::bind("127.0.0.1:0")?;
     let port = socket.local_addr()?.port();
     drop(socket);
+    let bin = canonical_tool_path(&bin)?;
     let state = State {
-        bin: canonical_tool_path(&bin)?,
-        data: root.join("postgres"),
+        bin: bin.strip_prefix(root).unwrap_or(&bin).to_path_buf(),
+        data: PathBuf::from("postgres"),
         port,
         owner_password: auth::token(),
         app_password: auth::token(),
@@ -151,7 +163,7 @@ fn checked(result: Output, action: &str) -> Result<()> {
     Ok(())
 }
 pub async fn ensure(path: &Path) -> Result<String> {
-    let state: State = serde_json::from_slice(&fs::read(path)?)?;
+    let state = State::load(path)?;
     let parent = path
         .parent()
         .ok_or("managed PostgreSQL state needs a directory")?;
@@ -269,7 +281,7 @@ pub async fn ensure(path: &Path) -> Result<String> {
     Ok(url(&state, false))
 }
 pub async fn stop(path: &Path) -> Result<()> {
-    let state: State = serde_json::from_slice(&fs::read(path)?)?;
+    let state = State::load(path)?;
     let mut stop = command(&state.bin, "pg_ctl");
     stop.arg("-D")
         .arg(state.data)

@@ -39,15 +39,15 @@ sistema desde Ajustes y aplica esa elección a todos los servicios.
   y descriptor `Service`, y añádelo a `modules::REGISTERED`. La propiedad
   `uses_file_store` habilita el motor y sus rutas compatibles para ese módulo.
 
-Desde la raíz, en PowerShell, con la configuración de la instalación existente:
+Desde `backend/`, con la instalación central:
 
 ```powershell
-$server = '.\santolvdrive\backend\dist\santolvdrive-windows-x64.exe'
-$config = '.\santolvdrive\backend\servidor\server.json'
-& $server services list --config $config
-& $server services disable photos --config $config
-& $server services enable photos --config $config
+.\servidor\santolvdrive.exe services list
+.\servidor\santolvdrive.exe services disable photos
+.\servidor\santolvdrive.exe services enable photos
 ```
+
+En Linux, usa `./servidor/santolvdrive` para los mismos comandos.
 
 Los comandos requieren acceso local a la configuración del servidor. PostgreSQL
 guarda el estado entre reinicios. Desactivar devuelve `503 service_disabled`
@@ -94,26 +94,13 @@ Para actualizar: detener la versión anterior, guardar una copia de PostgreSQL y
 del almacenamiento y arrancar con **el mismo** `server.json` y `storage_root`.
 No ejecutar ambas versiones sobre los mismos datos. La migración es de avance;
 volver a una versión anterior requiere restaurar la copia completa.
-Los directorios locales antiguos `santolvdrive/backend/servidor`, `target` y `dist`
-se conservan como datos/artefactos ignorados; no se mueven ni se incluyen en Git.
 
-## Ejecutar
+## Instalación
 
-Desde `backend/`:
-
-```powershell
-cargo build --locked
-cargo run --locked -- install --directory servidor
-cargo run --locked -- serve --config servidor/server.json
-```
-
-Si ya existe una instalación, reutiliza su configuración. Consulta
-[backend/README.md](backend/README.md) para instalación y usuarios. El ejecutable
-sigue llamándose `santolvdrive` para conservar los comandos existentes.
-Por defecto: web `http://localhost:5500`, API `http://localhost:8443`.
-Se conserva el despliegue limitado a loopback. En configuración HTTPS se mantiene
-el modo API existente; la interfaz integrada descrita aquí es para HTTP local. Los lanzadores antiguos que pasan `--frontend <archivo.html>` también abren el
-inicio central y habilitan Drive y Fotos; no se usa Drive como página principal.
+`backend/dist/` contiene los instaladores y `backend/servidor/` la instalación
+local de todos los servicios. El ejecutable lee el `server.json` de su propia
+carpeta. La web abre en [localhost:5500](http://localhost:5500/).
+Consulta la [guía para Windows y Linux](backend/README.md#instalación-local).
 
 ## Fotos conectado
 

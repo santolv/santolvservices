@@ -440,3 +440,5 @@ el commit local e indicar qué autorización o inicio de sesión hace falta.
 - [Documentación de su interfaz HTML/CSS/JavaScript](https://github.com/santolv/santolvdrive/blob/b9c19e100e15c85534ede1a38e331411d4d2edad/frontend/pruebahtml/README.md).
 - [MDN: instalación de una PWA](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable).
 - [MDN: funcionamiento sin conexión y en segundo plano](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Offline_and_background_operation).
+
+- [x] Pulido visual con stageshow y unslop: controles estables, metadatos legibles, espaciado del encabezado y una sola transición de entrada de la biblioteca.

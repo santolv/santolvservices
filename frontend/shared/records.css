@@ -1,0 +1,38 @@
+
+:root{color-scheme:light;--record-bg:#f2f2f7;--record-surface:#fff;--record-text:#1d1d1f;--record-muted:#646469;--record-line:#d9d9df;--record-accent:#f5b500;--record-selected:#fff;--record-fill:#e6e6eb;--record-danger:#a81930}
+:root[data-theme="dark"]{color-scheme:dark;--record-bg:#1c1c1e;--record-surface:#2c2c2e;--record-text:#f5f5f7;--record-muted:#b1b1b8;--record-line:#48484c;--record-accent:#ffd60a;--record-selected:#1c1c1e;--record-fill:#303033;--record-danger:#ff9baa}
+body{font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;margin:0;background:var(--record-bg);color:var(--record-text)}
+.records-main,.records-editor{font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:var(--record-text)}
+.records-main{max-width:760px;margin:auto;padding:36px 20px 64px}
+/* Component styles are scoped so they cannot resize the shared shell or its dialogs. */
+@scope (.records-main,.records-editor){
+*{box-sizing:border-box}[hidden]{display:none!important}
+h1,h2,p{margin:0}h1{font-size:32px;line-height:1.15;letter-spacing:-.03em}h2{font-size:22px}
+button,input,select,textarea{font:inherit;color:inherit;min-width:0;min-height:36px;padding:7px 12px;border:1px solid var(--record-line);border-radius:8px;background:var(--record-surface)}
+button{cursor:pointer;font-weight:500}button:disabled{opacity:.6;cursor:default}
+:focus-visible{outline:2px solid var(--record-accent);outline-offset:2px}
+.primary{background:var(--record-accent);color:#1d1d1f;border-color:transparent;font-weight:600;border-radius:8px}
+.heading,.filters,.actions,.fields,.linked{display:flex;flex-wrap:wrap;gap:10px}
+.heading{justify-content:space-between;align-items:center;margin-bottom:20px}
+.filters{align-items:end;margin-top:16px}.filters>label:first-child{flex:1 1 13rem}
+label{display:grid;gap:5px;min-width:0}label span,.meta{font-size:13px;color:var(--record-muted)}
+label.inline{display:flex;align-items:center;gap:8px}label.inline input{min-height:auto}
+.filters input,.filters select{background:var(--record-fill);border-color:transparent}
+#message{margin:16px 0;color:var(--record-muted)}#message:empty{display:none}
+[data-error=true],#editor-error,.danger{color:var(--record-danger)!important}
+#items{list-style:none;padding:0;margin:20px 0;display:grid;gap:0;border-radius:12px;overflow:hidden;background:var(--record-surface)}
+#items li+li{border-top:1px solid var(--record-line)}
+#items button{width:100%;display:grid;gap:3px;min-height:72px;padding:13px 16px;border:0;border-radius:0;text-align:left;overflow-wrap:anywhere;background:transparent}
+#items button:hover{background:var(--record-fill)}#items strong{font-size:15px;line-height:1.4;font-weight:600}
+.preview{color:var(--record-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta{font-size:12px}
+.task-row button{grid-template-columns:24px minmax(0,1fr);column-gap:12px!important}
+.task-row button::before{content:'';width:20px;height:20px;border:1.5px solid var(--record-muted);border-radius:50%;grid-row:1/3;align-self:center}
+.task-row.done button::before{background:var(--record-accent);border-color:var(--record-accent);box-shadow:inset 0 0 0 4px var(--record-surface)}.task-row.done strong{color:var(--record-muted)}
+form,fieldset{display:grid;gap:14px}fieldset{border:0;margin:0;padding:0;min-inline-size:0}.fields>label{flex:1 1 9rem}.linked{align-items:end}.linked>label{flex:1 1 12rem}
+textarea{resize:vertical;min-height:220px;line-height:1.5}input[name=title]{font-size:22px;font-weight:650}
+.actions{justify-content:space-between}.actions>div{display:flex;flex-wrap:wrap;gap:8px}
+#note-filter{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+}
+.records-editor{width:min(36rem,calc(100% - 24px));max-height:calc(100dvh - 24px);padding:24px;border:1px solid var(--record-line);border-radius:16px;background:var(--record-surface);box-shadow:0 24px 70px #0004}
+.records-editor::backdrop{background:#0005}
+@media(max-width:560px){.records-main{padding:24px 14px 48px}.records-main h1{font-size:26px}.records-editor{padding:18px}}

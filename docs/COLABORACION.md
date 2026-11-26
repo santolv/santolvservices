@@ -12,6 +12,8 @@ sincronizan a través de Git.
 | Cuenta | frontend/account/ | backend/src/core/auth.rs y admin.rs (coordinados con Core) | [Cuenta](areas/cuenta/README.md) |
 | Drive | frontend/drive/ | backend/src/modules/drive/ | [Drive](areas/drive/README.md) |
 | Fotos | frontend/photos/ | backend/src/modules/photos/ | [Fotos](areas/fotos/README.md) |
+| Notas | frontend/notes/ | backend/src/modules/notes/ | [Notas](areas/notes/README.md) |
+| Tareas | frontend/tasks/ | backend/src/modules/tasks/ | [Tareas](areas/tasks/README.md) |
 | Core | — | backend/src/core/ y arranque/instalación | [Core](areas/core/README.md) |
 | Compartido | frontend/shared/ | backend/src/file_store/ | [Compartido](areas/compartido/README.md) |
 

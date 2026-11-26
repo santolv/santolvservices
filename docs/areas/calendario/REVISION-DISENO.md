@@ -11,7 +11,8 @@ calendario. Notas usa listas agrupadas, editor existente y acento amarillo.
 
 Verificación: cuatro pruebas de clientes existentes, sintaxis de ambos scripts,
 identificadores únicos y diff sin errores. Capturas con Edge de Calendario a
-1366×900 y Notas a 390×844 con datos sintéticos, sin guardar datos de usuario.
+1366×900 y 390×900, en claro y oscuro, con datos sintéticos y sin datos de usuario.
+Sin desbordamiento horizontal en las ocho combinaciones.
 No se ha filmado un bucle: no se añade una demostración animada. No se han probado
 operaciones con cuentas privadas reales en el navegador. CI comprueba Rust y
 PostgreSQL antes de integrar. La comprobación de localhost verifica disponibilidad

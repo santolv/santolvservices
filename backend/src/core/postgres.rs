@@ -8,9 +8,16 @@ use std::{
     env, fs,
     net::TcpListener,
     path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
+    process::{Command, Output},
 };
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+#[cfg(windows)]
+mod windows;
+#[cfg(not(windows))]
+use std::process::{Child as Process, Stdio};
+#[cfg(windows)]
+use windows::Process;
 
 #[derive(Serialize, Deserialize)]
 struct State {
@@ -162,7 +169,83 @@ fn checked(result: Output, action: &str) -> Result<()> {
     }
     Ok(())
 }
-pub async fn ensure(path: &Path) -> Result<String> {
+pub fn configured_url(path: &Path) -> Result<String> {
+    Ok(url(&State::load(path)?, false))
+}
+
+pub struct Managed {
+    state: State,
+    child: Option<Process>,
+}
+
+impl Managed {
+    pub fn pid(&self) -> Option<u32> {
+        self.child.as_ref().map(Process::id)
+    }
+
+    pub fn exited(&mut self) -> std::io::Result<bool> {
+        self.child
+            .as_mut()
+            .map_or(Ok(false), |child| Ok(child.try_wait()?.is_some()))
+    }
+
+    pub async fn shutdown(mut self) -> Result<()> {
+        if self.pid().is_some() && !self.exited()? {
+            checked(output(stop_command(&self.state)).await?, "shutdown")?;
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                while !self.exited()? {
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+                std::io::Result::Ok(())
+            })
+            .await
+            .map_err(|_| "PostgreSQL did not exit after shutdown")??;
+        }
+        self.child.take();
+        Ok(())
+    }
+}
+
+impl Drop for Managed {
+    fn drop(&mut self) {
+        if self.pid().is_some()
+            && matches!(self.exited(), Ok(false))
+            && let Err(error) = stop_command(&self.state)
+                .output()
+                .map_err(Into::into)
+                .and_then(|result| checked(result, "shutdown"))
+        {
+            tracing::error!(%error, "Could not shut down managed PostgreSQL");
+        }
+    }
+}
+
+fn spawn(state: &State, log: &Path) -> std::io::Result<Process> {
+    let mut postgres = command(&state.bin, "postgres");
+    postgres
+        .arg("-D")
+        .arg(&state.data)
+        .args(["-h", "127.0.0.1", "-p"])
+        .arg(state.port.to_string())
+        .args(["-c", "unix_socket_directories="]);
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // Ctrl+C belongs to Santolv; PostgreSQL receives its own orderly stop.
+        postgres.process_group(0);
+    }
+    let log = fs::OpenOptions::new().create(true).append(true).open(log)?;
+    #[cfg(windows)]
+    return windows::spawn(&postgres, &log);
+    #[cfg(not(windows))]
+    postgres
+        .stdin(Stdio::null())
+        .stdout(log.try_clone()?)
+        .stderr(log)
+        .spawn()
+}
+
+pub async fn ensure(path: &Path, own_process: bool) -> Result<Managed> {
     let state = State::load(path)?;
     let parent = path
         .parent()
@@ -209,34 +292,43 @@ pub async fn ensure(path: &Path) -> Result<String> {
     }
     let mut status = command(&state.bin, "pg_ctl");
     status.arg("-D").arg(&state.data).arg("status");
-    let running = output(status).await?;
-    if !running.status.success() {
-        let mut start = command(&state.bin, "pg_ctl");
-        start
-            .arg("-D")
-            .arg(&state.data)
-            .args(["-w", "-t", "30", "-l"])
-            .arg(parent.join("postgresql.log"))
-            .args([
-                "-o",
-                &format!("-h 127.0.0.1 -p {} -c unix_socket_directories=", state.port),
-                "start",
-            ]);
-        // A detached Windows postmaster can inherit pipe handles; never capture startup via pipes.
-        let status = tokio::task::spawn_blocking(move || {
-            start.stdout(Stdio::null()).stderr(Stdio::null()).status()
-        })
-        .await??;
-        if !status.success() {
-            return Err(format!(
-                "PostgreSQL startup failed; see {} (the local port may be occupied)",
-                parent.join("postgresql.log").display()
-            )
-            .into());
+    let status = output(status).await?;
+    let log = parent.join("postgresql.log");
+    let child = match status.status.code() {
+        Some(0) if own_process => return Err(
+            "Managed PostgreSQL is already running. Stop the previous Santolv server first. If only its database is running, use database-stop before serve.".into()
+        ),
+        Some(0) => None,
+        Some(3) => Some(spawn(&state, &log)?),
+        _ => {
+            checked(status, "status")?;
+            unreachable!()
         }
-    }
-    let options: PgConnectOptions = url(&state, true).parse()?;
-    let mut owner = PgConnection::connect_with(&options.disable_statement_logging()).await?;
+    };
+    let mut managed = Managed { state, child };
+    let state = &managed.state;
+    let options: PgConnectOptions = url(state, true).parse()?;
+    let options = options.disable_statement_logging();
+    let mut owner = if managed.pid().is_some() {
+        tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            loop {
+                if managed.exited()? {
+                    return Err::<_, Box<dyn std::error::Error>>(
+                        format!("PostgreSQL exited during startup; see {}", log.display()).into(),
+                    );
+                }
+                if let Ok(connection) = PgConnection::connect_with(&options).await {
+                    return Ok(connection);
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            }
+        })
+        .await
+        .map_err(|_| format!("PostgreSQL startup timed out; see {}", log.display()))??
+    } else {
+        PgConnection::connect_with(&options).await?
+    };
+    let state = &managed.state;
     let data: String = sqlx::query_scalar("SELECT current_setting('data_directory')")
         .fetch_one(&mut owner)
         .await?;
@@ -272,21 +364,25 @@ pub async fn ensure(path: &Path) -> Result<String> {
             .execute(&mut owner)
             .await?;
     }
-    let options: PgConnectOptions = url(&state, false).parse()?;
+    let options: PgConnectOptions = url(state, false).parse()?;
     let mut app = PgConnection::connect_with(&options.disable_statement_logging()).await?;
     let limited:bool=sqlx::query_scalar("SELECT NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole FROM pg_roles WHERE rolname=current_user").fetch_one(&mut app).await?;
     if !limited {
         return Err("managed application role has excessive PostgreSQL privileges".into());
     }
-    Ok(url(&state, false))
+    Ok(managed)
 }
 pub async fn stop(path: &Path) -> Result<()> {
     let state = State::load(path)?;
+    checked(output(stop_command(&state)).await?, "shutdown")
+}
+
+fn stop_command(state: &State) -> Command {
     let mut stop = command(&state.bin, "pg_ctl");
     stop.arg("-D")
-        .arg(state.data)
-        .args(["-w", "-m", "fast", "stop"]);
-    checked(output(stop).await?, "shutdown")
+        .arg(&state.data)
+        .args(["-w", "-t", "10", "-m", "fast", "stop"]);
+    stop
 }
 #[cfg(test)]
 mod tests {
@@ -296,14 +392,19 @@ mod tests {
         use sqlx::{Connection, Row};
         let t = tempfile::tempdir().unwrap();
         let state = super::prepare(t.path(), super::locate().unwrap()).unwrap();
-        let url = super::ensure(&state).await.unwrap_or_else(|error| {
+        let database = super::ensure(&state, true).await.unwrap_or_else(|error| {
             panic!(
                 "{error}; server log: {}",
                 std::fs::read_to_string(t.path().join("postgresql.log")).unwrap_or_default()
             )
         });
+        let url = super::configured_url(&state).unwrap();
+        assert!(database.pid().is_some());
         let saved = std::fs::read(&state).unwrap();
-        assert_eq!(super::ensure(&state).await.unwrap(), url);
+        let attached = super::ensure(&state, false).await.unwrap();
+        assert_eq!(attached.pid(), None);
+        assert!(super::ensure(&state, true).await.is_err());
+        attached.shutdown().await.unwrap();
         assert_eq!(std::fs::read(&state).unwrap(), saved);
         let mut wrong = url::Url::parse(&url).unwrap();
         wrong.set_password(Some("invalid-password")).unwrap();
@@ -314,8 +415,9 @@ mod tests {
         assert_eq!(row.get::<String, _>("addresses"), "127.0.0.1");
         assert_eq!(row.get::<String, _>("encryption"), "scram-sha-256");
         c.close().await.unwrap();
-        super::stop(&state).await.unwrap();
-        assert_eq!(super::ensure(&state).await.unwrap(), url);
-        super::stop(&state).await.unwrap();
+        database.shutdown().await.unwrap();
+        let restarted = super::ensure(&state, true).await.unwrap();
+        assert_eq!(super::configured_url(&state).unwrap(), url);
+        restarted.shutdown().await.unwrap();
     }
 }

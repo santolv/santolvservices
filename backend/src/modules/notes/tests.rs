@@ -13,8 +13,8 @@ use uuid::Uuid;
 
 use crate::{App, auth, core::manager, frontend, router};
 
-const NOTES: &str = "/api/v1/notes-tasks/notes";
-const TASKS: &str = "/api/v1/notes-tasks/tasks";
+const NOTES: &str = "/api/v1/notes";
+const TASKS: &str = "/api/v1/tasks";
 
 async fn user(db: &PgPool, name: &str) -> (Uuid, String) {
     let id = Uuid::new_v4();
@@ -121,7 +121,7 @@ async fn routes_use_core_permissions_and_keep_records_private(db: PgPool) {
         "POST",
         "/api/v1/services",
         alice,
-        json!({"id":"notes-tasks","enabled":true}),
+        json!({"id":"notes","enabled":true}),
         StatusCode::METHOD_NOT_ALLOWED,
     )
     .await;
@@ -136,9 +136,8 @@ async fn routes_use_core_permissions_and_keep_records_private(db: PgPool) {
     )
     .await;
     assert_eq!(disabled["error"]["code"], "service_disabled");
-    manager::set_enabled(&db, "notes-tasks", true)
-        .await
-        .unwrap();
+    manager::set_enabled(&db, "tasks", true).await.unwrap();
+    manager::set_enabled(&db, "notes", true).await.unwrap();
 
     let first = call(
         &api,
@@ -279,7 +278,7 @@ async fn routes_use_core_permissions_and_keep_records_private(db: PgPool) {
     .await;
     assert_eq!(list["items"], json!([linked]));
 
-    let error = sqlx::query("UPDATE notes_tasks.tasks SET owner_id=$1 WHERE owner_id=$2")
+    let error = sqlx::query("UPDATE tasks.tasks SET owner_id=$1 WHERE owner_id=$2")
         .bind(bob_id)
         .bind(alice_id)
         .execute(&db)
@@ -391,7 +390,7 @@ async fn routes_use_core_permissions_and_keep_records_private(db: PgPool) {
     .await;
 
     sqlx::query(
-        "INSERT INTO public.service_user_denials (user_id, service_id) VALUES ($1, 'notes-tasks')",
+        "INSERT INTO public.service_user_denials (user_id, service_id) VALUES ($1, 'notes')",
     )
     .bind(alice_id)
     .execute(&db)
@@ -410,7 +409,7 @@ async fn navigation_and_catalog_follow_core_activation_and_denials(db: PgPool) {
     );
     let (owner, token) = user(&db, "notes-navigation").await;
     let (_, other) = user(&db, "notes-other").await;
-    let card = "class=\"service\" href=\"/notes-tasks/\"";
+    let card = "class=\"service\" href=\"/notes/\"";
 
     let page = |path: &'static str, token: Option<&str>| {
         let pages = pages.clone();
@@ -433,15 +432,15 @@ async fn navigation_and_catalog_follow_core_activation_and_denials(db: PgPool) {
         }
     };
 
-    assert_eq!(page("/notes-tasks/", None).await.0, StatusCode::SEE_OTHER);
+    assert_eq!(page("/notes/", None).await.0, StatusCode::SEE_OTHER);
     assert_eq!(
-        page("/notes-tasks/", Some(&token)).await.0,
+        page("/notes/", Some(&token)).await.0,
         StatusCode::SERVICE_UNAVAILABLE
     );
     let home = page("/", Some(&token)).await.1;
     assert!(!home.contains(card));
 
-    let args = ["enable".to_owned(), "notes-tasks".to_owned()];
+    let args = ["enable".to_owned(), "notes".to_owned()];
     manager::console(&app, &args).await.unwrap();
     let catalog = call(
         &api,
@@ -457,75 +456,183 @@ async fn navigation_and_catalog_follow_core_activation_and_denials(db: PgPool) {
             .as_array()
             .unwrap()
             .iter()
-            .any(|entry| { entry["id"] == "notes-tasks" && entry["enabled"] == true })
+            .any(|entry| { entry["id"] == "notes" && entry["enabled"] == true })
     );
     let home = page("/", Some(&token)).await.1;
     assert!(home.contains(card));
-    let (status, body) = page("/notes-tasks/", Some(&token)).await;
+    let (status, body) = page("/notes/", Some(&token)).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("<h1>Notas y tareas</h1>"));
+    assert!(body.contains("<h1>Notas</h1>"));
 
     sqlx::query(
-        "INSERT INTO public.service_user_denials (user_id, service_id) VALUES ($1, 'notes-tasks')",
+        "INSERT INTO public.service_user_denials (user_id, service_id) VALUES ($1, 'notes')",
     )
     .bind(owner)
     .execute(&db)
     .await
     .unwrap();
-    assert_eq!(
-        page("/notes-tasks/", Some(&token)).await.0,
-        StatusCode::FORBIDDEN
-    );
+    assert_eq!(page("/notes/", Some(&token)).await.0, StatusCode::FORBIDDEN);
     let home = page("/", Some(&token)).await.1;
     assert!(!home.contains(card));
-    assert_eq!(page("/notes-tasks/", Some(&other)).await.0, StatusCode::OK);
+    assert_eq!(page("/notes/", Some(&other)).await.0, StatusCode::OK);
 }
 
 #[sqlx::test(migrations = false)]
-async fn migration_preserves_existing_accounts_and_service_settings(db: PgPool) {
+async fn split_preserves_records_links_activation_and_denials(db: PgPool) {
     let full = sqlx::migrate!("./migrations");
     let previous = Migrator {
-        migrations: Cow::Owned(
-            full.iter()
-                .filter(|migration| migration.version < 20)
-                .cloned()
-                .collect(),
-        ),
+        migrations: Cow::Owned(full.iter().filter(|m| m.version < 21).cloned().collect()),
         ..Migrator::DEFAULT
     };
     previous.run(&db).await.unwrap();
-    let (owner, _) = user(&db, "notes-existing").await;
-    let load_settings = || {
-        sqlx::query_as::<_, (String, bool)>(
-            "SELECT id, enabled FROM public.service_settings WHERE id <> 'notes-tasks' ORDER BY id",
-        )
-        .fetch_all(&db)
-    };
-    let previous_settings = load_settings().await.unwrap();
+    let (owner, _) = user(&db, "existing-records").await;
+    let note = Uuid::new_v4();
+    let task = Uuid::new_v4();
+    sqlx::query("UPDATE public.service_settings SET enabled=true WHERE id='notes-tasks'")
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO public.service_user_denials VALUES ($1,'notes-tasks')")
+        .bind(owner)
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO notes_tasks.notes(id,owner_id,title,content) VALUES($1,$2,'Idea','Contenido')",
+    )
+    .bind(note)
+    .bind(owner)
+    .execute(&db)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO notes_tasks.tasks(id,owner_id,title,status,priority,note_id) VALUES($1,$2,'Hacer','pending','normal',$3)").bind(task).bind(owner).bind(note).execute(&db).await.unwrap();
     full.run(&db).await.unwrap();
+    let row: (Uuid, Uuid) = sqlx::query_as("SELECT owner_id,note_id FROM tasks.tasks WHERE id=$1")
+        .bind(task)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(row, (owner, note));
     assert_eq!(
-        sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM public.users WHERE username='notes-existing'"
+        sqlx::query_scalar::<_, String>("SELECT content FROM notes.notes WHERE id=$1")
+            .bind(note)
+            .fetch_one(&db)
+            .await
+            .unwrap(),
+        "Contenido"
+    );
+    for service in ["notes", "tasks"] {
+        assert!(manager::enabled(&db, service).await.unwrap());
+        assert_eq!(
+            manager::require_access(&db, service, owner)
+                .await
+                .unwrap_err()
+                .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM public.service_settings WHERE id='notes-tasks'"
         )
         .fetch_one(&db)
         .await
         .unwrap(),
-        owner
-    );
-    assert_eq!(load_settings().await.unwrap(), previous_settings);
-    assert!(
-        !sqlx::query_scalar::<_, bool>(
-            "SELECT enabled FROM public.service_settings WHERE id = 'notes-tasks'"
-        )
-        .fetch_one(&db)
-        .await
-        .unwrap()
-    );
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM notes_tasks.notes")
-            .fetch_one(&db)
-            .await
-            .unwrap(),
         0
     );
+}
+
+#[sqlx::test]
+async fn services_switch_independently_and_preserve_links(db: PgPool) {
+    let root = tempfile::tempdir().unwrap();
+    let api = router(app_state(db.clone(), &root));
+    let (owner, token) = user(&db, "independent").await;
+    let token = Some(token.as_str());
+    manager::set_enabled(&db, "notes", true).await.unwrap();
+    manager::set_enabled(&db, "tasks", true).await.unwrap();
+    let note = call(
+        &api,
+        "POST",
+        NOTES,
+        token,
+        json!({"title":"Nota","content":"Privada"}),
+        StatusCode::CREATED,
+    )
+    .await;
+    let task = call(
+        &api,
+        "POST",
+        TASKS,
+        token,
+        json!({"title":"Tarea","note_id":note["id"]}),
+        StatusCode::CREATED,
+    )
+    .await;
+    manager::set_enabled(&db, "notes", false).await.unwrap();
+    call(
+        &api,
+        "GET",
+        NOTES,
+        token,
+        Value::Null,
+        StatusCode::SERVICE_UNAVAILABLE,
+    )
+    .await;
+    call(&api, "GET", TASKS, token, Value::Null, StatusCode::OK).await;
+    call(
+        &api,
+        "POST",
+        TASKS,
+        token,
+        json!({"title":"Independiente"}),
+        StatusCode::CREATED,
+    )
+    .await;
+    call(&api,"PUT",&format!("{}/{}",TASKS,task["id"].as_str().unwrap()),token,json!({"title":"Editada","status":"done","priority":"normal","due_at":null,"note_id":note["id"]}),StatusCode::OK).await;
+    call(
+        &api,
+        "POST",
+        TASKS,
+        token,
+        json!({"title":"Nuevo vínculo","note_id":note["id"]}),
+        StatusCode::SERVICE_UNAVAILABLE,
+    )
+    .await;
+    manager::set_enabled(&db, "notes", true).await.unwrap();
+    manager::set_enabled(&db, "tasks", false).await.unwrap();
+    call(&api, "GET", NOTES, token, Value::Null, StatusCode::OK).await;
+    call(
+        &api,
+        "GET",
+        TASKS,
+        token,
+        Value::Null,
+        StatusCode::SERVICE_UNAVAILABLE,
+    )
+    .await;
+    manager::set_enabled(&db, "tasks", true).await.unwrap();
+    sqlx::query("INSERT INTO public.service_user_denials VALUES ($1,'tasks')")
+        .bind(owner)
+        .execute(&db)
+        .await
+        .unwrap();
+    call(&api, "GET", NOTES, token, Value::Null, StatusCode::OK).await;
+    call(
+        &api,
+        "GET",
+        TASKS,
+        token,
+        Value::Null,
+        StatusCode::FORBIDDEN,
+    )
+    .await;
+    call(
+        &api,
+        "GET",
+        "/api/v1/notes-tasks/tasks",
+        token,
+        Value::Null,
+        StatusCode::FORBIDDEN,
+    )
+    .await;
 }

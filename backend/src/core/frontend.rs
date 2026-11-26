@@ -62,6 +62,22 @@ impl Frontend {
         let sidebar = include_str!("../../../frontend/shared/sidebar-button.html").trim();
         let upload = include_str!("../../../frontend/shared/upload-button.html").trim();
         html.replace(
+            "<!-- SANTOLV_RECORD_STYLE -->",
+            concat!(
+                "<style>",
+                include_str!("../../../frontend/shared/records.css"),
+                "</style>"
+            ),
+        )
+        .replace(
+            "<!-- SANTOLV_RECORD_SCRIPT -->",
+            concat!(
+                "<script>",
+                include_str!("../../../frontend/shared/records.js"),
+                "</script>"
+            ),
+        )
+        .replace(
             "<!-- SANTOLV_SHELL -->",
             include_str!("../../../frontend/shared/shell.html"),
         )

@@ -1,206 +1,10 @@
-<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<title>Notas y Tareas · Santolv</title>
-<style>
-:root {
-  color-scheme: light;
-  --background: #f6f6f8;
-  --surface: #fff;
-  --text: #1d1d1f;
-  --muted: #646469;
-  --line: #d9d9df;
-  --accent: #075fb6;
-  --accent-text: #fff;
-  --danger: #a81930;
-  font: 16px/1.5 system-ui, sans-serif;
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --background: #18181b;
-  --surface: #222225;
-  --text: #f5f5f7;
-  --muted: #b1b1b8;
-  --line: #434349;
-  --accent: #85bdff;
-  --accent-text: #10223a;
-  --danger: #ff9baa;
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--background); color: var(--text); }
-[hidden] { display: none !important; }
-main { max-width: 68rem; margin-inline: auto; padding: clamp(1rem, 4vw, 3rem); }
-h1, h2, p { margin: 0; }
-h1 { font-size: clamp(1.6rem, 5vw, 2.45rem); line-height: 1.15; letter-spacing: -.035em; }
-h2 { font-size: 1.25rem; }
-button, input, select, textarea { font: inherit; color: inherit; }
-button, input, select, textarea {
-  min-height: 2.75rem; padding: .5rem .75rem; border: 1px solid var(--line);
-  border-radius: .55rem; background: var(--surface); min-width: 0;
-}
-button { cursor: pointer; }
-button:disabled { opacity: .65; cursor: default; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.primary, .view button[aria-pressed="true"] {
-  background: var(--accent); color: var(--accent-text); border-color: var(--accent);
-}
-.heading, .filters, .view, .actions, .fields, .linked { display: flex; flex-wrap: wrap; gap: .65rem; }
-.heading { justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
-.filters { margin-top: 1rem; align-items: end; }
-.filters > label:first-child { flex: 1 1 13rem; }
-label { display: grid; gap: .25rem; min-width: 0; }
-label span, .meta { font-size: .875rem; color: var(--muted); }
-label.inline { display: flex; align-items: center; gap: .5rem; }
-label.inline input { min-height: auto; }
-#message { margin-block: 1rem; color: var(--muted); }
-[data-error="true"], #editor-error, .danger { color: var(--danger) !important; }
-#items { list-style: none; margin: 1rem 0; padding: 0; display: grid; gap: .55rem; }
-#items button {
-  width: 100%; min-width: 0; display: grid; gap: .25rem; padding: .8rem 1rem;
-  text-align: left; overflow-wrap: anywhere;
-}
-#items button:hover { border-color: var(--accent); }
-.preview { color: var(--muted); white-space: pre-wrap; }
-dialog {
-  width: min(36rem, calc(100% - 1.5rem)); max-height: calc(100dvh - 1.5rem);
-  border: 1px solid var(--line); border-radius: .9rem; padding: 1rem;
-  background: var(--surface); color: var(--text);
-}
-dialog::backdrop { background: #0007; }
-dialog form, fieldset { display: grid; gap: .85rem; }
-fieldset { border: 0; margin: 0; padding: 0; min-inline-size: 0; }
-.fields > label { flex: 1 1 9rem; }
-.linked { align-items: end; }
-.linked > label { flex: 1 1 12rem; }
-textarea { resize: vertical; }
-.actions { justify-content: space-between; }
-.actions > div { display: flex; flex-wrap: wrap; gap: .5rem; }
-#note-filter { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .75rem; }
 
-/* Diseño de Notas y tareas.html, manteniendo el editor y los filtros reales. */
-:root{--background:#f2f2f7;--surface:#fff;--text:#1d1d1f;--muted:#6e6e73;--line:#dedee3;--accent:#f5b500;--accent-text:#1d1d1f}
-:root[data-theme="dark"]{--background:#1c1c1e;--surface:#2c2c2e;--text:#f5f5f7;--muted:#aeaeb5;--line:#424245;--accent:#ffd60a;--accent-text:#1d1d1f}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-main{max-width:760px;padding:36px 20px 64px}
-main h1{font-size:32px;letter-spacing:-.03em}
-main .heading{margin-bottom:20px}
-main button,dialog button{border:0;font-weight:500}
-main #new,dialog .primary{border-radius:20px;background:var(--accent);color:var(--accent-text);padding:7px 16px;font-weight:600;min-height:36px}
-main .view{display:inline-flex;gap:2px;padding:3px;background:color-mix(in srgb,var(--text) 8%,transparent);border-radius:10px}
-main .view button{border-radius:7px;min-height:30px;padding:3px 18px;background:transparent;font-size:14px}
-main .view button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 3px #0002;border:0}
-main .filters{gap:10px;margin-top:16px;align-items:end}
-main .filters input,main .filters select{border:0;background:color-mix(in srgb,var(--text) 7%,transparent);border-radius:10px;min-height:36px;font-size:14px}
-main .filters label span{font-size:12px}
-main .filters button{min-height:36px;background:var(--surface)}
-main #message{font-size:14px;margin:16px 0}main #message:empty{display:none}
-main #items{gap:0;background:var(--surface);border-radius:12px;overflow:hidden;margin-top:20px}
-main #items li+li{border-top:1px solid var(--line)}
-main #items button{padding:13px 16px;border:0;border-radius:0;background:transparent;min-height:72px;gap:3px}
-main #items button:hover{background:color-mix(in srgb,var(--text) 5%,transparent)}
-main #items strong{font-size:15px;font-weight:600;line-height:1.4}
-main #items .preview{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-main #items .meta{font-size:12px;line-height:1.4}
-main #items .task-row button{grid-template-columns:24px minmax(0,1fr);column-gap:12px}
-main #items .task-row button::before{content:'';width:20px;height:20px;border:1.5px solid var(--muted);border-radius:50%;grid-row:1/3;align-self:center}
-main #items .task-row.done button::before{background:var(--accent);border-color:var(--accent);box-shadow:inset 0 0 0 4px var(--surface)}
-main #items .task-row.done strong{color:var(--muted)}
-dialog{border:0;border-radius:16px;padding:24px;box-shadow:0 24px 70px #0004}
-dialog input,dialog select,dialog textarea{background:color-mix(in srgb,var(--text) 4%,var(--surface));border:1px solid var(--line);border-radius:9px}
-dialog input[name=title]{font-size:22px;font-weight:650;letter-spacing:-.025em}
-dialog textarea{min-height:220px;line-height:1.5}
-dialog::backdrop{background:#0005}
-@media(max-width:560px){main{padding:24px 14px 48px}main h1{font-size:26px}main .heading{gap:10px}main .filters>label:first-child{flex-basis:100%}dialog{padding:18px}main #items button{padding:12px 14px}}
-@media(prefers-reduced-motion:reduce){main *,dialog *{transition:none;scroll-behavior:auto}}
-</style>
-</head>
-<body>
-<!-- SANTOLV_SHELL -->
-<main>
-  <div class="heading">
-    <h1>Notas y tareas</h1>
-    <button type="button" class="primary" id="new" disabled>Nueva nota</button>
-  </div>
-  <div class="view" role="group" aria-label="Vista">
-    <button type="button" id="notes" aria-pressed="true">Notas</button>
-    <button type="button" id="tasks" aria-pressed="false">Tareas</button>
-  </div>
-  <form class="filters" id="filters" role="search">
-    <label><span>Buscar</span><input type="search" name="q"></label>
-    <label id="archived-filter"><span>Archivo</span><select name="archived">
-      <option value="false">Activas</option><option value="true">Archivadas</option>
-    </select></label>
-    <label class="task-filter" hidden><span>Estado</span><select name="status">
-      <option value="">Todos</option><option value="pending">Pendiente</option>
-      <option value="in_progress">En curso</option><option value="done">Hecha</option>
-    </select></label>
-    <label class="task-filter" hidden><span>Prioridad</span><select name="priority">
-      <option value="">Todas</option><option value="low">Baja</option>
-      <option value="normal">Normal</option><option value="high">Alta</option>
-    </select></label>
-    <button type="submit">Buscar</button>
-  </form>
-  <div id="note-filter" hidden>
-    <span id="note-filter-label"></span>
-    <button type="button" id="clear-note-filter">Quitar filtro</button>
-  </div>
-  <p id="message" role="status"></p>
-  <ul id="items" aria-label="Resultados"></ul>
-  <button type="button" id="more" hidden>Cargar más</button>
-</main>
-<dialog id="editor" aria-labelledby="editor-title">
-  <form id="edit-form">
-    <h2 id="editor-title"></h2>
-    <fieldset id="edit-fields">
-      <label><span>Título</span><input name="title" required></label>
-      <fieldset id="note-fields">
-        <label><span>Contenido</span><textarea name="content" rows="8"></textarea></label>
-        <label class="inline" id="archive-field"><input name="archived" type="checkbox"><span>Archivada</span></label>
-      </fieldset>
-      <fieldset id="task-fields" hidden disabled>
-        <div class="fields">
-          <label><span>Estado</span><select name="status">
-            <option value="pending">Pendiente</option><option value="in_progress">En curso</option><option value="done">Hecha</option>
-          </select></label>
-          <label><span>Prioridad</span><select name="priority">
-            <option value="low">Baja</option><option value="normal">Normal</option><option value="high">Alta</option>
-          </select></label>
-        </div>
-        <label><span>Vencimiento</span><input type="datetime-local" name="due_at"></label>
-        <div class="linked">
-          <label><span>Nota vinculada</span><select name="note_id"><option value="">Ninguna</option></select></label>
-          <button type="button" id="load-notes">Buscar notas</button>
-        </div>
-        <div class="linked" id="picker-filters" hidden>
-          <label><span>Buscar nota por título o contenido</span><input type="search" id="picker-query"></label>
-          <label class="inline"><input type="checkbox" id="picker-archived"><span>Archivadas</span></label>
-          <button type="button" id="search-notes">Buscar</button>
-        </div>
-        <p id="picker-message" class="meta" role="status"></p>
-      </fieldset>
-    </fieldset>
-    <p id="editor-error" role="alert" hidden></p>
-    <div class="actions">
-      <div>
-        <button type="button" id="linked-tasks" hidden>Ver tareas vinculadas</button>
-        <button type="button" class="danger" id="delete" hidden>Eliminar tarea</button>
-      </div>
-      <div>
-        <button type="button" id="cancel">Cancelar</button>
-        <button type="submit" class="primary" id="save">Guardar</button>
-      </div>
-    </div>
-  </form>
-</dialog>
-<script>
 (() => {
   'use strict';
 
   const API_ORIGIN=location.protocol==='https:'?location.origin:'http://localhost:8443';
-  const base = '/notes-tasks';
+  const base = '';
+  const service = document.body.dataset.service;
   const shell = window.SantolvShell;
   const element = id => document.getElementById(id);
   const filters = element('filters');
@@ -216,11 +20,11 @@ dialog::backdrop{background:#0005}
     invalid_search: 'La búsqueda admite hasta 200 caracteres.',
     invalid_due_at: 'Introduce una fecha de vencimiento válida.',
     not_found: 'El registro o la nota vinculada ya no está disponible.',
-    service_disabled: 'Notas y Tareas está desactivado.',
-    service_forbidden: 'No tienes permiso para acceder a Notas y Tareas.'
+    service_disabled: 'El servicio está desactivado.',
+    service_forbidden: 'No tienes permiso para acceder a este servicio.'
   };
 
-  let me, resource = 'notes', noteFilter, listCursor, listRequest, activeParams;
+  let me, resource = service, noteFilter, listCursor, listRequest, activeParams;
   let editing, initialDue, pickerCursor, pickerRequest, pickerParams, saving = false;
 
   function returnHome() {
@@ -326,11 +130,11 @@ dialog::backdrop{background:#0005}
 
   function switchTo(next, linkedNote) {
     if (next !== resource || linkedNote) filters.reset();
+    if (next !== service) { location.assign('/' + next + '/' + (linkedNote ? '?note=' + encodeURIComponent(linkedNote.id) : '')); return; }
     resource = next;
     noteFilter = linkedNote;
     const notes = resource === 'notes';
-    element('notes').setAttribute('aria-pressed', String(notes));
-    element('tasks').setAttribute('aria-pressed', String(!notes));
+
     element('new').textContent = notes ? 'Nueva nota' : 'Nueva tarea';
     element('archived-filter').hidden = !notes;
     document.querySelectorAll('.task-filter').forEach(label => { label.hidden = notes; });
@@ -496,7 +300,7 @@ dialog::backdrop{background:#0005}
     const note = editing;
     editor.close();
     switchTo('tasks', note);
-    element('tasks').focus();
+
   });
   element('load-notes').addEventListener('click', () => void loadNotes(Boolean(pickerCursor)));
   element('search-notes').addEventListener('click', () => void loadNotes());
@@ -505,8 +309,6 @@ dialog::backdrop{background:#0005}
   });
   element('picker-archived').addEventListener('change', () => void loadNotes());
   element('new').addEventListener('click', () => openEditor());
-  element('notes').addEventListener('click', () => switchTo('notes'));
-  element('tasks').addEventListener('click', () => switchTo('tasks', noteFilter));
   element('clear-note-filter').addEventListener('click', () => switchTo('tasks'));
   element('more').addEventListener('click', () => void loadList(true));
   filters.addEventListener('submit', event => { event.preventDefault(); void loadList(); });
@@ -524,9 +326,7 @@ dialog::backdrop{background:#0005}
     shell?.account(me, {logout: endSession, switch: endSession});
     shell?.session(me.expires_at);
     element('new').disabled = false;
-    return loadList();
+    const noteId = new URLSearchParams(location.search).get('note');
+    switchTo(service, service === 'tasks' && noteId ? {id:noteId,title:'Nota vinculada'} : undefined);
   }).catch(error => message(error.message, true));
 })();
-</script>
-</body>
-</html>

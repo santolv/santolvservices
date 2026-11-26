@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Calendario · Santolv</title>
 <style>
-:root{color-scheme:light;--cal-text:#211f26;--cal-muted:#625b69;--cal-bg:#f8f7fa;--cal-panel:#fff;--cal-line:#ded9e3;--cal-accent:#8f3048;--cal-tint:#f8e6eb}
-:root[data-theme="dark"]{color-scheme:dark;--cal-text:#f4edf5;--cal-muted:#c0b5c3;--cal-bg:#19171d;--cal-panel:#242128;--cal-line:#45404a;--cal-accent:#ff9bb4;--cal-tint:#4c2835}
 *{box-sizing:border-box}body{margin:0;font:15px/1.45 system-ui,sans-serif;background:var(--cal-bg);color:var(--cal-text)}[hidden]{display:none!important}
 .calendar-page{max-width:1320px;margin:auto;padding:clamp(16px,4vw,48px)}
 .calendar-page h1{font-size:clamp(29px,5vw,46px);margin:0;letter-spacing:-.045em}.calendar-page h2{margin:0;font-size:1.3rem}
@@ -35,8 +33,6 @@
 }
 
 /* Adaptación del diseño Calendario.html sobre los componentes y datos de Santolv. */
-:root{--cal-text:#1d1d1f;--cal-muted:#6e6e73;--cal-bg:#fff;--cal-panel:#f5f5f7;--cal-line:#dedee2;--cal-accent:#d92d25;--cal-tint:#fceae9}
-:root[data-theme="dark"]{--cal-text:#f5f5f7;--cal-muted:#aeaeb5;--cal-bg:#1e1e20;--cal-panel:#262628;--cal-line:#3b3b3e;--cal-accent:#ff6961;--cal-tint:#442a29}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 .calendar-page{max-width:none;margin:0;padding:0;display:grid;grid-template-columns:236px minmax(0,1fr);min-height:calc(100dvh - var(--shell-height,48px));grid-template-rows:auto 1fr}
 .cal-sidebar{grid-column:1;grid-row:1/3;background:var(--cal-panel);border-right:1px solid var(--cal-line);padding:28px 16px;display:flex;flex-direction:column;gap:16px;min-width:0}
@@ -115,13 +111,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
 #reminder-options #event-reminder{display:flex}
 
 .calendar-page #new-event{background:#ff453a;color:#fff;min-height:28px;height:28px;padding:0 12px;font-size:13px;border-radius:7px}
+
+/* Shared surfaces and sidebar behavior; no new theme is defined by this module. */
+:root,:root[data-theme]{--cal-accent:var(--ui-red);--cal-tint:color-mix(in srgb,var(--ui-red) 12%,var(--ui-canvas));--cal-bg:var(--ui-canvas);--cal-panel:var(--ui-raised);--cal-text:var(--ui-text);--cal-muted:var(--ui-muted);--cal-line:var(--ui-line)}
+.calendar-page{display:grid;position:relative;isolation:isolate;grid-template-columns:var(--ui-sidebar-width) minmax(0,1fr);--blue:var(--ui-blue);--fill:var(--ui-control)}
+.calendar-page .cal-sidebar{position:absolute;inset:0 auto 0 0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:16px;width:var(--ui-sidebar-width);padding:0 10.7px 14.98px;border:0;border-right:1px solid var(--ui-line);background:var(--ui-panel);overflow:auto;z-index:20;opacity:1;visibility:visible;transform:none}
+.calendar-page .cal-sidebar .sidebar-top{gap:10px;margin:0;min-height:46px}.calendar-page .cal-sidebar h1{font:600 17px/1.4 var(--ui-font);margin:0;letter-spacing:-.02em}
+.calendar-page .cal-sidebar label{display:grid;gap:8px;font-size:14px;padding:0 10.7px}.calendar-page .cal-sidebar select{width:100%;max-width:none}
+.calendar-page .cal-sidebar #manage{margin:0 10.7px}
+.calendar-page .cal-workspace{grid-column:2;grid-row:1;height:100%;min-height:0}
+.calendar-page.sidebar-hidden{grid-template-columns:0 minmax(0,1fr)}
+.calendar-page.sidebar-hidden .cal-sidebar{display:flex;transform:translateX(-100%);opacity:0;visibility:hidden;pointer-events:none}
+#event-dialog,#manage-dialog{background:var(--ui-raised);color:var(--ui-text);font:15px/1.45 var(--ui-font);border-color:var(--ui-line);box-shadow:var(--ui-shadow)}
+#event-dialog::backdrop,#manage-dialog::backdrop{background:var(--ui-backdrop);backdrop-filter:blur(6px)}
+#event-form .cal-date-group{background:var(--ui-control)}#event-form .cal-chips button{background:var(--ui-control)}
+#event-form .calendar-actions button:not(#save-event){background:var(--ui-control)}
+#event-form .cal-advanced{padding:8px 0;border-top:1px solid var(--ui-line)}#event-form .cal-advanced>summary{font-size:13px;color:var(--ui-muted)}
+#manage-dialog h2{font-size:22px;letter-spacing:-.025em}#manage-dialog h3{font-size:15px;margin:8px 0}
+#manage-dialog .cal-members li{padding:8px 0;border-bottom:1px solid var(--ui-line)}
+@media(max-width:620px){.calendar-page{display:grid;grid-template-columns:0 minmax(0,1fr)}.calendar-page .cal-sidebar{transform:translateX(-100%);opacity:0;visibility:hidden;pointer-events:none}.calendar-page.mobile-sidebar .cal-sidebar{display:flex;transform:none;opacity:1;visibility:visible;pointer-events:auto;box-shadow:8px 0 32px #0003}.calendar-page .cal-workspace{height:100%;min-height:0}.calendar-page .cal-sidebar label{width:auto}}
+@media(prefers-reduced-transparency:reduce){#event-dialog::backdrop,#manage-dialog::backdrop{backdrop-filter:none;background:#0009}}
+
+body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-date-group label{font-family:var(--ui-font)}
 </style>
 </head>
 <body class="calendar-body">
 <!-- SANTOLV_SHELL -->
 <main class="calendar-page app">
   <aside class="cal-sidebar" id="sidebar" aria-label="Calendarios">
-    <div class="cal-row spread"><h1>Calendario</h1><!-- SANTOLV_SIDEBAR_HIDE --></div>
+    <div class="sidebar-top"><!-- SANTOLV_SIDEBAR_HIDE --><h1>Calendario</h1></div>
     <label>Calendarios <select id="calendar-filter" aria-label="Filtrar por calendario"><option value="">Todos los calendarios</option></select></label>
     <button type="button" id="manage">Gestionar calendarios</button>
   </aside>

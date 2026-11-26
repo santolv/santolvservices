@@ -34,14 +34,17 @@ pub const SERVICE: Service = Service {
 fn routes() -> Router<App> {
     Router::new()
         .route("/api/v1/notes", get(list_notes).post(create_note))
-        .route("/api/v1/notes/{id}", get(get_note).put(update_note))
+        .route(
+            "/api/v1/notes/{id}",
+            get(get_note).put(update_note).delete(delete_note),
+        )
         .route(
             "/api/v1/notes-tasks/notes",
             get(list_notes).post(create_note),
         )
         .route(
             "/api/v1/notes-tasks/notes/{id}",
-            get(get_note).put(update_note),
+            get(get_note).put(update_note).delete(delete_note),
         )
         .layer(DefaultBodyLimit::max(640 * 1024))
 }
@@ -192,4 +195,24 @@ pub(super) async fn require_link(app: &App, user: &User, id: Uuid) -> Result<()>
         return Err(Error::denied());
     }
     Ok(())
+}
+
+async fn delete_note(
+    State(app): State<App>,
+    user: User,
+    Path(id): Path<String>,
+) -> Result<StatusCode> {
+    let id = id_from_path(&id)?;
+    let mut tx = app.db.begin().await?;
+    super::tasks::unlink_note(&mut tx, user.id, id).await?;
+    let deleted = sqlx::query("DELETE FROM notes.notes WHERE owner_id=$1 AND id=$2")
+        .bind(user.id)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    if deleted.rows_affected() == 0 {
+        return Err(Error::denied());
+    }
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
 }

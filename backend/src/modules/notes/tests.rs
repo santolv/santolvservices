@@ -636,3 +636,219 @@ async fn services_switch_independently_and_preserve_links(db: PgPool) {
     )
     .await;
 }
+#[sqlx::test]
+async fn calendar_links_are_personal_and_recheck_both_services(db: PgPool) {
+    let root = tempfile::tempdir().unwrap();
+    let api = router(app_state(db.clone(), &root));
+    let (alice_id, a) = user(&db, "link-alice").await;
+    let (bob_id, b) = user(&db, "link-bob").await;
+    let a = Some(a.as_str());
+    let b = Some(b.as_str());
+    for service in ["notes", "tasks", "calendar"] {
+        manager::set_enabled(&db, service, true).await.unwrap();
+    }
+    let note = call(
+        &api,
+        "POST",
+        NOTES,
+        a,
+        json!({"title":"Privada","content":"Secreto"}),
+        StatusCode::CREATED,
+    )
+    .await;
+    let task = call(
+        &api,
+        "POST",
+        TASKS,
+        a,
+        json!({"title":"Vinculada","note_id":note["id"]}),
+        StatusCode::CREATED,
+    )
+    .await;
+    let event=call(&api,"POST","/api/v1/calendar/events",a,json!({"title":"Agenda","description":"","local_start":"2026-12-03T09:00","local_end":"2026-12-03T10:00","zone":"UTC"}),StatusCode::CREATED).await;
+    let event_id = event["id"].as_str().unwrap();
+    let notes = format!("/api/v1/calendar/events/{event_id}/links/notes");
+    let tasks = format!("/api/v1/calendar/events/{event_id}/links/tasks");
+    call(
+        &api,
+        "PUT",
+        &notes,
+        a,
+        json!({"id":note["id"]}),
+        StatusCode::OK,
+    )
+    .await;
+    call(
+        &api,
+        "PUT",
+        &tasks,
+        a,
+        json!({"id":task["id"]}),
+        StatusCode::OK,
+    )
+    .await;
+    call(
+        &api,
+        "GET",
+        &notes,
+        None,
+        Value::Null,
+        StatusCode::UNAUTHORIZED,
+    )
+    .await;
+    call(&api, "GET", &notes, b, Value::Null, StatusCode::NOT_FOUND).await;
+    sqlx::query("INSERT INTO calendar.members(calendar_id,user_id,role) VALUES($1,$2,'reader')")
+        .bind(Uuid::parse_str(event["calendar_id"].as_str().unwrap()).unwrap())
+        .bind(bob_id)
+        .execute(&db)
+        .await
+        .unwrap();
+    assert!(call(&api, "GET", &notes, b, Value::Null, StatusCode::OK).await["id"].is_null());
+    call(
+        &api,
+        "PUT",
+        &notes,
+        b,
+        json!({"id":note["id"]}),
+        StatusCode::NOT_FOUND,
+    )
+    .await;
+    let own = call(
+        &api,
+        "POST",
+        NOTES,
+        b,
+        json!({"title":"De Bob","content":"Otra"}),
+        StatusCode::CREATED,
+    )
+    .await;
+    call(
+        &api,
+        "PUT",
+        &notes,
+        b,
+        json!({"id":own["id"]}),
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(
+        call(&api, "GET", &notes, a, Value::Null, StatusCode::OK).await["id"],
+        note["id"]
+    );
+    manager::set_enabled(&db, "notes", false).await.unwrap();
+    call(
+        &api,
+        "GET",
+        &notes,
+        a,
+        Value::Null,
+        StatusCode::SERVICE_UNAVAILABLE,
+    )
+    .await;
+    assert_eq!(
+        call(&api, "GET", &tasks, a, Value::Null, StatusCode::OK).await["id"],
+        task["id"]
+    );
+    manager::set_enabled(&db, "notes", true).await.unwrap();
+    sqlx::query("INSERT INTO public.service_user_denials VALUES($1,'notes')")
+        .bind(alice_id)
+        .execute(&db)
+        .await
+        .unwrap();
+    call(&api, "GET", &notes, a, Value::Null, StatusCode::FORBIDDEN).await;
+    sqlx::query("DELETE FROM public.service_user_denials WHERE user_id=$1")
+        .bind(alice_id)
+        .execute(&db)
+        .await
+        .unwrap();
+    call(
+        &api,
+        "DELETE",
+        &format!("{NOTES}/{}", note["id"].as_str().unwrap()),
+        b,
+        Value::Null,
+        StatusCode::NOT_FOUND,
+    )
+    .await;
+    call(
+        &api,
+        "DELETE",
+        &format!("{NOTES}/{}", note["id"].as_str().unwrap()),
+        a,
+        Value::Null,
+        StatusCode::NO_CONTENT,
+    )
+    .await;
+    assert!(call(&api, "GET", &notes, a, Value::Null, StatusCode::OK).await["id"].is_null());
+    assert!(
+        call(
+            &api,
+            "GET",
+            &format!("{TASKS}/{}", task["id"].as_str().unwrap()),
+            a,
+            Value::Null,
+            StatusCode::OK
+        )
+        .await["note_id"]
+            .is_null()
+    );
+    manager::set_enabled(&db, "calendar", false).await.unwrap();
+    call(
+        &api,
+        "GET",
+        &tasks,
+        a,
+        Value::Null,
+        StatusCode::SERVICE_UNAVAILABLE,
+    )
+    .await;
+}
+
+#[sqlx::test]
+async fn task_archive_is_persistent_private_and_independent_of_completion(db: PgPool) {
+    let root = tempfile::tempdir().unwrap();
+    let api = router(app_state(db.clone(), &root));
+    let (_, a) = user(&db, "archive-alice").await;
+    let (_, b) = user(&db, "archive-bob").await;
+    let a = Some(a.as_str());
+    let b = Some(b.as_str());
+    manager::set_enabled(&db, "tasks", true).await.unwrap();
+    let task = call(
+        &api,
+        "POST",
+        TASKS,
+        a,
+        json!({"title":"Para archivar"}),
+        StatusCode::CREATED,
+    )
+    .await;
+    let path = format!("{TASKS}/{}", task["id"].as_str().unwrap());
+    let mut input = json!({"title":"Para archivar","status":"done","priority":"normal","due_at":null,"note_id":null,"archived":true});
+    call(&api, "PUT", &path, b, input.clone(), StatusCode::NOT_FOUND).await;
+    let archived = call(&api, "PUT", &path, a, input.clone(), StatusCode::OK).await;
+    assert!(archived["archived_at"].is_string());
+    assert!(
+        call(&api, "GET", TASKS, a, Value::Null, StatusCode::OK).await["items"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        call(
+            &api,
+            "GET",
+            &format!("{TASKS}?archived=true"),
+            a,
+            Value::Null,
+            StatusCode::OK
+        )
+        .await["items"][0]["id"],
+        task["id"]
+    );
+    input["archived"] = json!(false);
+    call(&api, "PUT", &path, a, input, StatusCode::OK).await;
+    assert_eq!(
+        call(&api, "GET", TASKS, a, Value::Null, StatusCode::OK).await["items"][0]["status"],
+        "done"
+    );
+}

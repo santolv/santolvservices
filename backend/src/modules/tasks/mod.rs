@@ -48,6 +48,8 @@ fn routes() -> Router<App> {
 }
 #[derive(FromRow, Serialize)]
 struct Task {
+    #[serde(with = "time::serde::rfc3339::option")]
+    archived_at: Option<OffsetDateTime>,
     id: Uuid,
     title: String,
     status: String,
@@ -114,6 +116,8 @@ struct NewTask {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct EditTask {
+    #[serde(default)]
+    archived: Option<bool>,
     title: String,
     status: TaskStatus,
     priority: Priority,
@@ -131,6 +135,8 @@ fn nullable<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
 
 #[derive(Deserialize)]
 struct TasksQuery {
+    #[serde(default)]
+    archived: bool,
     status: Option<TaskStatus>,
     priority: Option<Priority>,
     note_id: Option<Uuid>,
@@ -152,13 +158,14 @@ async fn list_tasks(
     let Query(query) = query.map_err(|_| Error::bad("invalid_query"))?;
     let options = query.list.options()?;
     let items = sqlx::query_as(
-        "SELECT id, title, status, priority, due_at, note_id, created_at, updated_at
+        "SELECT id, title, status, priority, due_at, note_id, archived_at, created_at, updated_at
          FROM tasks.tasks
          WHERE owner_id=$1 AND ($2::text IS NULL OR status=$2)
            AND ($3::text IS NULL OR priority=$3)
            AND ($4::uuid IS NULL OR note_id=$4)
            AND ($5::text IS NULL OR title ILIKE $5 ESCAPE '!')
            AND ($6::timestamptz IS NULL OR (created_at, id) < ($6, $7))
+         AND (archived_at IS NOT NULL)=$9
          ORDER BY created_at DESC, id DESC LIMIT $8",
     )
     .bind(user.id)
@@ -169,6 +176,7 @@ async fn list_tasks(
     .bind(options.before_time)
     .bind(options.before_id)
     .bind(options.limit + 1)
+    .bind(query.archived)
     .fetch_all(&app.db)
     .await?;
     page(items, options.limit, |task: &Task| {
@@ -188,7 +196,7 @@ async fn create_task(
     let task = sqlx::query_as(
         "INSERT INTO tasks.tasks (owner_id, id, title, status, priority, due_at, note_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, title, status, priority, due_at, note_id, created_at, updated_at",
+         RETURNING id, title, status, priority, due_at, note_id, archived_at, created_at, updated_at",
     )
     .bind(user.id)
     .bind(Uuid::new_v4())
@@ -209,7 +217,7 @@ async fn get_task(
     Path(id): Path<String>,
 ) -> Result<Json<Task>> {
     let task = sqlx::query_as(
-        "SELECT id, title, status, priority, due_at, note_id, created_at, updated_at
+        "SELECT id, title, status, priority, due_at, note_id, archived_at, created_at, updated_at
          FROM tasks.tasks WHERE owner_id=$1 AND id=$2",
     )
     .bind(user.id)
@@ -240,9 +248,10 @@ async fn update_task(
     }
     let task = sqlx::query_as(
         "UPDATE tasks.tasks SET title=$3, status=$4, priority=$5, due_at=$6,
-           note_id=$7, updated_at=statement_timestamp()
+           note_id=$7, updated_at=statement_timestamp(),
+           archived_at=CASE WHEN $8::boolean IS NULL THEN archived_at WHEN $8 THEN COALESCE(archived_at,statement_timestamp()) ELSE NULL END
          WHERE owner_id=$1 AND id=$2
-         RETURNING id, title, status, priority, due_at, note_id, created_at, updated_at",
+         RETURNING id, title, status, priority, due_at, note_id, archived_at, created_at, updated_at",
     )
     .bind(user.id)
     .bind(id_from_path(&id)?)
@@ -251,6 +260,7 @@ async fn update_task(
     .bind(input.priority.as_str())
     .bind(due_at(input.due_at.as_deref())?)
     .bind(input.note_id)
+    .bind(input.archived)
     .fetch_optional(&app.db)
     .await?
     .ok_or_else(Error::denied)?;
@@ -271,4 +281,22 @@ async fn delete_task(
         return Err(Error::denied());
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub(super) async fn require_link(app: &App, user: &User, id: Uuid) -> Result<()> {
+    crate::core::manager::require_access(&app.db, "tasks", user.id).await?;
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks.tasks WHERE owner_id=$1 AND id=$2)")
+            .bind(user.id)
+            .bind(id)
+            .fetch_one(&app.db)
+            .await?;
+    if !exists {
+        return Err(Error::denied());
+    }
+    Ok(())
+}
+pub(super) async fn unlink_note(db: &mut sqlx::PgConnection, user: Uuid, note: Uuid) -> Result<()> {
+    sqlx::query("UPDATE tasks.tasks SET note_id=NULL,updated_at=statement_timestamp() WHERE owner_id=$1 AND note_id=$2").bind(user).bind(note).execute(db).await?;
+    Ok(())
 }

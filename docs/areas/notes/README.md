@@ -19,3 +19,11 @@ y al editor propios, nunca a la barra global ni a sus diálogos.
 
 Comprobar cargo fmt --check, cargo clippy --locked --all-targets -- -D warnings,
 cargo test --locked contra PostgreSQL de pruebas, los cuatro clientes y diff --check.
+
+## Editor y eliminación
+
+El editor tiene título y contenido sin bordes, acciones Archivar/Restaurar,
+Eliminar y Hecho, y fondo desenfocado con degradado. `DELETE /api/v1/notes/{id}`
+elimina únicamente una nota propia. Las tareas vinculadas se conservan y su
+`note_id` pasa a null dentro de la misma transacción; Calendario limpia sus
+referencias automáticamente. La interfaz confirma antes de eliminar.

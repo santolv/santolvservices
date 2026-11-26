@@ -15,36 +15,30 @@
     <button type="button" class="primary" id="new" disabled>Nueva nota</button>
   </div>
   <form class="filters" id="filters" role="search">
-    <label><span>Buscar</span><input type="search" name="q"></label>
-    <label id="archived-filter"><span>Archivo</span><select name="archived">
-      <option value="false">Activas</option><option value="true">Archivadas</option>
-    </select></label>
-    <label class="task-filter" hidden><span>Estado</span><select name="status">
-      <option value="">Todos</option><option value="pending">Pendiente</option>
-      <option value="in_progress">En curso</option><option value="done">Hecha</option>
-    </select></label>
-    <label class="task-filter" hidden><span>Prioridad</span><select name="priority">
-      <option value="">Todas</option><option value="low">Baja</option>
-      <option value="normal">Normal</option><option value="high">Alta</option>
-    </select></label>
-    <button type="submit">Buscar</button>
+    <nav class="record-tabs" aria-label="Aplicaciones"><a href="/notes/" data-record-service="notes" >Notas</a><a href="/tasks/" data-record-service="tasks" aria-current="page">Tareas</a></nav>
+    <label class="record-search"><span class="sr-only">Buscar</span><input type="search" name="q" placeholder="Buscar" aria-label="Buscar"></label>
+    <div class="record-segment" role="group" aria-label="Archivo"><button type="button" data-record-archive="false" aria-pressed="true">Activas</button><button type="button" data-record-archive="true" aria-pressed="false">Archivadas</button></div>
+    <label id="archived-filter" hidden><span>Archivo</span><select name="archived"><option value="false">Activas</option><option value="true">Archivadas</option></select></label>
+    <details class="record-filter-options task-filter" hidden><summary>Filtros</summary><label><span>Estado</span><select name="status"><option value="">Todos</option><option value="pending">Pendiente</option><option value="in_progress">En curso</option><option value="done">Hecha</option></select></label><label><span>Prioridad</span><select name="priority"><option value="">Todas</option><option value="low">Baja</option><option value="normal">Normal</option><option value="high">Alta</option></select></label><button type="submit">Aplicar</button></details>
   </form>
   <div id="note-filter" hidden>
     <span id="note-filter-label"></span>
     <button type="button" id="clear-note-filter">Quitar filtro</button>
   </div>
   <p id="message" role="status"></p>
+  <form id="quick-task" class="quick-task" hidden><span aria-hidden="true">+</span><input name="title" maxlength="200" required placeholder="Nueva tarea" aria-label="Nueva tarea"><button type="submit" aria-label="Añadir tarea">Añadir</button></form>
   <ul id="items" aria-label="Resultados"></ul>
+  <section id="completed-block" hidden><h2 id="completed-heading">Completadas</h2><ul id="completed-items" aria-labelledby="completed-heading"></ul></section>
   <button type="button" id="more" hidden>Cargar más</button>
 </main>
 <dialog class="records-editor" id="editor" aria-labelledby="editor-title">
   <form id="edit-form">
-    <h2 id="editor-title"></h2>
+    <h2 id="editor-title" class="sr-only"></h2>
     <fieldset id="edit-fields">
-      <label><span>Título</span><input name="title" required></label>
+      <label class="record-title"><span class="sr-only">Título</span><input name="title" placeholder="Título" maxlength="200" required></label>
       <fieldset id="note-fields">
-        <label><span>Contenido</span><textarea name="content" rows="8"></textarea></label>
-        <label class="inline" id="archive-field"><input name="archived" type="checkbox"><span>Archivada</span></label>
+        <label class="record-content"><span class="sr-only">Contenido</span><textarea name="content" placeholder="Escribe algo…" rows="8"></textarea></label>
+        <label class="inline" id="archive-field" hidden><input name="archived" type="checkbox"><span>Archivada</span></label>
       </fieldset>
       <fieldset id="task-fields" hidden disabled>
         <div class="fields">
@@ -67,16 +61,18 @@
         </div>
         <p id="picker-message" class="meta" role="status"></p>
       </fieldset>
+      <details class="record-related" id="record-related" hidden><summary>Relaciones</summary><button type="button" id="linked-tasks" hidden>Ver tareas vinculadas</button></details>
     </fieldset>
     <p id="editor-error" role="alert" hidden></p>
     <div class="actions">
       <div>
-        <button type="button" id="linked-tasks" hidden>Ver tareas vinculadas</button>
-        <button type="button" class="danger" id="delete" hidden>Eliminar tarea</button>
+        <button type="button" id="archive" hidden>Archivar</button>
+
+        <button type="button" class="danger" id="delete" hidden>Eliminar</button>
       </div>
       <div>
-        <button type="button" id="cancel">Cancelar</button>
-        <button type="submit" class="primary" id="save">Guardar</button>
+        <button type="button" id="cancel" aria-label="Cerrar sin guardar" title="Cerrar sin guardar">×</button>
+        <button type="submit" class="primary" id="save">Hecho</button>
       </div>
     </div>
   </form>

@@ -82,7 +82,11 @@
     }
     button.append(meta);
     button.addEventListener('click', () => openEditor(item));
-    li.append(button);
+    if(resource==='tasks'){
+      const toggle=document.createElement('button');toggle.type='button';toggle.className='task-toggle';toggle.setAttribute('aria-label',item.status==='done'?'Marcar como pendiente: '+item.title:'Completar: '+item.title);toggle.setAttribute('aria-pressed',String(item.status==='done'));
+      toggle.addEventListener('click',async()=>{toggle.disabled=true;try{await api('/tasks/'+encodeURIComponent(item.id),{method:'PUT',body:{title:item.title,status:item.status==='done'?'pending':'done',priority:item.priority,due_at:item.due_at,note_id:item.note_id,archived:Boolean(item.archived_at)}});await loadList()}catch(error){message(error.message,true)}finally{toggle.disabled=false}});li.append(toggle);
+    }
+    button.className='record-open';li.append(button);
     return li;
   }
 
@@ -92,14 +96,16 @@
     const request = new AbortController();
     listRequest = request;
     const items = element('items');
+    element('quick-task').hidden=resource!=='tasks'||filters.elements.archived.value==='true';
     if (!append) {
       items.replaceChildren();
+      element('completed-items').replaceChildren();
       listCursor = null;
       const {q, archived, status, priority} = filters.elements;
       activeParams = new URLSearchParams();
       if (q.value.trim()) activeParams.set('q', q.value.trim());
-      if (resource === 'notes') activeParams.set('archived', archived.value);
-      else {
+      activeParams.set('archived', archived.value);
+      if (resource !== 'notes') {
         if (status.value) activeParams.set('status', status.value);
         if (priority.value) activeParams.set('priority', priority.value);
         if (noteFilter) activeParams.set('note_id', noteFilter.id);
@@ -114,9 +120,12 @@
     try {
       const data = await api(resourcePath() + '?' + params, {signal: request.signal});
       if (listRequest !== request) return;
-      items.append(...data.items.map(row));
+      for (const item of data.items) (resource==='tasks' && item.status==='done' ? element('completed-items') : items).append(row(item));
+      const completed=element('completed-items').childElementCount;
+      element('completed-block').hidden=!completed;
+      element('completed-heading').textContent='Completadas · '+completed;
       listCursor = data.next_cursor;
-      message(items.childElementCount ? '' : 'No hay resultados.');
+      message(items.childElementCount || completed ? '' : 'No hay resultados.');
     } catch (error) {
       if (listRequest === request) message(error.message, true);
     } finally {
@@ -136,7 +145,8 @@
     const notes = resource === 'notes';
 
     element('new').textContent = notes ? 'Nueva nota' : 'Nueva tarea';
-    element('archived-filter').hidden = !notes;
+    element('archived-filter').hidden = true;
+    element('quick-task').hidden = notes;
     document.querySelectorAll('.task-filter').forEach(label => { label.hidden = notes; });
     element('note-filter').hidden = !noteFilter;
     if (noteFilter) element('note-filter-label').textContent = 'Nota: ' + noteFilter.title;
@@ -210,9 +220,13 @@
       element(id).hidden = !visible;
       element(id).disabled = !visible;
     }
-    element('archive-field').hidden = !item;
+    element('archive-field').hidden = true;
+    element('archive').hidden = !item;
+    element('archive').textContent=item?.archived_at?'Restaurar':'Archivar';
+    form.elements.archived.checked=Boolean(item?.archived_at);
     element('linked-tasks').hidden = !(notes && item);
-    element('delete').hidden = notes || !item;
+    element('record-related').hidden = !(notes && item);
+    element('delete').hidden = !item;
     form.elements.title.value = item?.title ?? '';
     if (notes) {
       form.elements.content.value = item?.content ?? '';
@@ -251,7 +265,7 @@
   async function change(method, body) {
     if (saving) return;
     saving = true;
-    for (const id of ['edit-fields', 'cancel', 'save', 'delete', 'linked-tasks']) element(id).disabled = true;
+    for (const id of ['edit-fields', 'cancel', 'save', 'delete', 'linked-tasks', 'archive']) element(id).disabled = true;
     editorError();
     try {
       await api(resourcePath(editing?.id), {method, body});
@@ -273,6 +287,7 @@
       body.content = fields.content.value;
       if (editing) body.archived = fields.archived.checked;
     } else {
+      if(editing)body.archived=fields.archived.checked;
       body.status = fields.status.value;
       body.priority = fields.priority.value;
       body.note_id = fields.note_id.value || null;
@@ -294,7 +309,7 @@
   editor.addEventListener('close', () => { pickerRequest?.abort(); pickerRequest = null; });
   element('cancel').addEventListener('click', () => editor.close());
   element('delete').addEventListener('click', () => {
-    if (window.confirm('¿Eliminar esta tarea?')) void change('DELETE');
+    if (window.confirm(resource==='notes'?'¿Eliminar esta nota? Las tareas vinculadas se conservarán.':'¿Eliminar esta tarea?')) void change('DELETE');
   });
   element('linked-tasks').addEventListener('click', () => {
     const note = editing;
@@ -308,6 +323,11 @@
     if (event.key === 'Enter') { event.preventDefault(); void loadNotes(); }
   });
   element('picker-archived').addEventListener('change', () => void loadNotes());
+  element('archive').addEventListener('click',()=>{if(!editing)return;form.elements.archived.checked=!Boolean(editing.archived_at);form.requestSubmit()});
+  for(const button of document.querySelectorAll('[data-record-archive]'))button.addEventListener('click',()=>{filters.elements.archived.value=button.dataset.recordArchive;for(const other of document.querySelectorAll('[data-record-archive]'))other.setAttribute('aria-pressed',String(other===button));void loadList()});
+  filters.elements.q.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>void loadList(),200)});
+  let searchTimer;
+  element('quick-task').addEventListener('submit',async event=>{event.preventDefault();const input=element('quick-task').elements.title,button=element('quick-task').querySelector('button');button.disabled=true;try{await api('/tasks',{method:'POST',body:{title:input.value}});input.value='';await loadList();input.focus()}catch(error){message(error.message,true)}finally{button.disabled=false}});
   element('new').addEventListener('click', () => openEditor());
   element('clear-note-filter').addEventListener('click', () => switchTo('tasks'));
   element('more').addEventListener('click', () => void loadList(true));
@@ -328,5 +348,7 @@
     element('new').disabled = false;
     const noteId = new URLSearchParams(location.search).get('note');
     switchTo(service, service === 'tasks' && noteId ? {id:noteId,title:'Nota vinculada'} : undefined);
+    const id=new URLSearchParams(location.search).get('id');if(id)void api(resourcePath(id)).then(openEditor).catch(error=>message(error.message,true));
+    void api('/services').then(data=>{for(const link of document.querySelectorAll('[data-record-service]'))link.hidden=!data.items.some(item=>item.id===link.dataset.recordService&&item.enabled)}).catch(()=>{});
   }).catch(error => message(error.message, true));
 })();

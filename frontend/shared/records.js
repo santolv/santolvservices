@@ -134,7 +134,7 @@
     resource = next;
     noteFilter = linkedNote;
     const notes = resource === 'notes';
-    
+
     element('new').textContent = notes ? 'Nueva nota' : 'Nueva tarea';
     element('archived-filter').hidden = !notes;
     document.querySelectorAll('.task-filter').forEach(label => { label.hidden = notes; });

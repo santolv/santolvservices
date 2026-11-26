@@ -113,6 +113,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
 @media(max-width:850px){.calendar-page{display:flex;flex-direction:column}.cal-sidebar{flex-shrink:0}.cal-workspace{flex:1;height:auto;min-height:0}.cal-week-view,.calendar-page.mobile-sidebar .cal-week-view{height:100%;min-height:0}}
 
 #reminder-options #event-reminder{display:flex}
+
+.calendar-page #new-event{background:#ff453a;color:#fff;min-height:28px;height:28px;padding:0 12px;font-size:13px;border-radius:7px}
 </style>
 </head>
 <body class="calendar-body">
@@ -120,14 +122,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
 <main class="calendar-page app">
   <aside class="cal-sidebar" id="sidebar" aria-label="Calendarios">
     <div class="cal-row spread"><h1>Calendario</h1><!-- SANTOLV_SIDEBAR_HIDE --></div>
-    <button type="button" class="primary" id="new-event">Nuevo evento</button>
     <label>Calendarios <select id="calendar-filter" aria-label="Filtrar por calendario"><option value="">Todos los calendarios</option></select></label>
     <button type="button" id="manage">Gestionar calendarios</button>
   </aside>
   <section class="cal-workspace" aria-label="Eventos">
   <div class="cal-row spread cal-controls">
     <div class="cal-row"><!-- SANTOLV_SIDEBAR_SHOW --><button type="button" id="previous" aria-label="Período anterior">‹</button><button type="button" id="today">Hoy</button><button type="button" id="next" aria-label="Período siguiente">›</button><h2 id="period" aria-live="polite"></h2></div>
-    <div class="cal-segment" role="group" aria-label="Vista"><button type="button" data-view="month" aria-pressed="false">Mes</button><button type="button" data-view="week" aria-pressed="true">Semana</button><button type="button" data-view="agenda" aria-pressed="false">Agenda</button></div>
+    <div class="cal-segment" role="group" aria-label="Vista"><button type="button" data-view="month" aria-pressed="false">Mes</button><button type="button" data-view="week" aria-pressed="true">Semana</button><button type="button" data-view="agenda" aria-pressed="false">Agenda</button></div><button type="button" class="primary" id="new-event">+ Nuevo evento</button>
   </div>
   <p id="page-status" role="status"></p>
   <div id="display" class="cal-scroll" aria-labelledby="period"></div>

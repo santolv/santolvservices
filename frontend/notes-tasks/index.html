@@ -79,6 +79,42 @@ textarea { resize: vertical; }
 .actions { justify-content: space-between; }
 .actions > div { display: flex; flex-wrap: wrap; gap: .5rem; }
 #note-filter { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .75rem; }
+
+/* Diseño de Notas y tareas.html, manteniendo el editor y los filtros reales. */
+:root{--background:#f2f2f7;--surface:#fff;--text:#1d1d1f;--muted:#6e6e73;--line:#dedee3;--accent:#f5b500;--accent-text:#1d1d1f}
+:root[data-theme="dark"]{--background:#1c1c1e;--surface:#2c2c2e;--text:#f5f5f7;--muted:#aeaeb5;--line:#424245;--accent:#ffd60a;--accent-text:#1d1d1f}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:760px;padding:36px 20px 64px}
+main h1{font-size:32px;letter-spacing:-.03em}
+main .heading{margin-bottom:20px}
+main button,dialog button{border:0;font-weight:500}
+main #new,dialog .primary{border-radius:20px;background:var(--accent);color:var(--accent-text);padding:7px 16px;font-weight:600;min-height:36px}
+main .view{display:inline-flex;gap:2px;padding:3px;background:color-mix(in srgb,var(--text) 8%,transparent);border-radius:10px}
+main .view button{border-radius:7px;min-height:30px;padding:3px 18px;background:transparent;font-size:14px}
+main .view button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 3px #0002;border:0}
+main .filters{gap:10px;margin-top:16px;align-items:end}
+main .filters input,main .filters select{border:0;background:color-mix(in srgb,var(--text) 7%,transparent);border-radius:10px;min-height:36px;font-size:14px}
+main .filters label span{font-size:12px}
+main .filters button{min-height:36px;background:var(--surface)}
+main #message{font-size:14px;margin:16px 0}main #message:empty{display:none}
+main #items{gap:0;background:var(--surface);border-radius:12px;overflow:hidden;margin-top:20px}
+main #items li+li{border-top:1px solid var(--line)}
+main #items button{padding:13px 16px;border:0;border-radius:0;background:transparent;min-height:72px;gap:3px}
+main #items button:hover{background:color-mix(in srgb,var(--text) 5%,transparent)}
+main #items strong{font-size:15px;font-weight:600;line-height:1.4}
+main #items .preview{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+main #items .meta{font-size:12px;line-height:1.4}
+main #items .task-row button{grid-template-columns:24px minmax(0,1fr);column-gap:12px}
+main #items .task-row button::before{content:'';width:20px;height:20px;border:1.5px solid var(--muted);border-radius:50%;grid-row:1/3;align-self:center}
+main #items .task-row.done button::before{background:var(--accent);border-color:var(--accent);box-shadow:inset 0 0 0 4px var(--surface)}
+main #items .task-row.done strong{color:var(--muted)}
+dialog{border:0;border-radius:16px;padding:24px;box-shadow:0 24px 70px #0004}
+dialog input,dialog select,dialog textarea{background:color-mix(in srgb,var(--text) 4%,var(--surface));border:1px solid var(--line);border-radius:9px}
+dialog input[name=title]{font-size:22px;font-weight:650;letter-spacing:-.025em}
+dialog textarea{min-height:220px;line-height:1.5}
+dialog::backdrop{background:#0005}
+@media(max-width:560px){main{padding:24px 14px 48px}main h1{font-size:26px}main .heading{gap:10px}main .filters>label:first-child{flex-basis:100%}dialog{padding:18px}main #items button{padding:12px 14px}}
+@media(prefers-reduced-motion:reduce){main *,dialog *{transition:none;scroll-behavior:auto}}
 </style>
 </head>
 <body>
@@ -217,6 +253,7 @@ textarea { resize: vertical; }
 
   function row(item) {
     const li = document.createElement('li');
+    if (resource === 'tasks') li.className = 'task-row' + (item.status === 'done' ? ' done' : '');
     const button = document.createElement('button');
     button.type = 'button';
     const title = document.createElement('strong');

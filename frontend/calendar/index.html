@@ -415,9 +415,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
 
   function renderChips(){const group=$('calendar-chips');group.replaceChildren();for(const option of eventFields.calendar_id.options){const b=document.createElement('button');b.type='button';b.textContent=option.textContent;b.style.setProperty('--chip-color',eventColor(option.value));b.setAttribute('aria-pressed',String(option.value===eventFields.calendar_id.value));b.disabled=eventFields.calendar_id.disabled;b.addEventListener('click',()=>{eventFields.calendar_id.value=option.value;renderChips()});group.append(b)}}
   function refreshClocks(){ $('calendar-date').value=eventFields.local_start.value.slice(0,10);$('start-clock').value=eventFields.local_start.value.slice(11,16)||'09:00';$('end-clock').value=eventFields.local_end.value.slice(11,16)||'10:00';document.querySelectorAll('.cal-clock-row').forEach(row=>row.hidden=eventFields.all_day.checked); }
-  function syncClocks(){const date=$('calendar-date').value;if(!date)return;const allDay=eventFields.all_day.checked;const start=allDay?'00:00':$('start-clock').value,end=allDay?'00:00':$('end-clock').value;const endDate=allDay||end<=start?key(day(dateFromKey(date),1)):date;eventFields.local_start.value=date+(allDay?'':'T'+start);eventFields.local_end.value=endDate+(allDay?'':'T'+end);}
+  function syncClocks(resetSpan = false){
+    const date=$('calendar-date').value;if(!date)return;
+    const allDay=eventFields.all_day.checked,start=allDay?'00:00':$('start-clock').value,end=allDay?'00:00':$('end-clock').value;
+    const previousStart=eventFields.local_start.value.slice(0,10),previousEnd=eventFields.local_end.value.slice(0,10);
+    const span=previousStart&&previousEnd?Math.max(0,Math.round((Date.parse(previousEnd)-Date.parse(previousStart))/86400000)):0;
+    const days=allDay?Math.max(1,span):resetSpan===true?Number(end<=start):Math.max(span,Number(end<=start));
+    const endDate=key(day(dateFromKey(date),days));
+    eventFields.local_start.value=date+(allDay?'':'T'+start);eventFields.local_end.value=endDate+(allDay?'':'T'+end);
+  }
   for(const id of ['calendar-date','start-clock','end-clock'])$(id).addEventListener('change',syncClocks);
-  eventFields.all_day.addEventListener('change',()=>{scheduleInputs();syncClocks();refreshClocks()});
+  eventFields.all_day.addEventListener('change',()=>{scheduleInputs();syncClocks(true);refreshClocks()});
   for(const field of ['local_start','local_end'])eventFields[field].addEventListener('change',refreshClocks);
   async function loadLinks(id){
     const version=detailsNumber;const area=$('source-links');area.replaceChildren();

@@ -92,8 +92,9 @@ impl Frontend {
         .replacen(
             "<head>",
             &format!(
-                "<head><style>{}</style><script>{}</script>",
+                "<head><style>{}</style><script>{}</script><script>{}</script>",
                 include_str!("../../../frontend/shared/shell.css"),
+                include_str!("../../../frontend/shared/calendar.js"),
                 include_str!("../../../frontend/shared/shell.js")
             ),
             1,

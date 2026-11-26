@@ -12,10 +12,9 @@
 <main class="records-main">
   <div class="heading">
     <h1>Tareas</h1>
-    <button type="button" class="primary" id="new" disabled>Nueva nota</button>
+    <button type="button" class="primary" id="new" disabled>Nueva tarea</button>
   </div>
   <form class="filters" id="filters" role="search">
-    <nav class="record-tabs" aria-label="Aplicaciones"><a href="/notes/" data-record-service="notes" >Notas</a><a href="/tasks/" data-record-service="tasks" aria-current="page">Tareas</a></nav>
     <label class="record-search"><span class="sr-only">Buscar</span><input type="search" name="q" placeholder="Buscar" aria-label="Buscar"></label>
     <div class="record-segment" role="group" aria-label="Archivo"><button type="button" data-record-archive="false" aria-pressed="true">Activas</button><button type="button" data-record-archive="true" aria-pressed="false">Archivadas</button></div>
     <label id="archived-filter" hidden><span>Archivo</span><select name="archived"><option value="false">Activas</option><option value="true">Archivadas</option></select></label>
@@ -36,10 +35,6 @@
     <h2 id="editor-title" class="sr-only"></h2>
     <fieldset id="edit-fields">
       <label class="record-title"><span class="sr-only">Título</span><input name="title" placeholder="Título" maxlength="200" required></label>
-      <fieldset id="note-fields">
-        <label class="record-content"><span class="sr-only">Contenido</span><textarea name="content" placeholder="Escribe algo…" rows="8"></textarea></label>
-        <label class="inline" id="archive-field" hidden><input name="archived" type="checkbox"><span>Archivada</span></label>
-      </fieldset>
       <fieldset id="task-fields" hidden disabled>
         <div class="fields">
           <label><span>Estado</span><select name="status">
@@ -61,7 +56,6 @@
         </div>
         <p id="picker-message" class="meta" role="status"></p>
       </fieldset>
-      <details class="record-related" id="record-related" hidden><summary>Relaciones</summary><button type="button" id="linked-tasks" hidden>Ver tareas vinculadas</button></details>
     </fieldset>
     <p id="editor-error" role="alert" hidden></p>
     <div class="actions">
@@ -78,5 +72,50 @@
   </form>
 </dialog>
 <!-- SANTOLV_RECORD_SCRIPT -->
+<script>(() => {
+ 'use strict';
+ const {api,start}=window.SantolvRecords.create(),$=id=>document.getElementById(id),form=$('edit-form'),editor=$('editor'),filters=$('filters'),noteSelect=form.elements.note_id;
+ const states={pending:'Pendiente',in_progress:'En curso',done:'Hecha'},priorities={low:'Baja',normal:'Normal',high:'Alta'},format=new Intl.DateTimeFormat('es',{dateStyle:'medium',timeStyle:'short'});
+ const noteFilter=new URLSearchParams(location.search).get('note');
+ let editing,cursor,request,params,saving=false,ready=false,searchTimer,initialDue,pickerRequest,pickerCursor,pickerParams;
+ const message=(text,error=false)=>{$('message').textContent=text;$('message').dataset.error=String(error)};
+ const error=(text='')=>{$('editor-error').textContent=text;$('editor-error').hidden=!text};
+ const path=id=>'/tasks'+(id?'/'+encodeURIComponent(id):'');
+ function row(task){const li=document.createElement('li');li.className='task-row'+(task.status==='done'?' done':'');
+  const toggle=document.createElement('button');toggle.type='button';toggle.className='task-toggle';toggle.setAttribute('aria-label',(task.status==='done'?'Marcar pendiente: ':'Completar: ')+task.title);toggle.setAttribute('aria-pressed',String(task.status==='done'));
+  toggle.addEventListener('click',async()=>{toggle.disabled=true;try{await api(path(task.id),{method:'PUT',body:{title:task.title,status:task.status==='done'?'pending':'done',priority:task.priority,due_at:task.due_at,note_id:task.note_id,archived:Boolean(task.archived_at)}});await load()}catch(e){message(e.message,true)}finally{toggle.disabled=false}});
+  const button=document.createElement('button');button.type='button';button.className='record-open';const title=document.createElement('strong');title.textContent=task.title;const meta=document.createElement('span');meta.className='meta';meta.textContent=[states[task.status],priorities[task.priority],task.due_at?'Vence '+format.format(new Date(task.due_at)):''].filter(Boolean).join(' · ');button.append(title,meta);button.addEventListener('click',()=>open(task));li.append(toggle,button);return li;
+ }
+ async function load(append=false){if(!ready||append&&!cursor)return;request?.abort();const current=new AbortController();request=current;
+  if(!append){$('items').replaceChildren();$('completed-items').replaceChildren();cursor=null;params=new URLSearchParams({archived:filters.elements.archived.value});for(const key of ['q','status','priority'])if(filters.elements[key].value.trim())params.set(key,filters.elements[key].value.trim());if(noteFilter&&!$('note-filter').hidden)params.set('note_id',noteFilter)}
+  $('quick-task').hidden=filters.elements.archived.value==='true';const query=new URLSearchParams(params);if(append)query.set('cursor',cursor);$('more').disabled=true;$('items').setAttribute('aria-busy','true');message('Cargando…');
+  try{const page=await api('/tasks?'+query,{signal:current.signal});if(request!==current)return;for(const task of page.items)(task.status==='done'?$('completed-items'):$('items')).append(row(task));cursor=page.next_cursor;const count=$('completed-items').childElementCount;$('completed-block').hidden=!count;$('completed-heading').textContent='Completadas · '+count;message($('items').childElementCount||count?'':'No hay resultados.')}catch(e){if(request===current)message(e.message,true)}finally{if(request===current){$('more').hidden=!cursor;$('more').disabled=false;$('items').setAttribute('aria-busy','false')}}
+ }
+ function localMinute(value){if(!value)return '';const d=new Date(value),pad=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes())}
+ function addNote(id,title){const option=[...noteSelect.options].find(o=>o.value===id);if(option)option.textContent=title;else noteSelect.add(new Option(title,id))}
+ async function loadNotes(append=false){pickerRequest?.abort();const current=new AbortController();pickerRequest=current;const button=$('load-notes');if(!append){pickerCursor=null;pickerParams=new URLSearchParams({archived:String($('picker-archived').checked)});if($('picker-query').value.trim())pickerParams.set('q',$('picker-query').value.trim());for(const option of [...noteSelect.options])if(option.value&&!option.selected)option.remove()}
+  const query=new URLSearchParams(pickerParams);if(append&&pickerCursor)query.set('cursor',pickerCursor);$('picker-filters').hidden=false;button.disabled=true;$('picker-message').textContent='Buscando notas…';
+  try{const page=await api('/notes?'+query,{signal:current.signal});if(pickerRequest!==current)return;for(const note of page.items)addNote(note.id,note.title);pickerCursor=page.next_cursor;$('picker-message').textContent=page.items.length?'':'No hay notas que coincidan.'}catch(e){if(pickerRequest===current)$('picker-message').textContent=e.message}finally{if(pickerRequest===current){button.textContent=pickerCursor?'Cargar más notas':'Buscar notas';button.disabled=false}}
+ }
+ function open(task=null){if(!ready||editor.open)return;editing=task;form.reset();$('editor-title').textContent=task?'Editar tarea':'Nueva tarea';form.elements.title.value=task?.title||'';form.elements.status.value=task?.status||'pending';form.elements.priority.value=task?.priority||'normal';initialDue=localMinute(task?.due_at);form.elements.due_at.value=initialDue;
+  $('archive').hidden=!task;$('archive').textContent=task?.archived_at?'Restaurar':'Archivar';$('delete').hidden=!task;noteSelect.replaceChildren(new Option('Ninguna',''));const noteId=task?task.note_id:noteFilter;if(noteId){addNote(noteId,'Nota vinculada');noteSelect.value=noteId}
+  pickerCursor=null;$('picker-query').value='';$('picker-archived').checked=false;$('picker-filters').hidden=true;$('picker-message').textContent='';$('load-notes').textContent='Buscar notas';$('load-notes').disabled=false;
+  if(noteId){const current=new AbortController();pickerRequest=current;api('/notes/'+encodeURIComponent(noteId),{signal:current.signal}).then(note=>{if(pickerRequest===current)addNote(note.id,note.title)}).catch(()=>{})}
+  error();editor.showModal();form.elements.title.focus();
+ }
+ let archiveOverride;
+ async function change(method,body){if(saving)return;saving=true;for(const id of ['edit-fields','save','cancel','archive','delete'])$(id).disabled=true;error();try{await api(path(editing?.id),{method,body});editor.close();await load()}catch(e){error(e.message)}finally{saving=false;archiveOverride=undefined;for(const id of ['edit-fields','save','cancel','archive','delete'])$(id).disabled=false}}
+ form.addEventListener('submit',e=>{e.preventDefault();const f=form.elements,body={title:f.title.value,status:f.status.value,priority:f.priority.value,note_id:f.note_id.value||null,due_at:null};if(editing){body.archived=archiveOverride??Boolean(editing.archived_at);if(f.due_at.value===initialDue)body.due_at=editing.due_at}
+  if(f.due_at.value&&(!editing||f.due_at.value!==initialDue)){const d=new Date(f.due_at.value);if(Number.isNaN(d.valueOf())){error('Introduce una fecha válida.');return}body.due_at=d.toISOString()}void change(editing?'PUT':'POST',body)});
+ $('archive').addEventListener('click',()=>{if(editing){archiveOverride=!Boolean(editing.archived_at);form.requestSubmit()}});
+ $('delete').addEventListener('click',()=>{if(editing&&window.confirm('¿Eliminar esta tarea?'))void change('DELETE')});$('cancel').addEventListener('click',()=>editor.close());editor.addEventListener('cancel',e=>{if(saving)e.preventDefault()});editor.addEventListener('close',()=>{pickerRequest?.abort();pickerRequest=null;archiveOverride=undefined});
+ $('new').addEventListener('click',()=>open());$('more').addEventListener('click',()=>void load(true));$('clear-note-filter').addEventListener('click',()=>{$('note-filter').hidden=true;void load()});
+ $('load-notes').addEventListener('click',()=>void loadNotes(Boolean(pickerCursor)));$('search-notes').addEventListener('click',()=>void loadNotes());$('picker-archived').addEventListener('change',()=>void loadNotes());$('picker-query').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void loadNotes()}});
+ $('quick-task').addEventListener('submit',async e=>{e.preventDefault();const input=$('quick-task').elements.title,button=$('quick-task').querySelector('button');button.disabled=true;try{await api('/tasks',{method:'POST',body:{title:input.value}});input.value='';await load();input.focus()}catch(err){message(err.message,true)}finally{button.disabled=false}});
+ for(const button of document.querySelectorAll('[data-record-archive]'))button.addEventListener('click',()=>{filters.elements.archived.value=button.dataset.recordArchive;for(const b of document.querySelectorAll('[data-record-archive]'))b.setAttribute('aria-pressed',String(b===button));void load()});
+ filters.addEventListener('submit',e=>{e.preventDefault();void load()});filters.addEventListener('change',e=>{if(e.target.matches('select'))void load()});filters.elements.q.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>void load(),200)});
+ message('Cargando…');start().then(async()=>{ready=true;$('new').disabled=false;$('new').textContent='Nueva tarea';$('task-fields').hidden=false;$('task-fields').disabled=false;$('note-filter').hidden=!noteFilter;if(noteFilter)$('note-filter-label').textContent='Tareas de la nota vinculada';await load();const id=new URLSearchParams(location.search).get('id');if(id)open(await api(path(id)))}).catch(e=>message(e.message,true));
+})();
+</script>
 </body>
 </html>

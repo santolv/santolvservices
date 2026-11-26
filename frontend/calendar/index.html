@@ -133,6 +133,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
 @media(prefers-reduced-transparency:reduce){#event-dialog::backdrop,#manage-dialog::backdrop{backdrop-filter:none;background:#0009}}
 
 body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-date-group label{font-family:var(--ui-font)}
+
+.calendar-page :is(#previous,#next,#today){display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:28px;height:28px;padding:0 8px;border:0;border-radius:7px;background:var(--ui-control);color:var(--ui-text);font:500 13px/1 var(--ui-font)}
+.calendar-page :is(#previous,#next) svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.cal-segment{background:var(--ui-control);padding:2px;gap:2px;border-radius:8px}.cal-segment button{height:26px;min-height:26px;border-radius:6px}.cal-segment button[aria-pressed=true]{background:var(--ui-selected);color:var(--ui-text);box-shadow:0 .5px 1px #0003}
 </style>
 </head>
 <body class="calendar-body">
@@ -145,7 +149,7 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
   </aside>
   <section class="cal-workspace" aria-label="Eventos">
   <div class="cal-row spread cal-controls">
-    <div class="cal-row"><!-- SANTOLV_SIDEBAR_SHOW --><button type="button" id="previous" aria-label="Período anterior">‹</button><button type="button" id="today">Hoy</button><button type="button" id="next" aria-label="Período siguiente">›</button><h2 id="period" aria-live="polite"></h2></div>
+    <div class="cal-row"><!-- SANTOLV_SIDEBAR_SHOW --><button type="button" id="previous" aria-label="Período anterior"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg></button><button type="button" id="today">Hoy</button><button type="button" id="next" aria-label="Período siguiente"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button><h2 id="period" aria-live="polite"></h2></div>
     <div class="cal-segment" role="group" aria-label="Vista"><button type="button" data-view="month" aria-pressed="false">Mes</button><button type="button" data-view="week" aria-pressed="true">Semana</button><button type="button" data-view="agenda" aria-pressed="false">Agenda</button></div><button type="button" class="primary" id="new-event">+ Nuevo evento</button>
   </div>
   <p id="page-status" role="status"></p>

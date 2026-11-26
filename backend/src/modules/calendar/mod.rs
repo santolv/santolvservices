@@ -15,6 +15,7 @@ use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
 mod events;
+mod links;
 
 pub const SERVICE: crate::core::manager::Service = crate::core::manager::Service {
     id: "calendar",
@@ -42,6 +43,10 @@ fn routes() -> Router<App> {
                 axum::routing::delete(revoke),
             )
             .route("/events", get(events::list).post(events::create))
+            .route(
+                "/events/{id}/links/{service}",
+                get(links::get).put(links::put),
+            )
             .route(
                 "/events/{id}",
                 get(events::get).put(events::update).delete(events::remove),

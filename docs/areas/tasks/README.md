@@ -19,3 +19,13 @@ y al editor propios, nunca a la barra global ni a sus diálogos.
 
 Comprobar cargo fmt --check, cargo clippy --locked --all-targets -- -D warnings,
 cargo test --locked contra PostgreSQL de pruebas, los cuatro clientes y diff --check.
+
+## Listas y archivo
+
+Las tareas pendientes y completadas se muestran en bloques separados. Se puede
+crear desde la lista, completar o reabrir con su botón circular y editar desde el
+título. Se conservan prioridad, vencimiento y vínculo con la nota al cambiar estado.
+
+La migración 0022 añade `archived_at`. Los listados aceptan `archived=false|true`
+(false por defecto); el PUT acepta `archived` opcional. Omitirlo conserva el estado
+anterior. Archivar es independiente de completar y nunca elimina el registro.

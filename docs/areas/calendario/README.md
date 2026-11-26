@@ -43,3 +43,16 @@ cargo clippy --manifest-path backend/Cargo.toml --locked --all-targets -- -D war
 cargo test --manifest-path backend/Cargo.toml --locked
 git diff --check
 ```
+
+## Vínculos personales con Notas y Tareas
+
+`GET/PUT /api/v1/calendar/events/{id}/links/{notes|tasks}` lee o sustituye
+`{ "id": UUID|null }` para el usuario autenticado. Exige acceso al evento y al
+servicio de origen, y el registro debe pertenecer al usuario. Los vínculos son
+privados incluso en calendarios compartidos. No copian contenido de notas ni
+cambian vencimientos o estados de tareas. Se gestionan al abrir un evento guardado.
+La migración 0022 añade las referencias y las limpia si se elimina el origen.
+
+La semana muestra horas, bloques por duración, eventos solapados en carriles y
+una fila de día completo. El panel usa el botón compartido para mostrar/ocultar.
+El editor mantiene repetición, zonas horarias y recordatorios en opciones plegables.

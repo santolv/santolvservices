@@ -64,21 +64,70 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
 @media(max-width:600px){.cal-sidebar label{width:100%}.cal-sidebar select{max-width:none;flex:1}.cal-grid.month .cal-day{min-height:82px}.cal-grid.month .cal-event{font-size:11px}.cal-controls> .cal-row{flex-wrap:wrap}.calendar-page h2{flex-basis:100%;margin:4px 0}.cal-segment{max-width:100%}}
 @media(prefers-reduced-motion:reduce){.calendar-page *{scroll-behavior:auto;transition:none}}
 
+
+/* Reference: hourly week and compact, opaque Apple-style editor. */
+.calendar-page{--blue:var(--cal-text);--fill:var(--cal-panel)}
+.calendar-page.sidebar-hidden{grid-template-columns:0 minmax(0,1fr)}.calendar-page.sidebar-hidden .cal-sidebar{display:none}
+.cal-controls{padding:12px 16px;min-height:56px}.cal-controls .cal-row{gap:3px}.calendar-page h2{font-size:21px;letter-spacing:-.02em;margin-left:12px}
+.calendar-page #previous,.calendar-page #next,.calendar-page #today{height:28px;min-height:28px;padding:0 9px;background:color-mix(in srgb,var(--cal-text) 9%,var(--cal-bg));border-radius:7px;font-weight:500}
+.cal-week-view{height:calc(100dvh - var(--shell-height,48px) - 57px);min-height:400px;display:flex;flex-direction:column;overflow-x:auto;overflow-y:hidden}
+.cal-time-head,.cal-all-day,.cal-time-grid{display:grid;grid-template-columns:52px repeat(7,minmax(88px,1fr));min-width:668px}
+.cal-time-head>div{padding:8px 0;display:flex;align-items:center;flex-direction:column;gap:2px;color:var(--cal-muted);font-size:12px;border-bottom:1px solid var(--cal-line)}
+.cal-time-head button.day-number{font-size:19px;font-weight:400;border:0;background:transparent;border-radius:50%;width:32px;height:32px;padding:0;min-height:32px;color:var(--cal-text)}
+.cal-time-head [aria-current=date]{background:var(--cal-accent)!important;color:#fff!important}
+.cal-all-day{border-bottom:1px solid var(--cal-line);max-height:140px;overflow-y:auto;flex-shrink:0}.cal-all-day>span{font-size:11px;text-align:right;color:var(--cal-muted);padding:6px 8px}.cal-all-day>div{min-height:36px;padding:0 3px;border-left:1px solid var(--cal-line)}
+.cal-time-scroll{flex:1;min-height:0;overflow-y:auto;min-width:668px}.cal-time-grid{height:1152px}
+.cal-time-gutter{position:relative}.cal-time-gutter span{position:absolute;right:8px;font-size:11px;line-height:1.3;color:var(--cal-muted);font-variant-numeric:tabular-nums}
+.cal-time-column{height:1152px;position:relative;min-width:0;border-left:1px solid var(--cal-line)}
+.calendar-page button.cal-hour-slot{display:block;width:100%;height:48px;min-height:48px;padding:0;border:0;border-bottom:1px solid var(--cal-line);border-radius:0;background:transparent}
+.calendar-page button.cal-hour-slot:hover{background:color-mix(in srgb,var(--cal-text) 4%,transparent)}
+.cal-timed-event{position:absolute;box-sizing:border-box;margin:0;padding:4px 6px;border-left-width:3px;z-index:1;white-space:normal;line-height:1.3;background:color-mix(in srgb,var(--event-color) 25%,var(--cal-bg));box-shadow:0 0 0 1px var(--cal-bg)}
+.cal-timed-event strong,.cal-timed-event small{display:block;font-size:12px;overflow:hidden;text-overflow:ellipsis}.cal-timed-event small{font-size:11px;color:var(--cal-muted)}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#event-dialog{width:min(420px,calc(100% - 24px));padding:20px;border:1px solid var(--cal-line);border-radius:16px;background:var(--cal-panel);color:var(--cal-text)}
+#event-dialog::backdrop{background:#0005;backdrop-filter:blur(6px)}
+#event-form{display:grid;gap:14px;font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+#event-form #event-fields{gap:12px}#event-form>p:empty{display:none}
+#event-form input[name=title]{order:-1;border:0;background:transparent;border-radius:0;font-family:inherit;font-weight:600;font-size:20px;line-height:1.3;padding:0;min-height:28px;width:100%;color:inherit;box-shadow:none}
+#event-form input[name=title]::placeholder{color:var(--cal-muted);font-size:15px;font-weight:400}
+#event-form input[name=title]:focus-visible{outline:0;box-shadow:0 1px var(--cal-accent)}
+.cal-advanced-calendar{display:none!important}.cal-chips{display:flex;gap:6px;flex-wrap:wrap}
+.cal-chips button{display:flex;align-items:center;gap:7px;min-height:28px;padding:4px 10px;border:0;border-radius:16px;background:color-mix(in srgb,var(--cal-text) 9%,var(--cal-panel));color:inherit;font-family:inherit;font-weight:500;font-size:13px;line-height:1.3}
+.cal-chips button::before{content:'';width:10px;height:10px;border-radius:50%;background:var(--chip-color);flex:none}.cal-chips [aria-pressed=true]{outline:1.5px solid var(--chip-color);outline-offset:0}
+.cal-chips button:disabled{opacity:1}
+.cal-date-group{background:color-mix(in srgb,var(--cal-text) 9%,var(--cal-panel));border-radius:10px;overflow:hidden}
+#event-form .cal-date-group label{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:40px;padding:6px 12px;font-weight:500;margin:0}
+.cal-date-group label+label{border-top:1px solid var(--cal-line)}
+#event-form .cal-date-group input:not([type=checkbox]){border:0;background:transparent;text-align:right;min-height:28px;width:150px;font:inherit;padding:0;color:inherit}
+#event-form input[role=switch]{appearance:none;-webkit-appearance:none;position:relative;width:42px;height:26px;min-height:26px;border:0;border-radius:13px;background:#78788066;padding:0;margin:0;cursor:pointer;flex:none;transition:background .15s}
+#event-form input[role=switch]::after{content:'';position:absolute;left:2px;top:2px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #0004;transition:transform .15s}
+#event-form input[role=switch]:checked{background:#30d158}#event-form input[role=switch]:checked::after{transform:translateX(16px)}
+.cal-advanced{display:grid;gap:10px;font-size:12px}.cal-advanced>summary{cursor:pointer;color:var(--cal-muted);padding:4px 0}.cal-advanced label{margin-top:8px}
+#event-form .calendar-actions{justify-content:flex-end;gap:8px}#event-form .calendar-actions button{border:0;border-radius:7px;min-height:32px;padding:6px 13px;background:color-mix(in srgb,var(--cal-text) 9%,var(--cal-panel));color:inherit;font-family:inherit;font-weight:600;font-size:13px;line-height:1.3}
+#event-form #save-event{background:#ff453a;color:#fff}#event-form #delete-event{color:#ff6961;margin-right:auto}
+#event-reminder{font-size:12px}#event-reminder select{max-width:100%}#source-links{display:flex;flex-wrap:wrap;gap:12px}#source-links a{color:var(--cal-accent)}
+@media(max-width:620px){.calendar-page .cal-sidebar{display:none}.calendar-page.mobile-sidebar .cal-sidebar{display:flex}.calendar-page .cal-workspace{width:100%}.cal-week-view{height:calc(100dvh - var(--shell-height,48px) - 110px)}.calendar-page.mobile-sidebar .cal-week-view{height:65dvh}.cal-controls{align-items:center}.calendar-page h2{flex-basis:auto;margin-left:8px;font-size:18px}}
+@media(prefers-reduced-motion:reduce){#event-form input[role=switch],#event-form input[role=switch]::after{transition:none}}
+
+.calendar-body{overflow:hidden}.calendar-page{height:calc(100dvh - var(--shell-height,48px));min-height:0;grid-template-rows:minmax(0,1fr)}.cal-sidebar{grid-row:1}.cal-workspace{height:100%;min-height:0}.cal-scroll{min-height:0}.cal-week-view{height:100%;min-height:0}#event-form .cal-date-group label{font:500 13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}#event-form .calendar-actions{justify-content:flex-start}#event-reminder{display:none}#event-form .cal-advanced #event-reminder{display:flex}
+@media(max-width:850px){.calendar-page{display:flex;flex-direction:column}.cal-sidebar{flex-shrink:0}.cal-workspace{flex:1;height:auto;min-height:0}.cal-week-view,.calendar-page.mobile-sidebar .cal-week-view{height:100%;min-height:0}}
+
+#reminder-options #event-reminder{display:flex}
 </style>
 </head>
-<body>
+<body class="calendar-body">
 <!-- SANTOLV_SHELL -->
-<main class="calendar-page">
-  <aside class="cal-sidebar" aria-label="Calendarios">
-    <h1>Calendario</h1>
+<main class="calendar-page app">
+  <aside class="cal-sidebar" id="sidebar" aria-label="Calendarios">
+    <div class="cal-row spread"><h1>Calendario</h1><!-- SANTOLV_SIDEBAR_HIDE --></div>
     <button type="button" class="primary" id="new-event">Nuevo evento</button>
     <label>Calendarios <select id="calendar-filter" aria-label="Filtrar por calendario"><option value="">Todos los calendarios</option></select></label>
     <button type="button" id="manage">Gestionar calendarios</button>
   </aside>
   <section class="cal-workspace" aria-label="Eventos">
   <div class="cal-row spread cal-controls">
-    <div class="cal-row"><button type="button" id="previous" aria-label="Período anterior">‹</button><button type="button" id="today">Hoy</button><button type="button" id="next" aria-label="Período siguiente">›</button><h2 id="period" aria-live="polite"></h2></div>
-    <div class="cal-segment" role="group" aria-label="Vista"><button type="button" data-view="month" aria-pressed="true">Mes</button><button type="button" data-view="week" aria-pressed="false">Semana</button><button type="button" data-view="agenda" aria-pressed="false">Agenda</button></div>
+    <div class="cal-row"><!-- SANTOLV_SIDEBAR_SHOW --><button type="button" id="previous" aria-label="Período anterior">‹</button><button type="button" id="today">Hoy</button><button type="button" id="next" aria-label="Período siguiente">›</button><h2 id="period" aria-live="polite"></h2></div>
+    <div class="cal-segment" role="group" aria-label="Vista"><button type="button" data-view="month" aria-pressed="false">Mes</button><button type="button" data-view="week" aria-pressed="true">Semana</button><button type="button" data-view="agenda" aria-pressed="false">Agenda</button></div>
   </div>
   <p id="page-status" role="status"></p>
   <div id="display" class="cal-scroll" aria-labelledby="period"></div>
@@ -86,13 +135,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
 </main>
 <dialog id="event-dialog" class="calendar-dialog" aria-labelledby="event-heading">
   <form id="event-form" class="calendar-form">
-    <h2 id="event-heading"></h2>
+    <h2 id="event-heading" class="sr-only"></h2>
     <p id="event-detail"></p>
     <fieldset id="event-fields">
-      <label>Calendario <select name="calendar_id"></select></label>
-      <label>Título <input name="title" maxlength="200" required></label>
-      <label>Descripción <textarea name="description" maxlength="4000" rows="3"></textarea></label>
-      <label><input name="all_day" type="checkbox"> Todo el día</label>
+      <div id="calendar-chips" class="cal-chips" aria-label="Calendario"></div><label class="cal-advanced-calendar">Calendario <select name="calendar_id"></select></label>
+      <input name="title" maxlength="200" placeholder="Título del evento" aria-label="Título del evento" required>
+      <div class="cal-date-group"><label>Fecha <input id="calendar-date" type="date"></label>
+      <label class="cal-switch-row">Todo el día <input name="all_day" type="checkbox" role="switch"></label><label class="cal-clock-row">Inicio <input id="start-clock" type="time"></label><label class="cal-clock-row">Fin <input id="end-clock" type="time"></label></div><details class="cal-advanced"><summary>Más opciones</summary><label>Descripción <textarea name="description" maxlength="4000" rows="3"></textarea></label>
       <label>Inicio <input name="local_start" type="datetime-local" step="1" required></label>
       <label><span id="end-label">Fin</span> <input name="local_end" type="datetime-local" step="1" required></label>
       <label>Zona horaria <input name="zone" maxlength="100" required></label>
@@ -103,13 +152,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
         <label id="repeat-until" hidden>Último día <input name="repeat_until" type="date"></label>
         <label id="repeat-count" hidden>Número de ocasiones <input name="repeat_count" type="number" min="1" max="10000"></label>
       </fieldset>
-    </fieldset>
-    <div class="cal-row" id="event-reminder">
+
+    </details></fieldset>
+    <details id="reminder-options" class="cal-advanced"><summary>Recordatorio personal</summary>    <div class="cal-row" id="event-reminder">
       <label>Recordatorio personal <select name="reminder_minutes">
         <option value="">Sin recordatorio</option><option value="0">A la hora del evento</option><option value="5">5 minutos antes</option><option value="15">15 minutos antes</option><option value="30">30 minutos antes</option><option value="60">1 hora antes</option><option value="1440">1 día antes</option><option value="10080">1 semana antes</option>
       </select></label>
       <button type="button" id="save-reminder">Guardar recordatorio</button>
-    </div>
+    </div></details>
+    <details id="event-links" class="cal-advanced" hidden><summary>Notas y tareas vinculadas</summary><p>Estos vínculos son privados de tu cuenta.</p><label>Nota <select id="linked-note"><option value="">Ninguna</option></select></label><button type="button" id="more-linked-notes" hidden>Cargar más notas</button><label>Tarea <select id="linked-task"><option value="">Ninguna</option></select></label><button type="button" id="more-linked-tasks" hidden>Cargar más tareas</button><div id="source-links"></div><button type="button" id="save-links">Guardar vínculos</button></details>
     <p id="event-status" role="status"></p>
     <div class="calendar-actions">
       <button type="button" id="edit-single">Editar esta ocurrencia</button><button type="button" id="edit-series">Editar</button>
@@ -150,7 +201,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
   const eventFields = eventForm.elements;
   const manageDialog = $('manage-dialog');
   const nameForm = $('calendar-name-form');
-  let view = 'month', anchor = new Date(), calendars = [], loadNumber = 0, detailsNumber = 0, membersNumber = 0;
+  let view = 'week', anchor = new Date(), calendars = [], loadNumber = 0, detailsNumber = 0, membersNumber = 0;
   let detail, mode;
 
   function day(date, shift = 0) {
@@ -172,12 +223,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
     if (event.all_day) return event.local_start.slice(0, 10) <= value && event.local_end.slice(0, 10) > value;
     return new Date(event.starts_at) < day(date, 1) && new Date(event.ends_at) > date;
   }
+  function eventColor(id) { const item=calendars.find(c=>c.id===id),known={'personal':'#0a84ff','trabajo':'#ff9f0a','familia':'#30d158','estudio':'#bf5af2'};if(item?.is_default)return '#0a84ff';if(known[item?.name.toLocaleLowerCase()])return known[item.name.toLocaleLowerCase()];const colors=['#0a84ff','#ff9f0a','#30d158','#bf5af2','#ff453a'];return colors[Array.from(id||'').reduce((n,c)=>n+c.charCodeAt(0),0)%colors.length]; }
   function link(event, agenda = false) {
     const a = document.createElement('a');
     a.className = 'cal-event';
-    const palette = ['#007aff', '#c77800', '#248a3d', '#af52de', '#d92d25'];
-    const colorIndex = Array.from(event.calendar_id || '').reduce((sum, char) => sum + char.charCodeAt(0), 0) % palette.length;
-    a.style.setProperty('--event-color', palette[colorIndex]);
+    a.style.setProperty('--event-color', eventColor(event.calendar_id));
     a.href = occurrenceUrl(event);
     a.title = event.title;
     a.textContent = agenda ? eventLabel(event) + ' · ' + event.title + ' · ' + event.calendar_name : event.title;
@@ -190,6 +240,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
     return a;
   }
   function render(items, start, end) {
+    if (view === 'week') { renderWeek(items,start); return; }
     if (view === 'agenda') {
       const list = document.createElement('ul');
       list.className = 'cal-agenda';
@@ -231,14 +282,37 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
     }
     $('display').replaceChildren(grid);
   }
+
+  function layoutIntervals(events) {
+    const sorted=events.slice().sort((a,b)=>a.start-b.start||a.end-b.end),groups=[];
+    for(const item of sorted){let group=groups.at(-1);if(!group||item.start>=group.end){group={end:item.end,items:[],lanes:[]};groups.push(group)}group.end=Math.max(group.end,item.end);let lane=group.lanes.findIndex(end=>end<=item.start);if(lane<0)lane=group.lanes.length;group.lanes[lane]=item.end;group.items.push({...item,lane});}
+    return groups.flatMap(group=>group.items.map(item=>({...item,columns:group.lanes.length})));
+  }
+  function renderWeek(items,start) {
+    const wrapper=document.createElement('div');wrapper.className='cal-week-view';
+    const header=document.createElement('div');header.className='cal-time-head';header.append(document.createElement('div'));
+    const allDay=document.createElement('div');allDay.className='cal-all-day';const caption=document.createElement('span');caption.textContent='Todo el día';allDay.append(caption);
+    const scroll=document.createElement('div');scroll.className='cal-time-scroll';const grid=document.createElement('div');grid.className='cal-time-grid';const gutter=document.createElement('div');gutter.className='cal-time-gutter';
+    for(let h=0;h<24;h++){const label=document.createElement('span');label.textContent=String(h).padStart(2,'0')+':00';label.style.top=(h*48)+'px';gutter.append(label)}grid.append(gutter);
+    for(let i=0;i<7;i++){
+      const date=day(start,i),head=document.createElement('div');const label=document.createElement('span');label.textContent=date.toLocaleDateString('es',{weekday:'short'});const number=document.createElement('button');number.type='button';number.textContent=date.getDate();number.className='day-number';if(key(date)===key(new Date()))number.setAttribute('aria-current','date');number.addEventListener('click',()=>openCreate(date));head.append(label,number);header.append(head);
+      const full=document.createElement('div');for(const event of items.filter(e=>e.all_day&&containsDay(e,date)))full.append(link(event));allDay.append(full);
+      const column=document.createElement('div');column.className='cal-time-column';
+      for(let h=0;h<24;h++){const slot=document.createElement('button');slot.type='button';slot.className='cal-hour-slot';slot.setAttribute('aria-label','Crear evento '+date.toLocaleDateString('es')+' '+h+':00');slot.addEventListener('click',()=>{const value=day(date);value.setHours(h);openCreate(value,true)});column.append(slot)}
+      const minute=value=>value.getHours()*60+value.getMinutes();
+      const intervals=items.filter(e=>!e.all_day&&containsDay(e,date)).map(event=>{const begin=new Date(event.starts_at),finish=new Date(event.ends_at);return {event,start:begin<date?0:minute(begin),end:finish>=day(date,1)?1440:minute(finish)}});
+      for(const item of layoutIntervals(intervals)){const a=link(item.event);a.classList.add('cal-timed-event');a.replaceChildren();const title=document.createElement('strong');title.textContent=item.event.title;const time=document.createElement('small');time.textContent=new Date(item.event.starts_at).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'})+'–'+new Date(item.event.ends_at).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});a.append(title,time);a.style.top=(item.start*.8)+'px';a.style.height=Math.max(24,(item.end-item.start)*.8-2)+'px';a.style.left=(item.lane/item.columns*100)+'%';a.style.width=(100/item.columns)+'%';column.append(a)}grid.append(column);
+    }
+    scroll.append(grid);wrapper.append(header,allDay,scroll);$('display').replaceChildren(wrapper);scroll.scrollTop=7*48;
+  }
+
   async function load() {
     const version = ++loadNumber;
     const [start, end] = range();
     const status = $('page-status');
-    const dateLabel = date => date.toLocaleDateString('es-ES', {day: 'numeric', month: 'short', year: 'numeric'});
     $('period').textContent = view === 'month'
       ? anchor.toLocaleDateString('es-ES', {month: 'long', year: 'numeric'})
-      : dateLabel(start) + ' – ' + dateLabel(day(end, -1));
+      : (start.toLocaleDateString('es',{month:'short'}).replace('.','') + (start.getMonth()===day(end,-1).getMonth()?'':' – '+day(end,-1).toLocaleDateString('es',{month:'short'}).replace('.',''))+' '+day(end,-1).getFullYear());
     $('display').replaceChildren();
     status.textContent = 'Cargando eventos…';
     const filter = $('calendar-filter').value;
@@ -297,8 +371,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
     $('repeat-fields').hidden = next === 'occurrence' || (viewing && !recurring);
     $('repeat-fields').disabled = next === 'occurrence';
     $('event-reminder').hidden = next === 'occurrence';
+    $('reminder-options').hidden = next === 'occurrence';
     $('save-reminder').hidden = !viewing;
     $('save-event').hidden = viewing;
+    $('save-event').textContent=creating?'Añadir':'Guardar';
+    $('close-event').textContent=viewing?'Cerrar':'Cancelar';
     $('edit-single').hidden = !viewing || !recurring || item?.role === 'reader';
     $('edit-series').hidden = !viewing || item?.role === 'reader';
     $('edit-series').textContent = recurring ? 'Editar serie' : 'Editar';
@@ -330,16 +407,36 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-seri
     for (const field of ['local_start', 'local_end']) {
       if (item?.[field]) eventFields[field].value = item[field].slice(0, item.all_day ? 10 : 19);
     }
+    refreshClocks(); renderChips();
+    $('event-links').hidden = !viewing;
+    if (viewing) void loadLinks(item.event_id || item.id);
     if (!eventDialog.open) eventDialog.showModal();
   }
-  function openCreate(date) {
+
+  function renderChips(){const group=$('calendar-chips');group.replaceChildren();for(const option of eventFields.calendar_id.options){const b=document.createElement('button');b.type='button';b.textContent=option.textContent;b.style.setProperty('--chip-color',eventColor(option.value));b.setAttribute('aria-pressed',String(option.value===eventFields.calendar_id.value));b.disabled=eventFields.calendar_id.disabled;b.addEventListener('click',()=>{eventFields.calendar_id.value=option.value;renderChips()});group.append(b)}}
+  function refreshClocks(){ $('calendar-date').value=eventFields.local_start.value.slice(0,10);$('start-clock').value=eventFields.local_start.value.slice(11,16)||'09:00';$('end-clock').value=eventFields.local_end.value.slice(11,16)||'10:00';document.querySelectorAll('.cal-clock-row').forEach(row=>row.hidden=eventFields.all_day.checked); }
+  function syncClocks(){const date=$('calendar-date').value;if(!date)return;const allDay=eventFields.all_day.checked;const start=allDay?'00:00':$('start-clock').value,end=allDay?'00:00':$('end-clock').value;const endDate=allDay||end<=start?key(day(dateFromKey(date),1)):date;eventFields.local_start.value=date+(allDay?'':'T'+start);eventFields.local_end.value=endDate+(allDay?'':'T'+end);}
+  for(const id of ['calendar-date','start-clock','end-clock'])$(id).addEventListener('change',syncClocks);
+  eventFields.all_day.addEventListener('change',()=>{scheduleInputs();syncClocks();refreshClocks()});
+  for(const field of ['local_start','local_end'])eventFields[field].addEventListener('change',refreshClocks);
+  async function loadLinks(id){
+    const version=detailsNumber;const area=$('source-links');area.replaceChildren();
+    for(const kind of ['notes','tasks']){const select=$(kind==='notes'?'linked-note':'linked-task');select.replaceChildren(new Option('Ninguna',''));select.disabled=true;
+      try{const [page,current]=await Promise.all([request('/'+kind+'?limit=100'),api('/events/'+id+'/links/'+kind)]);if(version!==detailsNumber)return;for(const item of page.items)select.add(new Option(item.title,item.id));if(current.id&&!page.items.some(item=>item.id===current.id)){const item=await request('/'+kind+'/'+current.id);if(version!==detailsNumber)return;select.add(new Option(item.title,item.id))}select.value=current.id||'';select.disabled=false;select.dataset.initial=select.value;const more=$('more-linked-'+kind);more.dataset.cursor=page.next_cursor||'';more.hidden=!page.next_cursor;if(current.id){const a=document.createElement('a');a.href='/'+kind+'/?id='+encodeURIComponent(current.id);a.textContent='Abrir '+(kind==='notes'?'nota':'tarea');area.append(a)}}catch(error){if(version===detailsNumber){const p=document.createElement('p');p.textContent=(kind==='notes'?'Notas: ':'Tareas: ')+(error.status===503?'Servicio desactivado.':error.status===403?'Acceso denegado.':describe(error));area.append(p)}}
+    }
+  }
+  for(const kind of ['notes','tasks'])$('more-linked-'+kind).addEventListener('click',async()=>{const button=$('more-linked-'+kind),version=detailsNumber;button.disabled=true;try{const page=await request('/'+kind+'?limit=100&cursor='+encodeURIComponent(button.dataset.cursor));if(version!==detailsNumber)return;const select=$(kind==='notes'?'linked-note':'linked-task');for(const item of page.items)if(![...select.options].some(o=>o.value===item.id))select.add(new Option(item.title,item.id));button.dataset.cursor=page.next_cursor||'';button.hidden=!page.next_cursor}catch(error){if(version===detailsNumber)$('event-status').textContent=describe(error)}finally{button.disabled=false}});
+  $('save-links').addEventListener('click',async()=>{const eventId=detail?.event.id,version=detailsNumber;if(!eventId)return;const button=$('save-links');button.disabled=true;try{for(const kind of ['notes','tasks']){const select=$(kind==='notes'?'linked-note':'linked-task');if(!select.disabled&&select.value!==select.dataset.initial){const value=select.value;await api('/events/'+eventId+'/links/'+kind,'PUT',{id:value||null});if(version!==detailsNumber)return;select.dataset.initial=value}}if(version!==detailsNumber)return;$('event-status').textContent='Vínculos guardados.';await loadLinks(eventId)}catch(error){$('event-status').textContent=describe(error)}finally{button.disabled=false}});
+
+  function openCreate(date, exact = false) {
     detailsNumber++;
     detail = null;
     formMode('create');
     const now = new Date();
-    const start = key(date) === key(now) ? new Date(now.getTime() + 1800000) : new Date(date.setHours(9, 0, 0, 0));
+    const start = exact ? date : key(date) === key(now) ? new Date(now.getTime() + 1800000) : new Date(date.setHours(9, 0, 0, 0));
     eventFields.local_start.value = localTime(start);
     eventFields.local_end.value = localTime(new Date(start.getTime() + 3600000));
+    refreshClocks();
   }
   const occurrencePath = (id, original) => '/events/' + encodeURIComponent(id) + '/occurrences/' + encodeURIComponent(original);
   async function openDetail(id, original) {

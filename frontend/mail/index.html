@@ -103,7 +103,7 @@ body{margin:0;background:var(--ui-canvas);color:var(--ui-text);font:15px/1.45 va
  .mail-app .mail-sidebar{position:absolute;inset:0 auto 0 0;width:min(245px,85%);z-index:6;transform:translateX(-100%);visibility:hidden;box-shadow:var(--ui-shadow)}
  .mail-app.mobile-sidebar .mail-sidebar{transform:none;visibility:visible}
  .mail-toolbar{gap:8px;padding:8px 11px}.mail-toolbar h2{font-size:18px}.mail-toolbar .mail-primary{margin-left:auto}
- .mail-search{flex:1 1 100%;margin:0}.mail-search input{min-height:38px}
+ .mail-search{order:1;flex:1 1 100%;margin:0}.mail-search input{min-height:38px}
  .mail-workspace{grid-template-columns:minmax(0,1fr)}.mail-list{border:0}.mail-reader{display:none}
  .mail-app[data-reading] .mail-list{display:none}.mail-app[data-reading] .mail-reader{display:block}
  .mail-back{display:inline-flex}.mail-action,.mail-primary,.mail-nav button{min-height:44px}
@@ -146,7 +146,7 @@ body{margin:0;background:var(--ui-canvas);color:var(--ui-text);font:15px/1.45 va
   <main class="mail-main">
     <header class="mail-toolbar">
       <!-- SANTOLV_SIDEBAR_SHOW -->
-      <h2 id="mail-folder">Entrada</h2>
+      <h2 id="mail-folder" tabindex="-1">Entrada</h2>
       <label class="mail-search"><svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-search"/></svg><input id="mail-search" type="search" aria-label="Buscar en el buzón" placeholder="Buscar en este buzón" maxlength="200" disabled></label>
       <button type="button" class="mail-primary" id="mail-compose" disabled><svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-compose"/></svg>Redactar</button>
     </header>

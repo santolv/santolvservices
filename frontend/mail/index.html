@@ -15,6 +15,7 @@ body{margin:0;background:var(--ui-canvas);color:var(--ui-text);font:15px/1.45 va
 .mail-app :focus-visible,.mail-dialog :focus-visible{outline:2px solid var(--ui-blue);outline-offset:2px}
 .mail-app button:disabled,.mail-dialog button:disabled{opacity:.55;cursor:default}
 .mail-icon{width:20px;height:20px;display:block;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.mail-symbols{position:absolute}
 .mail-sidebar{grid-column:1;min-height:0;min-width:0;display:flex;flex-direction:column;gap:18px;padding:0 12px 14px;background:var(--ui-panel);border-right:1px solid var(--ui-line);overflow:auto;transition:transform 180ms ease}
 .mail-sidebar .sidebar-top{gap:8px;margin:0}
 .mail-sidebar h1{margin:0;font-size:17px;letter-spacing:-.025em}
@@ -115,7 +116,7 @@ body{margin:0;background:var(--ui-canvas);color:var(--ui-text);font:15px/1.45 va
 </head>
 <body>
 <!-- SANTOLV_SHELL -->
-<svg width="0" height="0" aria-hidden="true" style="position:absolute">
+<svg class="mail-symbols" width="0" height="0" aria-hidden="true">
   <symbol id="mail-icon-inbox" viewBox="0 0 24 24"><path d="M3 14l3-8h12l3 8v5H3zM3 14h5l2 2h4l2-2h5"/></symbol>
   <symbol id="mail-icon-drafts" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h6"/></symbol>
   <symbol id="mail-icon-sent" viewBox="0 0 24 24"><path d="m3 10 18-7-7 18-4-7-7-4Zm7 4L21 3"/></symbol>

@@ -14,6 +14,8 @@ sincronizan a través de Git.
 | Fotos | frontend/photos/ | backend/src/modules/photos/ | [Fotos](areas/fotos/README.md) |
 | Notas | frontend/notes/ | backend/src/modules/notes/ | [Notas](areas/notes/README.md) |
 | Tareas | frontend/tasks/ | backend/src/modules/tasks/ | [Tareas](areas/tasks/README.md) |
+| Contactos | frontend/contacts/ | backend/src/modules/contacts/ | [Contactos](areas/contactos/README.md) |
+| Correo | frontend/mail/ | backend/src/modules/mail/ | [Correo](areas/correo/README.md) |
 | Core | — | backend/src/core/ y arranque/instalación | [Core](areas/core/README.md) |
 | Compartido | frontend/shared/ | backend/src/file_store/ | [Compartido](areas/compartido/README.md) |
 

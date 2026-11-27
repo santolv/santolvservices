@@ -90,6 +90,12 @@ El directorio de instalación es privado para propietario/SYSTEM en Windows y pr
 
 ## Administración y acceso
 
+Contactos (`contacts`) y Correo (`mail`) se instalan desactivados. Para habilitarlos,
+ejecuta `santolvdrive services enable contacts` y `santolvdrive services enable mail`
+con la configuración de la instalación. Cada servicio aparece en Inicio para las
+cuentas autorizadas y se puede desactivar por separado. Correo guarda borradores
+y organiza mensajes localmente. La conexión para enviar y recibir queda pendiente.
+
 El **superusuario del servidor** es único y se conserva como identidad de administración y auditoría. No puede iniciar sesión por HTTP, no tiene unidad personal y no aparece en el HTML. La base de datos impide crear un segundo superusuario. La actualización revoca sus antiguas sesiones y conserva los usuarios, sus sesiones normales y todos los archivos. Las rutas /api/v1/admin/* se han retirado de la API y de OpenAPI.
 
 La administración se realiza desde la terminal del propio servidor, con acceso del sistema operativo a su configuración privada. No es el usuario PostgreSQL y no se concede un rol superuser de PostgreSQL. Quien pueda leer server.json y ejecutar el programa con esa cuenta del sistema controla esta instalación.

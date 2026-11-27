@@ -537,6 +537,8 @@ async fn only_authenticated_users_get_pages_and_only_allowed_modules_can_be_used
         "/drive/",
         "/photos/",
         "/photos/index.html",
+        "/contacts/",
+        "/mail/",
     ] {
         let response = page(route, "drive_session=invalid").await.unwrap();
         assert_eq!(response.status(), StatusCode::SEE_OTHER, "{route}");
@@ -556,6 +558,8 @@ async fn only_authenticated_users_get_pages_and_only_allowed_modules_can_be_used
     for route in [
         "/api/v1/services",
         "/api/v1/photos/library",
+        "/api/v1/contacts",
+        "/api/v1/mail/status",
         "/api/v1/activity/recent",
         "/api/v1/openapi.json",
     ] {
@@ -658,6 +662,77 @@ async fn only_authenticated_users_get_pages_and_only_allowed_modules_can_be_used
     assert_eq!(
         serde_json::from_slice::<Value>(&catalog).unwrap()["items"],
         json!([{"id":"drive","enabled":true,"path":"/drive"}])
+    );
+    for (service, api) in [
+        ("contacts", "/api/v1/contacts"),
+        ("mail", "/api/v1/mail/status"),
+    ] {
+        let route = format!("/{service}/");
+        let card = format!("class=\"service\" href=\"{route}\"");
+        let launcher = format!("data-shell-service=\"{service}\"");
+        assert!(!home.contains(&card) && !home.contains(&launcher));
+        assert_eq!(
+            page(&route, &cookie).await.unwrap().status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+
+        manager::set_enabled(&h.app.db, service, true)
+            .await
+            .unwrap();
+        let bob_home = html(page("/", &bob_cookie).await.unwrap()).await;
+        assert!(bob_home.contains(&card) && bob_home.contains(&launcher));
+        let bob_page = page(&route, &bob_cookie).await.unwrap();
+        assert_eq!(bob_page.status(), StatusCode::OK);
+        let bob_page = html(bob_page).await;
+        assert!(bob_page.contains("id=\"santolv-topbar\""));
+        assert!(!bob_page.contains("<!-- SANTOLV_"));
+        assert!(!bob_page.contains("http://localhost:8443"));
+
+        admin::console(
+            &h.app,
+            &[
+                "deny-module".to_owned(),
+                alice.username.clone(),
+                service.to_owned(),
+            ],
+        )
+        .await
+        .unwrap();
+        let alice_home = html(page("/", &cookie).await.unwrap()).await;
+        assert!(!alice_home.contains(&card) && !alice_home.contains(&launcher));
+        assert_eq!(
+            page(&route, &cookie).await.unwrap().status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            h.req("GET", api, Some(&alice.token), &[], Body::empty())
+                .await
+                .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    manager::set_enabled(&h.app.db, "contacts", false)
+        .await
+        .unwrap();
+    assert_eq!(
+        page("/contacts/", &bob_cookie).await.unwrap().status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(
+        page("/mail/", &bob_cookie).await.unwrap().status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        h.req(
+            "GET",
+            "/api/v1/mail/status",
+            Some(&bob.token),
+            &[],
+            Body::empty()
+        )
+        .await
+        .0,
+        StatusCode::OK
     );
     assert_eq!(
         h.req(

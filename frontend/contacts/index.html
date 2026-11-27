@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contactos · Santolv</title>
+<style>
+  body { margin:0; background:var(--ui-canvas); color:var(--ui-text); font:15px/1.45 var(--ui-font); }
+  .contacts { --blue:var(--ui-blue); --fill:var(--ui-hover); display:grid; grid-template-columns:204px minmax(220px,330px) minmax(0,1fr); height:calc(100dvh - var(--shell-height)); }
+  .contacts.sidebar-hidden { grid-template-columns:minmax(220px,330px) minmax(0,1fr); }
+  .contacts.sidebar-hidden aside { display:none; }
+  :is(.contacts,.contact-dialog) *, .contact-dialog { box-sizing:border-box; }
+  :is(.contacts,.contact-dialog) [hidden] { display:none !important; }
+  :is(.contacts,.contact-dialog) :is(button,input,textarea) { font:inherit; color:inherit; }
+  :is(.contacts,.contact-dialog) button { cursor:pointer; }
+  :is(.contacts,.contact-dialog) button:disabled { cursor:default; opacity:.55; }
+  :is(.contacts,.contact-dialog) :focus-visible { outline:2px solid var(--ui-blue); outline-offset:2px; }
+  :is(.contacts,.contact-dialog) :is(h1,h2,p) { margin:0; }
+  .contacts svg { width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:1.65; stroke-linecap:round; stroke-linejoin:round; }
+  .contact-sidebar { padding:12px; background:var(--ui-panel); border-inline-end:1px solid var(--ui-line); overflow:auto; }
+  .contact-sidebar-head { display:flex; align-items:center; gap:6px; margin-bottom:14px; font-size:14px; }
+  .contact-nav { display:grid; gap:3px; }
+  .contact-nav button { display:flex; align-items:center; gap:9px; min-height:36px; padding:5px 9px; border:0; border-radius:8px; background:transparent; text-align:start; }
+  .contact-nav button:hover { background:var(--ui-hover); }
+  .contact-nav button[aria-current="page"] { background:var(--ui-control); font-weight:600; }
+  .contact-nav svg { color:var(--ui-blue); }
+  .contact-index { display:grid; grid-template-rows:auto minmax(0,1fr) auto; min-height:0; min-width:0; border-inline-end:1px solid var(--ui-line); }
+  .contact-toolbar { display:grid; gap:12px; padding:16px; border-bottom:1px solid var(--ui-line); }
+  .contact-toolbar-line,.contact-tools { display:flex; align-items:center; gap:7px; }
+  .contact-toolbar h1 { flex:1; min-width:0; font-size:19px; line-height:1.15; letter-spacing:-.03em; }
+  .contact-search { display:flex; min-height:36px; align-items:center; gap:7px; padding:0 9px; border-radius:8px; background:var(--ui-control); color:var(--ui-muted); }
+  .contact-search:focus-within { outline:2px solid var(--ui-blue); outline-offset:2px; }
+  .contact-search input { min-width:0; width:100%; height:36px; padding:0; border:0; background:transparent; color:var(--ui-text); }
+  .contact-search input:focus-visible { outline:none; }
+  .contact-search input::placeholder { color:var(--ui-muted); }
+  :is(.contacts,.contact-dialog) .contact-button { display:inline-flex; justify-content:center; align-items:center; gap:6px; min-height:36px; padding:6px 10px; border:0; border-radius:8px; background:var(--ui-control); color:var(--ui-text); font-size:13px; font-weight:600; text-decoration:none; }
+  :is(.contacts,.contact-dialog) .contact-button:hover { background:var(--ui-hover); }
+  :is(.contacts,.contact-dialog) .contact-primary { color:#fff; background:#1768c6; }
+  :is(.contacts,.contact-dialog) .contact-primary:hover { background:#1257a8; }
+  :is(.contacts,.contact-dialog) .contact-danger { color:var(--ui-red); }
+  .contact-index-scroll { min-height:0; overflow:auto; padding:6px 8px 12px; }
+  .contact-list { margin:0; padding:0; list-style:none; }
+  .contact-section { padding:10px 9px 4px; color:var(--ui-muted); font-size:11px; font-weight:650; }
+  .contact-result { display:grid; grid-template-columns:34px minmax(0,1fr) auto; align-items:center; gap:10px; width:100%; min-height:54px; padding:6px 9px; text-align:start; border:0; border-radius:8px; background:transparent; }
+  .contact-result:hover { background:var(--ui-hover); }
+  .contact-result[aria-current="true"] { background:color-mix(in srgb,var(--ui-blue) 14%,var(--ui-surface)); }
+  .contact-result strong,.contact-result small { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .contact-result strong { font-weight:600; }
+  .contact-result small { color:var(--ui-muted); font-size:12px; }
+  .contact-result .contact-star { color:var(--ui-blue); width:15px; height:15px; }
+  .contact-avatar { display:grid; place-items:center; width:34px; height:34px; border-radius:50%; background:color-mix(in srgb,var(--ui-blue) 13%,var(--ui-surface)); color:var(--ui-blue); font-size:12px; font-weight:650; }
+  .contact-count { min-height:34px; padding:7px 16px; border-top:1px solid var(--ui-line); color:var(--ui-muted); font-size:12px; }
+  .contact-state { padding:24px 10px; color:var(--ui-muted); font-size:13px; }
+  .contact-state button { margin-top:8px; }
+  #contact-more { width:100%; margin-top:10px; }
+  .contact-pane { min-width:0; overflow:auto; }
+  .contact-empty { display:grid; align-content:center; justify-items:center; min-height:100%; padding:28px; text-align:center; color:var(--ui-muted); }
+  .contact-placeholder { display:grid; place-items:center; width:60px; height:60px; margin-bottom:14px; border-radius:16px; background:var(--ui-surface); color:var(--ui-blue); }
+  .contact-placeholder svg { width:30px; height:30px; }
+  .contact-empty h2 { color:var(--ui-text); font-size:21px; letter-spacing:-.025em; }
+  .contact-empty p { margin-top:6px; max-width:28ch; }
+  .contact-detail { max-width:800px; margin-inline:auto; padding:24px clamp(20px,4vw,56px) 42px; }
+  .contact-tools { justify-content:end; margin-bottom:26px; }
+  .contact-tools .contact-icon-button { width:36px; padding:4px; }
+  .contact-tools button[aria-pressed="true"] { color:var(--ui-blue); }
+  .contact-tools button[aria-pressed="true"] svg { fill:currentColor; }
+  .contacts .contact-back { display:none; }
+  .contact-profile { display:grid; grid-template-columns:72px minmax(0,1fr); align-items:center; gap:18px; margin-bottom:22px; }
+  .contact-profile .contact-avatar { width:72px; height:72px; font-size:26px; }
+  .contact-profile h2 { font-size:clamp(23px,3.6vw,32px); line-height:1.12; letter-spacing:-.035em; overflow-wrap:anywhere; }
+  .contact-profile p { margin-top:5px; color:var(--ui-muted); overflow-wrap:anywhere; }
+  .contact-shortcuts { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:24px; }
+  .contact-shortcuts .contact-button { color:var(--ui-blue); }
+  .contact-fields { display:grid; margin:0; padding:0 16px; border-radius:12px; background:var(--ui-surface); }
+  .contact-fields > div { display:grid; gap:3px; padding:11px 0; min-width:0; }
+  .contact-fields > div + div { border-top:1px solid var(--ui-line); }
+  .contact-fields dt { color:var(--ui-muted); font-size:12px; }
+  .contact-fields dd { margin:0; overflow-wrap:anywhere; white-space:pre-wrap; }
+  .contact-fields a { color:var(--ui-blue); text-underline-offset:2px; }
+  .contact-menu { position:relative; }
+  .contact-popover { position:absolute; z-index:2; right:0; top:calc(100% + 5px); min-width:178px; padding:5px; border:1px solid var(--ui-line); border-radius:11px; background:var(--ui-raised); box-shadow:var(--ui-shadow); }
+  .contact-popover .contact-button { width:100%; justify-content:start; background:transparent; }
+  .contact-feedback { margin-top:12px !important; color:var(--ui-muted); }
+  .contact-feedback:empty { display:none; }
+  .contact-error { color:var(--ui-red); }
+  .contact-dialog { width:min(545px,calc(100vw - 24px)); max-height:calc(100dvh - 28px); padding:0; overflow:auto; border:1px solid var(--ui-line); border-radius:16px; background:var(--ui-raised); color:var(--ui-text); box-shadow:var(--ui-shadow); }
+  .contact-dialog::backdrop { background:var(--ui-backdrop); backdrop-filter:blur(6px); }
+  .contact-dialog form { margin:0; }
+  .contact-dialog-head { padding:18px 20px 13px; border-bottom:1px solid var(--ui-line); }
+  .contact-dialog-head h2 { font-size:21px; letter-spacing:-.025em; }
+  .contact-dialog-head p,.contact-dialog-body label { color:var(--ui-muted); font-size:13px; }
+  .contact-dialog-body,.contact-options-fields { display:grid; gap:12px; }
+  .contact-dialog-body { padding:16px 20px; }
+  .contact-options-fields { margin-top:12px; }
+  .contact-edit-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .contact-dialog-body label { display:grid; min-width:0; gap:4px; font-weight:550; }
+  .contact-dialog-body :is(input,textarea) { width:100%; min-height:40px; padding:8px 10px; border:1px solid var(--ui-line); border-radius:8px; background:var(--ui-surface); color:var(--ui-text); font-size:15px; }
+  .contact-dialog-body textarea { min-height:65px; resize:vertical; }
+  .contact-dialog-body summary { cursor:pointer; color:var(--ui-blue); font-weight:600; }
+  .contact-dialog-foot { display:flex; justify-content:end; gap:8px; padding:12px 20px; border-top:1px solid var(--ui-line); }
+  #remove-contact-dialog { max-width:410px; }
+  .contact-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+  @media (max-width:820px) {
+    .contacts { grid-template-columns:174px minmax(200px,260px) minmax(0,1fr); }
+    .contacts.sidebar-hidden { grid-template-columns:minmax(200px,260px) minmax(0,1fr); }
+  }
+  @media (max-width:620px) {
+    .contacts,.contacts.sidebar-hidden { grid-template-columns:minmax(0,1fr); position:relative; }
+    .contact-sidebar { display:none; }
+    .contacts.mobile-sidebar .contact-sidebar { display:block; position:absolute; inset:0 auto 0 0; z-index:6; width:min(230px,82%); box-shadow:8px 0 24px #0003; }
+    .contact-index { border:0; }
+    .contact-pane { display:none; }
+    .contacts.show-contact .contact-index { display:none; }
+    .contacts.show-contact .contact-pane { display:block; }
+    .contacts .contact-back { display:inline-flex; margin-right:auto; }
+    .contact-detail { padding:16px 18px 30px; }
+    .contact-tools { margin-bottom:18px; }
+  }
+  @media (pointer:coarse) {
+    :is(.contacts,.contact-dialog) .contact-button,.contact-nav button,.contact-search,.contact-search input { min-height:44px; }
+    .contact-tools .contact-icon-button { width:44px; }
+  }
+  @media (prefers-reduced-transparency:reduce) { .contact-dialog::backdrop { background:#0009; backdrop-filter:none; } }
+  [data-contact-definitions] { display: none; }
+</style>
+</head>
+<body>
+<!-- SANTOLV_SHELL -->
+<svg data-contact-definitions xmlns="http://www.w3.org/2000/svg" aria-hidden="true" hidden>
+  <symbol id="contact-book" viewBox="0 0 24 24"><rect x="5" y="3" width="15" height="18" rx="3"/><path d="M3 8h4M3 16h4m2.5.5a3.8 3.8 0 0 1 7 0"/><circle cx="13" cy="10" r="2"/></symbol>
+  <symbol id="contact-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></symbol>
+  <symbol id="contact-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="contact-search-icon" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4 4"/></symbol>
+  <symbol id="contact-back-icon" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></symbol>
+  <symbol id="contact-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></symbol>
+  <symbol id="contact-call" viewBox="0 0 24 24"><path d="M7 3c1 .2 3 4.5 3 5.2s-1.1 1.6-1.7 2.1a13 13 0 0 0 5.4 5.4c.5-.6 1.4-1.7 2.1-1.7.8 0 5 2 5.2 3 .3 1.4-1.4 4-3.9 4C10.5 21 3 13.5 3 6.9 3 4.4 5.6 2.7 7 3Z"/></symbol>
+  <symbol id="contact-more-icon" viewBox="0 0 24 24"><path d="M5 12h.1M12 12h.1M19 12h.1" stroke-width="2.8"/></symbol>
+</svg>
+<main class="contacts app" id="contacts-app">
+  <aside class="contact-sidebar" id="sidebar" aria-label="Listas de contactos">
+    <div class="contact-sidebar-head"><!-- SANTOLV_SIDEBAR_HIDE --><strong>Contactos</strong></div>
+    <nav class="contact-nav" aria-label="Listas">
+      <button type="button" data-list="all" aria-current="page"><svg aria-hidden="true"><use href="#contact-book"/></svg>Todos los contactos</button>
+      <button type="button" data-list="favorite"><svg aria-hidden="true"><use href="#contact-star"/></svg>Favoritos</button>
+    </nav>
+  </aside>
+  <section class="contact-index" aria-labelledby="contact-index-title">
+    <header class="contact-toolbar">
+      <div class="contact-toolbar-line">
+        <!-- SANTOLV_SIDEBAR_SHOW -->
+        <h1 id="contact-index-title">Todos los contactos</h1>
+        <button type="button" class="contact-button contact-primary" id="new-contact" disabled>
+          <svg aria-hidden="true"><use href="#contact-add"/></svg>Nuevo
+        </button>
+      </div>
+      <label class="contact-search">
+        <svg aria-hidden="true"><use href="#contact-search-icon"/></svg>
+        <span class="contact-sr">Buscar contactos</span>
+        <input id="contact-search" type="search" placeholder="Buscar contactos" autocomplete="off" maxlength="200" disabled>
+      </label>
+    </header>
+    <div class="contact-index-scroll" id="contact-scroll">
+      <div class="contact-state" id="contact-state">
+        <p id="contact-list-status" role="status">Cargando contactos…</p>
+        <button type="button" class="contact-button" id="contact-retry" hidden>Reintentar</button>
+      </div>
+      <ul class="contact-list" id="contact-list" aria-label="Contactos"></ul>
+      <button type="button" class="contact-button" id="contact-more" hidden>Cargar más</button>
+    </div>
+    <p class="contact-count" id="contact-count" aria-live="polite"></p>
+  </section>
+  <section class="contact-pane" aria-label="Ficha del contacto">
+    <div class="contact-empty" id="contact-empty">
+      <span class="contact-placeholder" aria-hidden="true"><svg><use href="#contact-book"/></svg></span>
+      <h2>Ficha del contacto</h2>
+      <p>Selecciona un contacto de la lista para ver sus datos.</p>
+    </div>
+    <article class="contact-detail" id="contact-detail" aria-labelledby="contact-name" hidden>
+      <div class="contact-tools">
+        <button type="button" class="contact-button contact-back" id="contact-back"><svg aria-hidden="true"><use href="#contact-back-icon"/></svg>Lista</button>
+        <button type="button" class="contact-button contact-icon-button" id="favorite-contact" aria-label="Añadir a favoritos" aria-pressed="false"><svg aria-hidden="true"><use href="#contact-star"/></svg></button>
+        <button type="button" class="contact-button" id="edit-contact">Editar</button>
+        <div class="contact-menu">
+          <button type="button" class="contact-button contact-icon-button" id="contact-actions" aria-label="Más acciones" aria-expanded="false" aria-controls="contact-actions-panel"><svg aria-hidden="true"><use href="#contact-more-icon"/></svg></button>
+          <div class="contact-popover" id="contact-actions-panel" hidden>
+            <button type="button" class="contact-button" id="copy-email" hidden>Copiar correo</button>
+            <button type="button" class="contact-button" id="export-contact">Descargar vCard</button>
+            <button type="button" class="contact-button contact-danger" id="remove-contact">Eliminar contacto</button>
+          </div>
+        </div>
+      </div>
+      <header class="contact-profile">
+        <span class="contact-avatar" id="contact-avatar" aria-hidden="true"></span>
+        <div><h2 id="contact-name" tabindex="-1"></h2><p id="contact-position" hidden></p></div>
+      </header>
+      <div class="contact-shortcuts" id="contact-shortcuts" hidden>
+        <a class="contact-button" id="contact-email-action" hidden><svg aria-hidden="true"><use href="#contact-mail"/></svg>Escribir</a>
+        <a class="contact-button" id="contact-call-action" hidden><svg aria-hidden="true"><use href="#contact-call"/></svg>Llamar</a>
+      </div>
+      <dl class="contact-fields" id="contact-fields" hidden></dl>
+      <p class="contact-feedback" id="contact-feedback" role="status"></p>
+    </article>
+  </section>
+</main>
+<dialog class="contact-dialog" id="contact-editor" aria-labelledby="contact-editor-title">
+  <form id="contact-form">
+    <header class="contact-dialog-head"><h2 id="contact-editor-title">Nuevo contacto</h2><p>Añade un nombre, un apellido o una empresa.</p></header>
+    <div class="contact-dialog-body">
+      <div class="contact-edit-pair">
+        <label>Nombre<input name="given_name" autocomplete="off" maxlength="100" autofocus></label>
+        <label>Apellidos<input name="family_name" autocomplete="off" maxlength="100"></label>
+      </div>
+      <div class="contact-edit-pair">
+        <label>Correo electrónico<input name="email" type="email" autocomplete="off" maxlength="254"></label>
+        <label>Teléfono<input name="phone" type="tel" autocomplete="off" maxlength="80"></label>
+      </div>
+      <div class="contact-edit-pair">
+        <label>Empresa<input name="company" autocomplete="off" maxlength="160"></label>
+        <label>Puesto<input name="job_title" autocomplete="off" maxlength="120"></label>
+      </div>
+      <details id="contact-options"><summary>Dirección, sitio web y notas</summary>
+        <div class="contact-options-fields">
+          <label>Dirección<textarea name="address" rows="2" maxlength="500"></textarea></label>
+          <label>Sitio web<input name="website" type="url" autocomplete="off" placeholder="https://" maxlength="500"></label>
+          <label>Notas<textarea name="notes" rows="3" maxlength="4000"></textarea></label>
+        </div>
+      </details>
+      <p class="contact-error" id="contact-editor-error" role="alert" hidden></p>
+    </div>
+    <footer class="contact-dialog-foot">
+      <button type="button" class="contact-button" id="contact-cancel">Cancelar</button>
+      <button type="submit" class="contact-button contact-primary" id="contact-save">Guardar</button>
+    </footer>
+  </form>
+</dialog>
+<dialog class="contact-dialog" id="remove-contact-dialog" aria-labelledby="remove-contact-title" aria-describedby="remove-contact-copy">
+  <div class="contact-dialog-head"><h2 id="remove-contact-title">¿Eliminar contacto?</h2></div>
+  <div class="contact-dialog-body"><p id="remove-contact-copy"></p><p class="contact-error" role="alert" id="remove-contact-error" hidden></p></div>
+  <div class="contact-dialog-foot">
+    <button type="button" class="contact-button" id="remove-contact-cancel" autofocus>Cancelar</button>
+    <button type="button" class="contact-button contact-danger" id="remove-contact-confirm">Eliminar</button>
+  </div>
+</dialog>
+<!-- SANTOLV_RECORD_SCRIPT -->
+<script>
+(() => {
+  'use strict';
+  const {api, start} = window.SantolvRecords.create();
+  const id = name => document.getElementById(name);
+  const root = id('contacts-app');
+  const list = id('contact-list');
+  const search = id('contact-search');
+  const editor = id('contact-editor');
+  const form = id('contact-form');
+  const removeDialog = id('remove-contact-dialog');
+  const actions = id('contact-actions');
+  const actionsPanel = id('contact-actions-panel');
+  const more = id('contact-more');
+  const recordsPath = '/contacts';
+  const labels = {
+    email: 'Correo electrónico', phone: 'Teléfono', company: 'Empresa',
+    job_title: 'Puesto', address: 'Dirección', website: 'Sitio web', notes: 'Notas'
+  };
+  const validation = {
+    contact_name_required: 'Añade un nombre, un apellido o una empresa.',
+    invalid_contact_field: 'Revisa la longitud y los caracteres de los campos.',
+    invalid_contact_email: 'Introduce una dirección de correo válida.',
+    invalid_contact_website: 'Introduce una dirección web válida que empiece por https:// o http://.',
+    contact_changed: 'Este contacto ha cambiado en otra sesión. Ciérralo y vuelve a abrir la ficha.'
+  };
+  let contacts = [], selected, editing, removing, cursor, request, debounce;
+  let initialized = false, mailAvailable = false, writing = false, currentList = 'all';
+
+  function svgIcon(symbol) {
+    const space = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(space, 'svg');
+    const use = document.createElementNS(space, 'use');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('class', symbol);
+    use.setAttribute('href', '#' + symbol);
+    svg.append(use);
+    return svg;
+  }
+
+  const node = (tag, value, className) => {
+    const element = document.createElement(tag);
+    element.textContent = value;
+    if (className) element.className = className;
+    return element;
+  };
+
+  function initials(name) {
+    const words = name.trim().split(/\s+/);
+    return [words[0], words.length > 1 ? words.at(-1) : '']
+      .filter(Boolean).map(word => Array.from(word)[0].toLocaleUpperCase('es')).join('');
+  }
+
+  const detailUrl = contact => recordsPath + '/' + encodeURIComponent(contact.id);
+
+  function mailUrl(email) {
+    return mailAvailable ? '/mail/?to=' + encodeURIComponent(email)
+      : 'mailto:' + encodeURIComponent(email).replace('%40', '@');
+  }
+
+  function phoneUrl(phone) {
+    const number = phone.replace(/[().\s-]/g, '');
+    return /^\+?[0-9*#]+$/.test(number) ? 'tel:' + number.replaceAll('#', '%23') : '';
+  }
+
+  function websiteUrl(value) {
+    try {
+      const url = new URL(value);
+      return ['https:', 'http:'].includes(url.protocol) ? url.href : '';
+    } catch {
+      return '';
+    }
+  }
+
+  function setLink(element, href) {
+    element.hidden = !href;
+    if (href) element.href = href;
+    else element.removeAttribute('href');
+  }
+
+  function setActions(open) {
+    actionsPanel.hidden = !open;
+    actions.setAttribute('aria-expanded', String(open));
+  }
+
+  function setError(element, error) {
+    element.textContent = error ? (validation[error.code] || error.message) : '';
+    element.hidden = !error;
+  }
+
+  function announce(text, failed = false) {
+    const status = id('contact-feedback');
+    status.textContent = text;
+    status.classList.toggle('contact-error', failed);
+  }
+
+  function renderCard() {
+    const contact = selected;
+    id('contact-detail').hidden = !contact;
+    id('contact-empty').hidden = !!contact;
+    setActions(false);
+    if (!contact) {
+      root.classList.remove('show-contact');
+      return;
+    }
+    id('contact-avatar').textContent = initials(contact.display_name);
+    id('contact-name').textContent = contact.display_name;
+    const position = [contact.job_title, contact.company].filter(Boolean).join(' · ');
+    id('contact-position').textContent = position;
+    id('contact-position').hidden = !position;
+    const star = id('favorite-contact');
+    const starLabel = contact.favorite ? 'Quitar de favoritos' : 'Añadir a favoritos';
+    star.setAttribute('aria-label', starLabel);
+    star.setAttribute('aria-pressed', String(contact.favorite));
+    star.title = starLabel;
+    const email = contact.email ? mailUrl(contact.email) : '';
+    const call = contact.phone ? phoneUrl(contact.phone) : '';
+    setLink(id('contact-email-action'), email);
+    setLink(id('contact-call-action'), call);
+    id('contact-shortcuts').hidden = !email && !call;
+    id('copy-email').hidden = !contact.email || !navigator.clipboard;
+    const fields = id('contact-fields');
+    fields.replaceChildren();
+    const urls = {email, phone: call, website: websiteUrl(contact.website)};
+    for (const [key, label] of Object.entries(labels)) {
+      if (!contact[key]) continue;
+      const row = document.createElement('div');
+      const value = document.createElement('dd');
+      if (urls[key]) {
+        const link = node('a', contact[key]);
+        link.href = urls[key];
+        if (key === 'website') {
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+        }
+        value.append(link);
+      } else value.textContent = contact[key];
+      row.append(node('dt', label), value);
+      fields.append(row);
+    }
+    fields.hidden = !fields.childElementCount;
+  }
+
+  function openCard(contact) {
+    selected = contact;
+    root.classList.add('show-contact');
+    for (const button of list.querySelectorAll('.contact-result')) {
+      button.setAttribute('aria-current', String(button.dataset.id === contact.id));
+    }
+    announce('');
+    renderCard();
+    id('contact-name').focus();
+  }
+
+  function renderList() {
+    const fragment = document.createDocumentFragment();
+    let lastSection;
+    for (const contact of contacts) {
+      const first = Array.from(contact.display_name.trim())[0].toLocaleUpperCase('es');
+      if (first !== lastSection) {
+        const heading = node('li', first, 'contact-section');
+        heading.setAttribute('aria-hidden', 'true');
+        fragment.append(heading);
+        lastSection = first;
+      }
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'contact-result';
+      button.dataset.id = contact.id;
+      button.setAttribute('aria-current', String(selected?.id === contact.id));
+      const avatar = node('span', initials(contact.display_name), 'contact-avatar');
+      avatar.setAttribute('aria-hidden', 'true');
+      const text = document.createElement('span');
+      text.append(node('strong', contact.display_name));
+      const subtitle = contact.email || contact.company || contact.phone;
+      if (subtitle) text.append(node('small', subtitle));
+      button.append(avatar, text);
+      if (contact.favorite) button.append(svgIcon('contact-star'));
+      button.addEventListener('click', () => openCard(contact));
+      item.append(button);
+      fragment.append(item);
+    }
+    list.replaceChildren(fragment);
+    const count = contacts.length;
+    id('contact-count').textContent = count
+      ? count + (count === 1 ? ' contacto' : ' contactos') + (cursor ? ' en la lista' : '') : '';
+    more.hidden = !cursor;
+  }
+
+  function setListState(message = '', retry = false) {
+    id('contact-state').hidden = !message;
+    id('contact-list-status').textContent = message;
+    id('contact-retry').hidden = !retry;
+  }
+
+  async function load({append = false, keepSelection = false} = {}) {
+    if (!initialized || (append && !cursor)) return;
+    request?.abort();
+    const pending = new AbortController();
+    request = pending;
+    const q = search.value.trim();
+    const query = new URLSearchParams({limit: '50'});
+    if (q) query.set('q', q);
+    if (currentList === 'favorite') query.set('favorite', 'true');
+    if (append) query.set('cursor', cursor);
+    if (!append) {
+      contacts = [];
+      cursor = null;
+      if (!keepSelection) selected = null;
+      id('contact-scroll').scrollTop = 0;
+      renderList();
+      renderCard();
+    }
+    more.disabled = true;
+    list.setAttribute('aria-busy', 'true');
+    setListState(append ? '' : 'Cargando contactos…');
+    try {
+      const result = await api(recordsPath + '?' + query, {signal: pending.signal});
+      if (request !== pending) return;
+      contacts = contacts.concat(result.items);
+      cursor = result.next_cursor;
+      if (selected) selected = contacts.find(contact => contact.id === selected.id) || selected;
+      const empty = q ? 'No hay resultados para esta búsqueda.'
+        : currentList === 'favorite' ? 'Marca una ficha con la estrella para añadirla a Favoritos.'
+          : 'Tu agenda está vacía. Pulsa Nuevo para añadir un contacto.';
+      setListState(contacts.length ? '' : empty);
+      renderList();
+      renderCard();
+    } catch (error) {
+      if (request === pending) setListState(error.message, true);
+    } finally {
+      if (request === pending) {
+        list.setAttribute('aria-busy', 'false');
+        more.disabled = false;
+      }
+    }
+  }
+
+  function setCurrentList(value) {
+    currentList = value;
+    for (const button of document.querySelectorAll('[data-list]')) {
+      if (button.dataset.list === value) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    }
+    id('contact-index-title').textContent = value === 'favorite' ? 'Favoritos' : 'Todos los contactos';
+  }
+
+  function openEditor(contact = null) {
+    editing = contact;
+    form.reset();
+    id('contact-editor-title').textContent = contact ? 'Editar contacto' : 'Nuevo contacto';
+    if (contact) for (const field of form.querySelectorAll('[name]')) field.value = contact[field.name];
+    id('contact-options').open = Boolean(contact?.address || contact?.website || contact?.notes);
+    setError(id('contact-editor-error'), null);
+    editor.showModal();
+  }
+
+  function backToList() {
+    root.classList.remove('show-contact');
+    const row = [...list.querySelectorAll('.contact-result')].find(button => button.dataset.id === selected?.id);
+    (row || search).focus();
+  }
+
+  function setWriting(value) {
+    writing = value;
+    for (const name of ['contact-save', 'contact-cancel', 'remove-contact-confirm',
+      'remove-contact-cancel', 'favorite-contact', 'edit-contact', 'contact-actions']) id(name).disabled = value;
+  }
+
+  async function syncCard(contact) {
+    selected = contact;
+    root.classList.add('show-contact');
+    await load({keepSelection: true});
+    id('contact-name').focus();
+  }
+
+  async function recoverConflict(contact, error) {
+    if (error.code !== 'contact_changed' || selected?.id !== contact.id) return;
+    try {
+      selected = await api(detailUrl(contact));
+      renderList();
+      renderCard();
+    } catch { /* Keep the original message visible. */ }
+  }
+
+  for (const button of document.querySelectorAll('[data-list]')) {
+    button.addEventListener('click', () => {
+      setCurrentList(button.dataset.list);
+      if (root.classList.contains('mobile-sidebar')) {
+        root.classList.remove('mobile-sidebar');
+        search.focus();
+      }
+      void load();
+    });
+  }
+  search.addEventListener('input', () => {
+    clearTimeout(debounce);
+    more.disabled = true;
+    debounce = setTimeout(() => void load(), 170);
+  });
+  id('contact-retry').addEventListener('click', () => void (initialized ? load() : initialize()));
+  more.addEventListener('click', () => void load({append: true, keepSelection: true}));
+  id('new-contact').addEventListener('click', () => openEditor());
+  id('edit-contact').addEventListener('click', () => { if (selected) openEditor(selected); });
+  id('contact-back').addEventListener('click', backToList);
+  id('contact-cancel').addEventListener('click', () => editor.close());
+  editor.addEventListener('cancel', event => { if (writing) event.preventDefault(); });
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (writing) return;
+    const fields = Object.fromEntries(new FormData(form));
+    if (!['given_name', 'family_name', 'company'].some(key => fields[key].trim())) {
+      setError(id('contact-editor-error'), {code: 'contact_name_required'});
+      form.elements.given_name.focus();
+      return;
+    }
+    setWriting(true);
+    setError(id('contact-editor-error'), null);
+    const original = editing;
+    try {
+      const contact = await api(original ? detailUrl(original) : recordsPath, {
+        method: original ? 'PUT' : 'POST',
+        body: original ? {revision: original.revision, fields} : fields
+      });
+      editor.close();
+      if (!original) {
+        search.value = '';
+        setCurrentList('all');
+        root.classList.remove('mobile-sidebar');
+      }
+      await syncCard(contact);
+      announce(original ? 'Contacto actualizado.' : 'Contacto añadido.');
+    } catch (error) {
+      setError(id('contact-editor-error'), error);
+      if (original) await recoverConflict(original, error);
+    } finally {
+      setWriting(false);
+    }
+  });
+
+  id('favorite-contact').addEventListener('click', async () => {
+    if (!selected || writing) return;
+    const contact = selected;
+    setWriting(true);
+    try {
+      const updated = await api(detailUrl(contact) + '/favorite', {
+        method: 'PATCH', body: {revision: contact.revision, favorite: !contact.favorite}
+      });
+      if (selected?.id === contact.id) {
+        await syncCard(updated);
+        announce(updated.favorite ? 'Añadido a favoritos.' : 'Quitado de favoritos.');
+      } else await load({keepSelection: true});
+    } catch (error) {
+      await recoverConflict(contact, error);
+      announce(validation[error.code] || error.message, true);
+    } finally {
+      setWriting(false);
+    }
+  });
+
+  actions.addEventListener('click', () => {
+    const opening = actionsPanel.hidden;
+    setActions(opening);
+    if (opening) actionsPanel.querySelector('button:not([hidden])').focus();
+  });
+  document.addEventListener('click', event => {
+    if (!actionsPanel.hidden && !event.target.closest('.contact-menu')) setActions(false);
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !actionsPanel.hidden) {
+      setActions(false);
+      actions.focus();
+    }
+  });
+  id('copy-email').addEventListener('click', async () => {
+    const email = selected?.email;
+    if (!email) return;
+    setActions(false);
+    actions.focus();
+    try {
+      await navigator.clipboard.writeText(email);
+      announce('Correo copiado.');
+    } catch {
+      announce('No se pudo copiar el correo. Puedes seleccionarlo en la ficha.', true);
+    }
+  });
+
+  function vcard(contact) {
+    const escape = value => value.replaceAll('\\', '\\\\').replace(/\r\n|\r|\n/g, '\\n').replaceAll(';', '\\;').replaceAll(',', '\\,');
+    const lines = [
+      'BEGIN:VCARD', 'VERSION:3.0', 'FN:' + escape(contact.display_name),
+      'N:' + escape(contact.family_name) + ';' + escape(contact.given_name) + ';;;'
+    ];
+    const fields = {email:'EMAIL;TYPE=INTERNET',phone:'TEL',company:'ORG',job_title:'TITLE',website:'URL',notes:'NOTE'};
+    for (const [key, field] of Object.entries(fields)) {
+      if (contact[key]) lines.push(field + ':' + escape(contact[key]));
+    }
+    if (contact.address) lines.push('ADR:;;' + escape(contact.address) + ';;;;');
+    lines.push('END:VCARD');
+    const encoder = new TextEncoder();
+    return lines.map(line => {
+      let folded = '', bytes = 0;
+      for (const character of line) {
+        const length = encoder.encode(character).length;
+        if (bytes + length > 75) {
+          folded += '\r\n ';
+          bytes = 1;
+        }
+        folded += character;
+        bytes += length;
+      }
+      return folded;
+    }).join('\r\n') + '\r\n';
+  }
+
+  id('export-contact').addEventListener('click', () => {
+    if (!selected) return;
+    setActions(false);
+    actions.focus();
+    const download = document.createElement('a');
+    const url = URL.createObjectURL(new Blob([vcard(selected)], {type: 'text/vcard;charset=utf-8'}));
+    download.href = url;
+    download.download = (selected.display_name.replace(/[<>:"/\\|?*]/g, '_').slice(0,120) || 'contacto') + '.vcf';
+    document.body.append(download);
+    download.click();
+    download.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  id('remove-contact').addEventListener('click', () => {
+    if (!selected) return;
+    removing = selected;
+    setActions(false);
+    actions.focus();
+    id('remove-contact-copy').textContent = 'Se eliminará «' + removing.display_name + '» de tu agenda.';
+    setError(id('remove-contact-error'), null);
+    removeDialog.showModal();
+  });
+  id('remove-contact-cancel').addEventListener('click', () => removeDialog.close());
+  removeDialog.addEventListener('cancel', event => { if (writing) event.preventDefault(); });
+  id('remove-contact-confirm').addEventListener('click', async () => {
+    if (!removing || writing) return;
+    setWriting(true);
+    try {
+      await api(detailUrl(removing) + '?revision=' + removing.revision, {method: 'DELETE'});
+      removeDialog.close();
+      await load();
+      search.focus();
+    } catch (error) {
+      setError(id('remove-contact-error'), error);
+      await recoverConflict(removing, error);
+    } finally {
+      setWriting(false);
+    }
+  });
+
+  async function initialize() {
+    setListState('Cargando contactos…');
+    try {
+      const user = await start();
+      if (user.must_change_password) { location.replace('/account/'); return; }
+      initialized = true;
+      search.disabled = id('new-contact').disabled = false;
+      void api('/services').then(({items}) => {
+        mailAvailable = items.some(service => service.id === 'mail' && service.enabled);
+        renderCard();
+      }).catch(() => {});
+      await load();
+    } catch (error) {
+      setListState(error.message, true);
+    }
+  }
+  void initialize();
+})();
+</script>
+</body>
+</html>

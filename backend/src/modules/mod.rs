@@ -1,5 +1,7 @@
 pub mod calendar;
+pub mod contacts;
 pub mod drive;
+pub mod mail;
 pub mod notes;
 pub mod photos;
 mod record_support;
@@ -13,4 +15,6 @@ pub const REGISTERED: &[Service] = &[
     calendar::SERVICE,
     notes::SERVICE,
     tasks::SERVICE,
+    contacts::SERVICE,
+    mail::SERVICE,
 ];

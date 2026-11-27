@@ -519,6 +519,7 @@ body{margin:0;background:var(--ui-canvas);color:var(--ui-text);font:15px/1.45 va
 
   function confirmAction(title, text, action) {
     const dialog = $('mail-confirm');
+    if (dialog.open) return Promise.resolve(false);
     $('mail-confirm-title').textContent = title;
     $('mail-confirm-text').textContent = text;
     $('mail-confirm-accept').textContent = action;
@@ -584,10 +585,10 @@ body{margin:0;background:var(--ui-canvas);color:var(--ui-text);font:15px/1.45 va
     (to ? form.elements.subject : form.elements.to).focus();
   }
 
-  function closeCompose() {
+  async function closeCompose() {
     if (editingInProgress) return;
-    if (JSON.stringify(draftInput()) !== savedForm
-        && !window.confirm('¿Cerrar el borrador y descartar los cambios sin guardar?')) return;
+    const changed = JSON.stringify(draftInput()) !== savedForm;
+    if (changed && !(await confirmAction('¿Descartar cambios?', 'Los cambios que no hayas guardado se perderán.', 'Descartar'))) return;
     editor.close();
   }
 

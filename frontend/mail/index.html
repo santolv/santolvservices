@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Correo · Santolv</title>
+<style>
+body{margin:0;background:var(--ui-canvas);color:var(--ui-text);font:15px/1.45 var(--ui-font)}
+[hidden]{display:none!important}
+.mail-app{--blue:var(--ui-blue);--fill:var(--ui-hover);display:grid;grid-template-columns:220px minmax(0,1fr);grid-template-rows:minmax(0,1fr);position:relative;height:calc(100dvh - var(--shell-height));overflow:hidden;isolation:isolate}
+.mail-app,.mail-app *,.mail-dialog,.mail-dialog *{box-sizing:border-box}
+.mail-app :is(button,input),.mail-dialog :is(button,input,textarea){font:inherit;color:inherit}
+.mail-app button,.mail-dialog button{cursor:pointer}
+.mail-app :focus-visible,.mail-dialog :focus-visible{outline:2px solid var(--ui-blue);outline-offset:2px}
+.mail-app button:disabled,.mail-dialog button:disabled{opacity:.55;cursor:default}
+.mail-icon{width:20px;height:20px;display:block;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.mail-sidebar{grid-column:1;min-height:0;min-width:0;display:flex;flex-direction:column;gap:18px;padding:0 12px 14px;background:var(--ui-panel);border-right:1px solid var(--ui-line);overflow:auto;transition:transform 180ms ease}
+.mail-sidebar .sidebar-top{gap:8px;margin:0}
+.mail-sidebar h1{margin:0;font-size:17px;letter-spacing:-.025em}
+.mail-nav{display:grid;gap:3px}
+.mail-nav button{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;padding:6px 10px;border:0;border-radius:9px;text-align:left;background:transparent}
+.mail-nav button:hover,.mail-nav button[aria-current=page]{background:var(--ui-control)}
+.mail-nav button[aria-current=page]{font-weight:600}
+.mail-nav .mail-icon{color:var(--ui-blue)}
+.mail-account{margin-top:auto;width:100%;display:flex;align-items:center;gap:10px;padding:10px;text-align:left;background:var(--ui-surface);border:1px solid var(--ui-line);border-radius:11px}
+.mail-account:hover{background:var(--ui-hover)}
+.mail-account .mail-icon{color:var(--ui-blue)}
+.mail-account span{min-width:0}
+.mail-account strong,.mail-account small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mail-account small{color:var(--ui-muted)}
+.mail-app.sidebar-hidden{grid-template-columns:0 minmax(0,1fr)}
+.mail-app.sidebar-hidden .mail-sidebar{transform:translateX(-100%);visibility:hidden}
+.mail-main{grid-column:2;display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0;min-height:0}
+.mail-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 16px;border-bottom:1px solid var(--ui-line);background:var(--ui-canvas)}
+.mail-toolbar h2{font-size:20px;letter-spacing:-.028em;margin:0}
+.mail-search{display:flex;align-items:center;gap:7px;margin-left:auto;min-width:0;width:min(225px,100%);background:var(--ui-control);border-radius:9px;padding:0 10px;color:var(--ui-muted)}
+.mail-search:focus-within{outline:2px solid var(--ui-blue)}
+.mail-search .mail-icon{width:16px;height:16px}
+.mail-search input{border:0;background:transparent;outline:0!important;min-width:0;width:100%;min-height:36px}
+.mail-action,.mail-primary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;border:1px solid transparent;border-radius:9px;padding:6px 12px;font-weight:600!important;text-decoration:none}
+.mail-action{background:var(--ui-control);color:var(--ui-text)}
+.mail-action:hover{background:var(--ui-hover)}
+.mail-primary{background:#0065cc;color:#fff!important}
+.mail-primary:hover{background:#0058b3}
+.mail-danger{color:var(--ui-red)!important}
+.mail-workspace{display:grid;grid-template-columns:minmax(240px,340px) minmax(0,1fr);min-height:0;min-width:0}
+.mail-list{min-height:0;min-width:0;overflow:auto;background:var(--ui-canvas);border-right:1px solid var(--ui-line);padding:10px}
+.mail-list ul,.mail-suggestions ul{list-style:none;margin:0;padding:0}
+.mail-row{display:grid;gap:4px;width:100%;background:transparent;border:0;border-radius:10px;padding:10px 11px;color:inherit;text-align:left}
+.mail-row:hover{background:var(--ui-surface)}
+.mail-row[aria-current=true]{background:var(--ui-control)}
+.mail-row-head{display:flex;align-items:center;gap:8px;min-width:0}
+.mail-row-head strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mail-row-head time{font-size:12px;color:var(--ui-muted);margin-left:auto;flex:none}
+.mail-row-subject,.mail-row-summary{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mail-row-subject{font-weight:600}
+.mail-row-summary{font-size:13px;color:var(--ui-muted)}
+.mail-row .mail-icon{width:15px;height:15px;color:var(--ui-blue)}
+.mail-unread{width:7px;height:7px;flex:none;border-radius:50%;background:var(--ui-blue)}
+.mail-more{margin:10px 0 4px;width:100%}
+.mail-reader{min-height:0;min-width:0;overflow:auto;background:var(--ui-surface)}
+.mail-empty{min-height:min(380px,100%);display:grid;align-content:center;justify-items:center;text-align:center;padding:28px 14px;gap:9px;color:var(--ui-muted)}
+.mail-empty .mail-icon{width:48px;height:48px;stroke-width:1.25}
+.mail-empty h3{margin:0;font-size:18px;font-weight:650;color:var(--ui-text);letter-spacing:-.025em}
+.mail-empty p{max-width:32ch;margin:0}
+.mail-empty .mail-action,.mail-empty .mail-primary{margin-top:5px}
+.mail-reading{max-width:760px;margin:0 auto;padding:22px clamp(16px,4vw,42px) 40px}
+.mail-reading h3{font-size:clamp(23px,3vw,32px);margin:16px 0 10px;letter-spacing:-.043em;overflow-wrap:anywhere}
+.mail-reader-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.mail-back{display:none}
+.mail-details{display:grid;gap:5px;margin:0;padding:0 0 16px;border-bottom:1px solid var(--ui-line);color:var(--ui-muted);overflow-wrap:anywhere}
+.mail-details div{display:grid;grid-template-columns:50px minmax(0,1fr);gap:6px}
+.mail-details dd{margin:0;color:var(--ui-text)}
+.mail-content{white-space:pre-wrap;overflow-wrap:anywhere;margin:19px 0 0}
+.mail-page-status{position:absolute;bottom:12px;right:12px;z-index:3;padding:8px 13px;max-width:min(400px,calc(100% - 24px));border-radius:9px;background:var(--ui-raised);border:1px solid var(--ui-line);box-shadow:var(--ui-shadow)}
+.mail-page-status:empty,.mail-dialog [role=alert]:empty{display:none}
+.mail-dialog{width:min(660px,calc(100% - 24px));max-height:calc(100dvh - 24px);background:var(--ui-raised);color:var(--ui-text);border:1px solid var(--ui-line);box-shadow:var(--ui-shadow);border-radius:16px;padding:0;overflow:auto;font:15px/1.45 var(--ui-font)}
+.mail-dialog::backdrop{background:var(--ui-backdrop);backdrop-filter:blur(6px)}
+.mail-dialog form,.mail-info{padding:20px}
+.mail-dialog h2{margin:0;font-size:22px;letter-spacing:-.025em}
+.mail-dialog-top,.mail-dialog-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.mail-dialog-subtitle{color:var(--ui-muted);font-size:13px;margin:5px 0 12px}
+.mail-compose-fields{border:0;padding:0;margin:0;min-inline-size:0}
+.mail-field{display:grid;grid-template-columns:56px minmax(0,1fr);align-items:center;gap:8px;border-bottom:1px solid var(--ui-line);min-height:44px;position:relative}
+.mail-field label{font-size:13px;color:var(--ui-muted);font-weight:550}
+.mail-field input{border:0;background:transparent;padding:7px 4px;min-height:38px;width:100%;border-radius:6px}
+.mail-copies{margin:8px 0;font-size:13px}
+.mail-copies summary{color:var(--ui-blue);cursor:pointer;min-height:32px;padding-top:5px}
+.mail-compose-fields textarea{display:block;width:100%;min-height:200px;padding:14px 2px;resize:vertical;border:0;background:transparent}
+.mail-dialog [role=alert]{color:var(--ui-red);margin:8px 0;overflow-wrap:anywhere}
+.mail-dialog-actions{justify-content:flex-end;gap:8px;margin-top:13px}
+.mail-info p{color:var(--ui-muted)}
+#mail-account-dialog{width:min(420px,calc(100% - 24px))}
+.mail-suggestions{grid-column:2;padding:4px 0 8px}
+.mail-suggestions button{display:block;width:100%;min-height:40px;padding:5px 8px;text-align:left;border:0;border-radius:7px;background:var(--ui-surface);overflow-wrap:anywhere}
+.mail-suggestions li+li{margin-top:3px}
+.mail-suggestions button:hover{background:var(--ui-hover)}
+.mail-suggestions small{display:block;color:var(--ui-muted)}
+@media(max-width:900px){.mail-app{grid-template-columns:186px minmax(0,1fr)}.mail-workspace{grid-template-columns:minmax(190px,39%) minmax(0,1fr)}}
+@media(max-width:620px){
+ .mail-app,.mail-app.sidebar-hidden{grid-template-columns:0 minmax(0,1fr)}
+ .mail-app .mail-sidebar{position:absolute;inset:0 auto 0 0;width:min(245px,85%);z-index:6;transform:translateX(-100%);visibility:hidden;box-shadow:var(--ui-shadow)}
+ .mail-app.mobile-sidebar .mail-sidebar{transform:none;visibility:visible}
+ .mail-toolbar{gap:8px;padding:8px 11px}.mail-toolbar h2{font-size:18px}.mail-toolbar .mail-primary{margin-left:auto}
+ .mail-search{flex:1 1 100%;margin:0}.mail-search input{min-height:38px}
+ .mail-workspace{grid-template-columns:minmax(0,1fr)}.mail-list{border:0}.mail-reader{display:none}
+ .mail-app[data-reading] .mail-list{display:none}.mail-app[data-reading] .mail-reader{display:block}
+ .mail-back{display:inline-flex}.mail-action,.mail-primary,.mail-nav button{min-height:44px}
+ .mail-dialog form,.mail-info{padding:15px}.mail-compose-fields textarea{min-height:145px}
+}
+@media(prefers-reduced-motion:reduce){.mail-sidebar{transition:none}}
+@media(prefers-reduced-transparency:reduce){.mail-dialog::backdrop{backdrop-filter:none;background:#0009}}
+</style>
+</head>
+<body>
+<!-- SANTOLV_SHELL -->
+<svg width="0" height="0" aria-hidden="true" style="position:absolute">
+  <symbol id="mail-icon-inbox" viewBox="0 0 24 24"><path d="M3 14l3-8h12l3 8v5H3zM3 14h5l2 2h4l2-2h5"/></symbol>
+  <symbol id="mail-icon-drafts" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h6"/></symbol>
+  <symbol id="mail-icon-sent" viewBox="0 0 24 24"><path d="m3 10 18-7-7 18-4-7-7-4Zm7 4L21 3"/></symbol>
+  <symbol id="mail-icon-starred" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/></symbol>
+  <symbol id="mail-icon-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v11h14V9m-9 4h4"/></symbol>
+  <symbol id="mail-icon-trash" viewBox="0 0 24 24"><path d="M4 7h16m-11 0V4h6v3m-9 0 1 13h10l1-13m-8 4v5m4-5v5"/></symbol>
+  <symbol id="mail-icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></symbol>
+  <symbol id="mail-icon-compose" viewBox="0 0 24 24"><path d="M11 5H5v14h14v-6m-8 0 1-4 7-7 3 3-7 7-4 1Z"/></symbol>
+  <symbol id="mail-icon-envelope" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></symbol>
+  <symbol id="mail-icon-back" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+</svg>
+<div class="app mail-app" id="mail-app">
+  <aside class="mail-sidebar" id="sidebar" aria-label="Buzones de correo">
+    <div class="sidebar-top"><!-- SANTOLV_SIDEBAR_HIDE --><h1>Correo</h1></div>
+    <nav class="mail-nav" aria-label="Buzones">
+      <button type="button" data-folder="inbox" aria-current="page"><svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-inbox"/></svg>Entrada</button>
+      <button type="button" data-folder="drafts"><svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-drafts"/></svg>Borradores</button>
+      <button type="button" data-folder="sent"><svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-sent"/></svg>Enviados</button>
+      <button type="button" data-folder="starred"><svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-starred"/></svg>Destacados</button>
+      <button type="button" data-folder="archive"><svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-archive"/></svg>Archivados</button>
+      <button type="button" data-folder="trash"><svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-trash"/></svg>Papelera</button>
+    </nav>
+    <button type="button" class="mail-account" id="mail-account">
+      <svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-envelope"/></svg>
+      <span><strong>Cuenta de correo</strong><small id="mail-transport">Comprobando conexión…</small></span>
+    </button>
+  </aside>
+  <main class="mail-main">
+    <header class="mail-toolbar">
+      <!-- SANTOLV_SIDEBAR_SHOW -->
+      <h2 id="mail-folder">Entrada</h2>
+      <label class="mail-search"><svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-search"/></svg><input id="mail-search" type="search" aria-label="Buscar en el buzón" placeholder="Buscar en este buzón" maxlength="200" disabled></label>
+      <button type="button" class="mail-primary" id="mail-compose" disabled><svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-compose"/></svg>Redactar</button>
+    </header>
+    <div class="mail-workspace">
+      <section class="mail-list" aria-labelledby="mail-folder" id="mail-list">
+        <div class="mail-empty" id="mail-empty" role="status">
+          <svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-inbox" id="mail-empty-icon"/></svg>
+          <h3 id="mail-empty-title">Cargando correo…</h3>
+          <p id="mail-empty-text"></p>
+          <button type="button" class="mail-action" id="mail-empty-action" hidden></button>
+        </div>
+        <ul id="mail-rows" aria-label="Mensajes"></ul>
+        <button type="button" class="mail-action mail-more" id="mail-more" hidden>Cargar más</button>
+      </section>
+      <section class="mail-reader" aria-label="Lectura del mensaje">
+        <div class="mail-empty" id="mail-reader-empty">
+          <svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-envelope"/></svg>
+          <h3>Ningún mensaje seleccionado</h3>
+          <p>Elige un mensaje del buzón para verlo aquí.</p>
+        </div>
+        <article class="mail-reading" id="mail-reading" hidden>
+          <div class="mail-reader-toolbar">
+            <button type="button" class="mail-action mail-back" id="mail-back" aria-label="Volver a mensajes"><svg class="mail-icon" aria-hidden="true"><use href="#mail-icon-back"/></svg></button>
+            <button type="button" class="mail-action" id="mail-edit">Editar borrador</button>
+            <button type="button" class="mail-action" id="mail-star">Destacar</button>
+            <button type="button" class="mail-action" id="mail-read">Marcar como leído</button>
+            <button type="button" class="mail-action" id="mail-archive">Archivar</button>
+            <button type="button" class="mail-action" id="mail-trash">Enviar a papelera</button>
+            <button type="button" class="mail-action mail-danger" id="mail-delete" hidden>Eliminar definitivamente</button>
+          </div>
+          <h3 id="mail-subject"></h3>
+          <dl class="mail-details" id="mail-details"></dl>
+          <p class="mail-content" id="mail-content"></p>
+        </article>
+      </section>
+    </div>
+  </main>
+  <p class="mail-page-status" id="mail-status" role="status"></p>
+</div>
+
+<dialog class="mail-dialog" id="mail-editor" aria-labelledby="mail-editor-title">
+  <form id="mail-form">
+    <div class="mail-dialog-top"><h2 id="mail-editor-title">Nuevo borrador</h2></div>
+    <p class="mail-dialog-subtitle">El borrador se guarda de forma privada en Santolv.</p>
+    <fieldset class="mail-compose-fields" id="mail-fields">
+      <div class="mail-field">
+        <label for="mail-to">Para</label>
+        <input id="mail-to" name="to" type="text" inputmode="email" spellcheck="false" autocomplete="off" maxlength="16050" placeholder="nombre@dominio.es">
+        <div class="mail-suggestions" id="mail-suggestions" hidden><ul id="mail-contact-results" aria-label="Contactos sugeridos"></ul></div>
+      </div>
+      <details class="mail-copies" id="mail-copies">
+        <summary>Mostrar CC y CCO</summary>
+        <div class="mail-field"><label for="mail-cc">CC</label><input id="mail-cc" name="cc" type="text" inputmode="email" spellcheck="false" autocomplete="off" maxlength="16050"></div>
+        <div class="mail-field"><label for="mail-bcc">CCO</label><input id="mail-bcc" name="bcc" type="text" inputmode="email" spellcheck="false" autocomplete="off" maxlength="16050"></div>
+      </details>
+      <div class="mail-field"><label for="mail-input-subject">Asunto</label><input id="mail-input-subject" name="subject" maxlength="250" autocomplete="off"></div>
+      <textarea name="content" aria-label="Contenido del mensaje" maxlength="30000" placeholder="Escribe el mensaje…" rows="9"></textarea>
+    </fieldset>
+    <p id="mail-editor-error" role="alert"></p>
+    <div class="mail-dialog-actions">
+      <button type="button" class="mail-action" id="mail-cancel">Cerrar</button>
+      <button type="submit" class="mail-primary" id="mail-save">Guardar borrador</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="mail-dialog" id="mail-account-dialog" aria-labelledby="mail-account-title">
+  <section class="mail-info">
+    <h2 id="mail-account-title">Cuenta de correo</h2>
+    <p id="mail-account-message"></p>
+    <form method="dialog" class="mail-dialog-actions"><button class="mail-action" type="submit" value="close">Cerrar</button></form>
+  </section>
+</dialog>
+<dialog class="mail-dialog" id="mail-confirm" aria-labelledby="mail-confirm-title">
+  <section class="mail-info">
+    <h2 id="mail-confirm-title"></h2>
+    <p id="mail-confirm-text"></p>
+    <form method="dialog" class="mail-dialog-actions">
+      <button type="submit" value="cancel" class="mail-action" autofocus>Cancelar</button>
+      <button type="submit" value="accept" class="mail-action mail-danger" id="mail-confirm-accept"></button>
+    </form>
+  </section>
+</dialog>
+<!-- SANTOLV_RECORD_SCRIPT -->
+<script>
+(() => {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const {api, start} = window.SantolvRecords.create();
+  const app = $('mail-app');
+  const editor = $('mail-editor');
+  const form = $('mail-form');
+  const search = $('mail-search');
+  const list = $('mail-rows');
+  const dates = new Intl.DateTimeFormat('es', {day: 'numeric', month: 'short'});
+  const longDates = new Intl.DateTimeFormat('es', {dateStyle: 'long', timeStyle: 'short'});
+  const folders = [...document.querySelectorAll('[data-folder]')];
+  const namespace = 'http://www.w3.org/2000/svg';
+  const empty = {
+    inbox: ['Entrada vacía', 'Los mensajes recibidos aparecerán aquí.'],
+    drafts: ['Sin borradores', 'Comienza a redactar y guarda el mensaje para retomarlo más adelante.'],
+    sent: ['Sin mensajes enviados', 'Los mensajes enviados aparecerán aquí.'],
+    starred: ['Sin destacados', 'Destaca mensajes para encontrarlos en este buzón.'],
+    archive: ['Sin mensajes archivados', 'Archiva mensajes para retirarlos de sus buzones principales.'],
+    trash: ['Papelera vacía', 'Aquí puedes restaurar o eliminar definitivamente los mensajes descartados.']
+  };
+
+  let folder = 'inbox';
+  let records = [];
+  let cursor;
+  let listRequest;
+  let detailRequest;
+  let selected;
+  let editing;
+  let savedForm;
+  let editingInProgress = false;
+  let contactSearch = true;
+  let suggestionRequest;
+  let queuedStatus;
+  let searchTimer;
+  let contactsTimer;
+  let transport = 'checking';
+  let ready = false;
+
+  const splitAddresses = value => value.split(/[,;]/).map(part => part.trim()).filter(Boolean);
+  const messagePath = id => '/mail/messages/' + encodeURIComponent(id);
+  const subject = message => message.subject || '(Sin asunto)';
+  const participant = message => message.sender || message.to_addresses.join(', ') || 'Sin destinatario';
+  const icon = name => {
+    const svg = document.createElementNS(namespace, 'svg');
+    const use = document.createElementNS(namespace, 'use');
+    svg.setAttribute('class', 'mail-icon');
+    svg.setAttribute('aria-hidden', 'true');
+    use.setAttribute('href', '#mail-icon-' + name);
+    svg.append(use);
+    return svg;
+  };
+
+  function errorText(error) {
+    return {
+      mail_changed: 'El mensaje cambió en otra sesión. Vuelve a abrirlo para obtener la última versión.',
+      invalid_recipient: 'Revisa las direcciones de correo. Separa los destinatarios con comas.',
+      too_many_recipients: 'Puedes añadir hasta 50 destinatarios.',
+      invalid_subject: 'El asunto debe tener un máximo de 250 caracteres.',
+      invalid_mail_body: 'El mensaje debe tener un máximo de 30 000 caracteres.',
+      draft_not_editable: 'Restaura el borrador antes de editarlo.'
+    }[error.code] || error.message;
+  }
+
+  function status(text) {
+    clearTimeout(queuedStatus);
+    $('mail-status').textContent = text;
+    if (text) queuedStatus = setTimeout(() => { $('mail-status').textContent = ''; }, 4500);
+  }
+
+  function emptyState(title, text, action) {
+    $('mail-empty').hidden = false;
+    $('mail-empty-title').textContent = title;
+    $('mail-empty-text').textContent = text;
+    $('mail-empty-icon').setAttribute('href', '#mail-icon-' + folder);
+    const button = $('mail-empty-action');
+    button.hidden = !action;
+    button.textContent = action === 'compose' ? 'Redactar' : action === 'retry' ? 'Reintentar' : '';
+    button.onclick = action === 'compose' ? () => compose() : action === 'retry' ? () => void load() : null;
+  }
+
+  function renderList() {
+    list.replaceChildren();
+    for (const message of records) {
+      const li = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'mail-row';
+      button.dataset.id = message.id;
+      if (selected?.id === message.id) button.setAttribute('aria-current', 'true');
+      const top = document.createElement('span');
+      top.className = 'mail-row-head';
+      if (message.unread) {
+        const dot = document.createElement('span');
+        dot.className = 'mail-unread';
+        dot.setAttribute('role', 'img');
+        dot.setAttribute('aria-label', 'Sin leer');
+        top.append(dot);
+      }
+      const name = document.createElement('strong');
+      name.textContent = participant(message);
+      const time = document.createElement('time');
+      time.dateTime = message.updated_at;
+      time.textContent = dates.format(new Date(message.updated_at));
+      top.append(name, time);
+      if (message.starred) {
+        const star = icon('starred');
+        star.removeAttribute('aria-hidden');
+        star.setAttribute('role', 'img');
+        star.setAttribute('aria-label', 'Destacado');
+        top.append(star);
+      }
+      const title = document.createElement('span');
+      title.className = 'mail-row-subject';
+      title.textContent = subject(message);
+      const summary = document.createElement('span');
+      summary.className = 'mail-row-summary';
+      summary.textContent = message.content.trim() || 'Sin contenido';
+      button.append(top, title, summary);
+      button.addEventListener('click', () => void openMessage(message.id));
+      li.append(button);
+      list.append(li);
+    }
+    $('mail-more').hidden = !cursor;
+    if (!records.length) {
+      if (search.value.trim()) emptyState('Sin resultados', 'Prueba con otro asunto, destinatario o texto.');
+      else if (folder === 'inbox' && transport === 'not_configured') {
+        emptyState('Entrada vacía', 'Esta instalación guarda borradores. La recepción requiere una cuenta de correo conectada.');
+      } else {
+        emptyState(...empty[folder], folder === 'drafts' ? 'compose' : null);
+      }
+    } else {
+      $('mail-empty').hidden = true;
+    }
+  }
+
+  async function load(append = false) {
+    if (!ready || (append && !cursor)) return;
+    listRequest?.abort();
+    const request = new AbortController();
+    listRequest = request;
+    const params = new URLSearchParams({folder, limit: '50'});
+    const q = search.value.trim();
+    if (q) params.set('q', q);
+    if (append) params.set('cursor', cursor);
+    else {
+      records = [];
+      cursor = null;
+      list.replaceChildren();
+      $('mail-more').hidden = true;
+      emptyState('Cargando mensajes…', '');
+    }
+    $('mail-list').setAttribute('aria-busy', 'true');
+    $('mail-more').disabled = true;
+    try {
+      const result = await api('/mail/messages?' + params, {signal: request.signal});
+      if (listRequest !== request) return;
+      records = append ? records.concat(result.items) : result.items;
+      cursor = result.next_cursor;
+      renderList();
+    } catch (error) {
+      if (request.signal.aborted) return;
+      if (append) status(errorText(error));
+      else emptyState('No se pudo cargar el buzón', errorText(error), 'retry');
+    } finally {
+      if (listRequest === request) {
+        $('mail-list').setAttribute('aria-busy', 'false');
+        $('mail-more').disabled = false;
+      }
+    }
+  }
+
+  function detailLine(label, value) {
+    if (!value) return;
+    const row = document.createElement('div');
+    const dt = document.createElement('dt');
+    const dd = document.createElement('dd');
+    dt.textContent = label;
+    dd.textContent = value;
+    row.append(dt, dd);
+    $('mail-details').append(row);
+  }
+
+  function drawReader() {
+    $('mail-reading').hidden = !selected;
+    $('mail-reader-empty').hidden = Boolean(selected);
+    app.toggleAttribute('data-reading', Boolean(selected));
+    for (const button of list.querySelectorAll('.mail-row')) {
+      if (button.dataset.id === selected?.id) button.setAttribute('aria-current', 'true');
+      else button.removeAttribute('aria-current');
+    }
+    if (!selected) return;
+    const message = selected;
+    $('mail-subject').textContent = subject(message);
+    $('mail-content').textContent = message.content || 'Este mensaje está vacío.';
+    $('mail-details').replaceChildren();
+    detailLine('De', message.sender);
+    detailLine('Para', message.to_addresses.join(', '));
+    detailLine('CC', message.cc_addresses.join(', '));
+    detailLine('CCO', message.bcc_addresses.join(', '));
+    detailLine('Fecha', longDates.format(new Date(message.updated_at)));
+    $('mail-edit').hidden = message.kind !== 'draft' || message.trashed;
+    $('mail-star').hidden = message.trashed;
+    $('mail-star').textContent = message.starred ? 'Quitar destacado' : 'Destacar';
+    $('mail-read').hidden = message.kind !== 'received' || message.trashed;
+    $('mail-read').textContent = message.unread ? 'Marcar como leído' : 'Marcar como no leído';
+    $('mail-archive').hidden = message.trashed;
+    $('mail-archive').textContent = message.archived ? 'Sacar del archivo' : 'Archivar';
+    $('mail-trash').textContent = message.trashed ? 'Restaurar' : 'Mover a papelera';
+    $('mail-delete').hidden = !message.trashed;
+  }
+
+  async function openMessage(id) {
+    detailRequest?.abort();
+    const request = new AbortController();
+    detailRequest = request;
+    try {
+      const result = await api(messagePath(id), {signal: request.signal});
+      if (detailRequest !== request) return;
+      selected = result;
+      drawReader();
+      if (matchMedia('(max-width:620px)').matches) $('mail-back').focus();
+    } catch (error) {
+      if (!request.signal.aborted) status(errorText(error));
+    }
+  }
+
+  function clearReader() {
+    detailRequest?.abort();
+    detailRequest = null;
+    selected = null;
+    drawReader();
+  }
+
+  function selectFolder(value) {
+    clearTimeout(searchTimer);
+    folder = value;
+    search.value = '';
+    for (const button of folders) {
+      if (button.dataset.folder === value) {
+        button.setAttribute('aria-current', 'page');
+        $('mail-folder').textContent = button.textContent.trim();
+      } else button.removeAttribute('aria-current');
+    }
+    const narrowSidebar = app.classList.contains('mobile-sidebar');
+    app.classList.remove('mobile-sidebar');
+    if (narrowSidebar) $('mail-folder').focus();
+    clearReader();
+    void load();
+  }
+
+  function readerActions(disabled) {
+    for (const button of document.querySelectorAll('.mail-reader-toolbar button:not(.mail-back)')) {
+      button.disabled = disabled;
+    }
+  }
+
+  async function change(action) {
+    if (!selected) return;
+    const message = selected;
+    readerActions(true);
+    try {
+      const updated = await api(messagePath(message.id), {
+        method: 'PATCH', body: {revision: message.revision, action}
+      });
+      if (selected?.id === message.id) {
+        if (['archive', 'unarchive', 'trash', 'restore'].includes(action)
+            || (folder === 'starred' && action === 'unstar')) clearReader();
+        else {
+          selected = updated;
+          drawReader();
+        }
+      }
+      await load();
+      if (action === 'trash') status('Mensaje enviado a la papelera.');
+      if (action === 'restore') status('Mensaje restaurado.');
+    } catch (error) {
+      status(errorText(error));
+    } finally {
+      readerActions(false);
+    }
+  }
+
+  function confirmAction(title, text, action) {
+    const dialog = $('mail-confirm');
+    $('mail-confirm-title').textContent = title;
+    $('mail-confirm-text').textContent = text;
+    $('mail-confirm-accept').textContent = action;
+    dialog.returnValue = 'cancel';
+    return new Promise(resolve => {
+      dialog.addEventListener('close', () => resolve(dialog.returnValue === 'accept'), {once:true});
+      dialog.showModal();
+    });
+  }
+
+  async function remove() {
+    if (!selected?.trashed) return;
+    const message = selected;
+    const accepted = await confirmAction('¿Eliminar definitivamente?', 'Este mensaje se borrará de la papelera y no se podrá recuperar.', 'Eliminar');
+    if (!accepted || selected?.id !== message.id) return;
+    readerActions(true);
+    try {
+      await api(messagePath(message.id) + '?revision=' + encodeURIComponent(message.revision), {method:'DELETE'});
+      if (selected?.id === message.id) clearReader();
+      await load();
+      status('Mensaje eliminado.');
+    } catch (error) {
+      status(errorText(error));
+    } finally {
+      readerActions(false);
+    }
+  }
+
+  function draftInput() {
+    const fields = form.elements;
+    return {
+      to_addresses: splitAddresses(fields.to.value),
+      cc_addresses: splitAddresses(fields.cc.value),
+      bcc_addresses: splitAddresses(fields.bcc.value),
+      subject: fields.subject.value.trim(),
+      content: fields.content.value
+    };
+  }
+
+  function clearSuggestions() {
+    clearTimeout(contactsTimer);
+    suggestionRequest?.abort();
+    suggestionRequest = null;
+    $('mail-suggestions').hidden = true;
+    $('mail-contact-results').replaceChildren();
+  }
+
+  function compose(message = null, to = '') {
+    if (!ready || editor.open) return;
+    editing = message;
+    form.reset();
+    clearSuggestions();
+    $('mail-editor-title').textContent = message ? 'Editar borrador' : 'Nuevo borrador';
+    $('mail-editor-error').textContent = '';
+    form.elements.to.value = message?.to_addresses.join(', ') || to;
+    form.elements.cc.value = message?.cc_addresses.join(', ') || '';
+    form.elements.bcc.value = message?.bcc_addresses.join(', ') || '';
+    form.elements.subject.value = message?.subject || '';
+    form.elements.content.value = message?.content || '';
+    $('mail-copies').open = Boolean(form.elements.cc.value || form.elements.bcc.value);
+    savedForm = JSON.stringify(draftInput());
+    editor.showModal();
+    (to ? form.elements.subject : form.elements.to).focus();
+  }
+
+  function closeCompose() {
+    if (editingInProgress) return;
+    if (JSON.stringify(draftInput()) !== savedForm
+        && !window.confirm('¿Cerrar el borrador y descartar los cambios sin guardar?')) return;
+    editor.close();
+  }
+
+  async function save(event) {
+    event.preventDefault();
+    if (editingInProgress) return;
+    const input = draftInput();
+    const addressCount = input.to_addresses.length + input.cc_addresses.length + input.bcc_addresses.length;
+    if (!addressCount && !input.subject && !input.content.trim()) {
+      $('mail-editor-error').textContent = 'Añade un destinatario, un asunto o el texto del mensaje.';
+      return;
+    }
+    editingInProgress = true;
+    clearSuggestions();
+    $('mail-fields').disabled = true;
+    $('mail-cancel').disabled = true;
+    $('mail-save').disabled = true;
+    $('mail-save').textContent = 'Guardando…';
+    $('mail-editor-error').textContent = '';
+    try {
+      const draft = await api(editing ? messagePath(editing.id) : '/mail/messages', {
+        method: editing ? 'PUT' : 'POST',
+        body: editing ? {...input, revision: editing.revision} : input
+      });
+      editor.close();
+      selectFolder(draft.archived ? 'archive' : 'drafts');
+      selected = draft;
+      drawReader();
+      status('Borrador guardado.');
+    } catch (error) {
+      $('mail-editor-error').textContent = errorText(error);
+    } finally {
+      $('mail-fields').disabled = false;
+      $('mail-cancel').disabled = false;
+      $('mail-save').disabled = false;
+      $('mail-save').textContent = 'Guardar borrador';
+      editingInProgress = false;
+    }
+  }
+
+  async function suggest() {
+    if (!contactSearch || !editor.open) return;
+    const field = form.elements.to;
+    const query = field.value.split(/[,;]/).at(-1).trim();
+    if (query.length < 2 || query.length > 200) return;
+    const request = new AbortController();
+    suggestionRequest = request;
+    try {
+      const result = await api('/contacts?' + new URLSearchParams({q:query, limit:'6'}), {signal:request.signal});
+      if (suggestionRequest !== request || !editor.open) return;
+      const existing = splitAddresses(field.value).slice(0,-1);
+      const known = new Set(existing.map(address => address.toLowerCase()));
+      const items = result.items.filter(contact => contact.email && !known.has(contact.email.toLowerCase()));
+      const results = $('mail-contact-results');
+      results.replaceChildren();
+      for (const contact of items) {
+        const li = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = contact.display_name || contact.email;
+        const address = document.createElement('small');
+        address.textContent = contact.email;
+        button.append(address);
+        button.addEventListener('click', () => {
+          field.value = [...existing, contact.email].join(', ') + ', ';
+          clearSuggestions();
+          field.focus();
+        });
+        li.append(button);
+        results.append(li);
+      }
+      $('mail-suggestions').hidden = !items.length;
+    } catch (error) {
+      if (request.signal.aborted) return;
+      if ([403, 404, 503].includes(error.status)) contactSearch = false;
+      $('mail-suggestions').hidden = true;
+    }
+  }
+
+  for (const button of folders) button.addEventListener('click', () => selectFolder(button.dataset.folder));
+  $('mail-compose').addEventListener('click', () => compose());
+  $('mail-more').addEventListener('click', () => void load(true));
+  $('mail-back').addEventListener('click', () => {
+    const id = selected?.id;
+    clearReader();
+    const row = [...list.querySelectorAll('.mail-row')].find(button => button.dataset.id === id);
+    (row || search).focus();
+  });
+  $('mail-edit').addEventListener('click', () => compose(selected));
+  $('mail-star').addEventListener('click', () => void change(selected?.starred ? 'unstar' : 'star'));
+  $('mail-read').addEventListener('click', () => void change(selected?.unread ? 'read' : 'unread'));
+  $('mail-archive').addEventListener('click', () => void change(selected?.archived ? 'unarchive' : 'archive'));
+  $('mail-trash').addEventListener('click', () => void change(selected?.trashed ? 'restore' : 'trash'));
+  $('mail-delete').addEventListener('click', () => void remove());
+  $('mail-cancel').addEventListener('click', closeCompose);
+  editor.addEventListener('cancel', event => { event.preventDefault(); closeCompose(); });
+  editor.addEventListener('close', clearSuggestions);
+  form.addEventListener('submit', save);
+  form.elements.to.addEventListener('input', () => {
+    clearSuggestions();
+    contactsTimer = setTimeout(() => void suggest(), 220);
+  });
+  search.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      clearReader();
+      void load();
+    }, 220);
+  });
+
+  $('mail-account').addEventListener('click', () => {
+    $('mail-account-message').textContent = transport === 'not_configured'
+      ? 'El envío y la recepción estarán disponibles cuando se conecte una cuenta de correo. Los borradores ya se guardan en tu espacio privado de Santolv.'
+      : 'No se pudo consultar el estado de la cuenta de correo.';
+    $('mail-account-dialog').showModal();
+  });
+
+  async function boot() {
+    await start();
+    ready = true;
+    $('mail-compose').disabled = false;
+    search.disabled = false;
+    const to = new URLSearchParams(location.search).get('to');
+    if (to && to.length <= 320 && !/[\s,;]/u.test(to) && to.includes('@')) {
+      compose(null, to);
+      history.replaceState(history.state, '', location.pathname);
+    }
+    await Promise.all([load(), api('/mail/status').then(result => {
+      transport = result.transport;
+      $('mail-transport').textContent = transport === 'not_configured' ? 'Sin cuenta conectada' : 'Estado no disponible';
+      if (!records.length && folder === 'inbox' && $('mail-list').getAttribute('aria-busy') === 'false') {
+        if (transport === 'not_configured' && $('mail-empty-title').textContent === 'Entrada vacía') renderList();
+      }
+    }).catch(() => { $('mail-transport').textContent = 'Estado no disponible'; })]);
+  }
+
+  void boot().catch(error => emptyState('No se pudo abrir Correo', errorText(error)));
+})();
+</script>
+</body>
+</html>

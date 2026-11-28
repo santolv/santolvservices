@@ -49,7 +49,20 @@ Alcance: los cuatro editores ArtCraft alojados en la suite (fase 1) y el motor c
   por usuario, colas acotadas con contrapresión y tiempo máximo de inactividad.
 - Duplicados y desorden: identificadores únicos de operación y reconocimiento tras persistir.
 
+## Comprobaciones realizadas en producción (28/11/2026)
+
+- Apertura desde Drive (doble clic) de un PDF real en PdfCraft; creación, guardado y nuevo
+  guardado de un `.docx` en WordCraft (revisiones 1 → 2 → 3) y reapertura con el contenido íntegro.
+- Subida sobre el nodo con una revisión antigua: `412 revision_changed`, sin sobrescribir.
+- `/apps/` sin sesión: 401 o 404. Con cabecera Host ajena: 403.
+- `/apps/` con sesión: solo se sirve el paquete legítimo; `..%2F`, `%2e%2e`, `..%5C`, editor
+  inexistente, extensiones no permitidas, archivos con punto inicial, más de 4 niveles y nombres de
+  la instalación (`server.json`, ejecutable) responden 404.
+
 ## Riesgos residuales conocidos
+
+- WordCraft ofrece descargar fuentes que faltan (por ejemplo Aptos) desde internet. La CSP bloquea
+  esas conexiones externas; hay que proporcionar fuentes libres locales.
 
 - Las releases de ArtCraft son alfa y su código (cientos de miles de líneas) no se ha auditado
   manualmente todavía; un fallo en sus lectores de formatos podría bloquear o hacer fallar la

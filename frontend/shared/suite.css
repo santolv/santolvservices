@@ -62,12 +62,6 @@ body{font-family:var(--ui-font)}
 /* ---------- 3. Sidebars: one source list for every service ---------- */
 .sidebar-top,.contact-sidebar-head{height:48px;display:flex;align-items:center;gap:6px;margin:0 0 6px;padding-left:2px;flex:none}
 .sidebar-top :is(h1,h2),.contact-sidebar-head strong{margin:0;font:600 15px/1.2 var(--ui-font);letter-spacing:-.01em;color:var(--ui-text)}
-.app button.shell-sidebar-toggle{width:30px;height:30px;min-width:30px;min-height:30px;border-radius:7px;color:var(--ui-blue)}
-.app .shell-sidebar-toggle svg{width:20px;height:20px}
-/* One element: the icon is centred in the button and hover, press and focus share its rounded shape */
-.app button.shell-sidebar-toggle,.calendar-page .cal-controls button.shell-sidebar-toggle{padding:0;border:0;border-radius:7px;background:transparent;filter:none;transform:none}
-.app button.shell-sidebar-toggle:hover,.calendar-page .cal-controls button.shell-sidebar-toggle:hover{background:var(--ui-control);filter:none}
-.app button.shell-sidebar-toggle:focus-visible{outline:2px solid var(--ui-blue);outline-offset:0}
 .app .side :is(.nav,.album-link,.space-link)[aria-current="page"],.app .side :is(.nav,.album-link,.space-link).active{background:var(--ui-control)}
 .app .side :is(.nav,.album-link,.space-link):hover:not([aria-current="page"]):not(.active){background:var(--ui-hover)}
 .app .side .count{color:var(--ui-muted);font-variant-numeric:tabular-nums}
@@ -98,6 +92,18 @@ body{font-family:var(--ui-font)}
   .calendar-page.sidebar-hidden{grid-template-columns:0 minmax(0,1fr)}
 }
 .contacts.sidebar-hidden{grid-template-columns:minmax(220px,330px) minmax(0,1fr)}
+
+/* Sidebar toggle (shared/sidebar-button.html): one component for the whole suite.
+   The slot keeps the button's place in each module's layout; the button itself is
+   pinned to the same point under the top bar, so opening or closing the sidebar never
+   moves it and every module shows it identically. */
+:root{--sidebar-toggle-size:30px;--sidebar-toggle-x:12px;--sidebar-toggle-y:9px;--sidebar-toggle-bg:#e5e5ea;--sidebar-toggle-bg-hover:#d8d8de;--sidebar-toggle-icon:#1d1d1f}
+:root[data-theme=dark]{--sidebar-toggle-bg:#3a3a3c;--sidebar-toggle-bg-hover:#48484a;--sidebar-toggle-icon:#fff}
+.shell-sidebar-slot{display:block;flex:none;width:var(--sidebar-toggle-size);height:var(--sidebar-toggle-size)}
+.app .shell-sidebar-slot button.shell-sidebar-toggle,.calendar-page .cal-controls .shell-sidebar-slot button.shell-sidebar-toggle{position:fixed;z-index:20;left:var(--sidebar-toggle-x);top:calc(var(--shell-height) + var(--sidebar-toggle-y));display:grid;place-items:center;box-sizing:border-box;width:var(--sidebar-toggle-size);height:var(--sidebar-toggle-size);min-width:0;min-height:0;margin:0;padding:0;border:0;border-radius:8px;background:var(--sidebar-toggle-bg);color:var(--sidebar-toggle-icon);filter:none;transform:none;transition:background-color 120ms ease}
+.app .shell-sidebar-slot button.shell-sidebar-toggle:hover,.calendar-page .cal-controls .shell-sidebar-slot button.shell-sidebar-toggle:hover{background:var(--sidebar-toggle-bg-hover);filter:none}
+.app .shell-sidebar-slot button.shell-sidebar-toggle:focus-visible{outline:2px solid var(--ui-blue);outline-offset:2px}
+.app .shell-sidebar-slot .shell-sidebar-toggle svg{display:block;width:18px;height:18px;margin:0;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 
 /* ---------- 4. Titles: one scale ---------- */
 #page-title,#window-title{font-size:var(--ui-title);font-weight:700;letter-spacing:-.03em}

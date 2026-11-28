@@ -416,10 +416,11 @@
     const items = enabledOptions();
     const current = items.indexOf(open.menu.querySelector('.active'));
     const step = {ArrowDown: 1, ArrowUp: -1}[event.key];
-    if (step) { event.preventDefault(); activate(items[Math.min(items.length - 1, Math.max(0, current + step))]); }
-    else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); activate(items[event.key === 'Home' ? 0 : items.length - 1]); }
-    else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); const item = items[current]; if (item) choose(Number(item.dataset.index)); }
-    else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
+    const handled = () => { event.preventDefault(); event.stopPropagation(); };
+    if (step) { handled(); activate(items[Math.min(items.length - 1, Math.max(0, current + step))]); }
+    else if (event.key === 'Home' || event.key === 'End') { handled(); activate(items[event.key === 'Home' ? 0 : items.length - 1]); }
+    else if (event.key === 'Enter' || event.key === ' ') { handled(); const item = items[current]; if (item) choose(Number(item.dataset.index)); }
+    else if (event.key === 'Escape') { handled(); close(); }
     else if (event.key === 'Tab') close(false);
     else if (event.key.length === 1) {
       const letter = event.key.toLocaleLowerCase('es');

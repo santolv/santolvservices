@@ -115,6 +115,17 @@ impl Frontend {
             ),
             1,
         )
+        // Suite-wide design layer: loaded after every service stylesheet so the
+        // shared tokens and controls stay coherent across the whole suite.
+        .replacen(
+            "</head>",
+            concat!(
+                "<style>",
+                include_str!("../../../frontend/shared/suite.css"),
+                "</style></head>"
+            ),
+            1,
+        )
         .into()
     }
 }

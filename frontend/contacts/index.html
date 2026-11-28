@@ -700,6 +700,27 @@
     }
   });
 
+  // Right click on a contact selects it and offers the card's own actions.
+  window.SantolvShell?.bindContextMenu?.(list, event => {
+    const button = event.target.closest('.contact-result');
+    const contact = button && contacts.find(item => item.id === button.dataset.id);
+    if (!contact || writing) return;
+    if (selected?.id !== contact.id) openCard(contact);
+    const run = target => () => id(target).click();
+    const link = target => () => { const href = id(target).getAttribute('href'); if (href) location.assign(href); };
+    return [
+      {label: 'Escribir correo', icon: 'mail', hidden: !contact.email || id('contact-email-action').hidden, action: link('contact-email-action')},
+      {label: 'Llamar', icon: 'phone', hidden: !contact.phone || id('contact-call-action').hidden, action: link('contact-call-action')},
+      {label: 'Copiar correo', icon: 'copy', hidden: id('copy-email').hidden, action: run('copy-email')},
+      '-',
+      {label: contact.favorite ? 'Quitar de favoritos' : 'Añadir a favoritos', icon: 'star', action: run('favorite-contact')},
+      {label: 'Editar contacto', icon: 'edit', action: run('edit-contact')},
+      {label: 'Exportar vCard', icon: 'download', action: run('export-contact')},
+      '-',
+      {label: 'Eliminar contacto', icon: 'trash', danger: true, action: run('remove-contact')}
+    ];
+  }, {label: 'Acciones del contacto'});
+
   async function initialize() {
     setListState('Cargando contactos…');
     try {

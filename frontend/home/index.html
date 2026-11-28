@@ -55,5 +55,7 @@ async function loadRecent(request){
 async function endSession(){await api('/auth/logout','POST');window.SantolvShell?.sessionEnded();signedOut()}
 function filterHome(){const query=$('home-search').value.trim().toLocaleLowerCase('es');for(const item of document.querySelectorAll('.service:not([inert]),.recent-row'))item.hidden=!item.textContent.toLocaleLowerCase('es').includes(query)}
 $('home-search').addEventListener('input',filterHome);
+window.SantolvShell?.bindContextMenu?.(document.getElementById('main'),event=>{const link=event.target.closest('a.service:not([inert]),.recent-row a,a.recent-row');if(!link||!link.href)return;
+ return [{label:'Abrir',icon:'open',action:()=>link.click()},{label:'Abrir en una pestaña nueva',icon:'share',action:()=>window.open(link.href,'_blank','noopener')},'-',{label:'Copiar enlace',icon:'copy',hidden:!navigator.clipboard,action:()=>navigator.clipboard.writeText(link.href)}]},{label:'Acciones'});
 window.addEventListener('pageshow',()=>enter().catch(error=>{$('status').textContent='No se pudo cargar Inicio. '+error.message}));
 </script></body></html>

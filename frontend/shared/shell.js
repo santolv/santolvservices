@@ -263,3 +263,184 @@
   }
   window.SantolvShell = Object.assign(window.SantolvShell || {}, { contextMenu: open, closeContextMenu: close, bindContextMenu: bind });
 })();
+
+// Shared Selector. Every native <select> in the suite is kept (value, form, validation and
+// listeners keep working) but shown through one custom trigger and listbox. The menu lives
+// in the top layer (popover), so no overflow:hidden container can clip it, and it opens over
+// the trigger with the trigger's width, upwards when there is no room below.
+(() => {
+  'use strict';
+  if (!('HTMLSelectElement' in window)) return;
+  const proto = HTMLSelectElement.prototype;
+  const valueProperty = Object.getOwnPropertyDescriptor(proto, 'value');
+  const indexProperty = Object.getOwnPropertyDescriptor(proto, 'selectedIndex');
+  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let open = null, uid = 0;
+  const chevron = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>';
+
+  function labelOf(select) {
+    return select.getAttribute('aria-label') || select.labels?.[0]?.textContent.trim() || select.name || 'Seleccionar';
+  }
+  function enhance(select) {
+    if (select.dataset.selector || select.multiple || select.size > 1 || select.dataset.native !== undefined) return;
+    select.dataset.selector = 'true';
+    const parentWidth = select.parentElement?.clientWidth || 0;
+    const wide = !select.offsetWidth || select.offsetWidth >= parentWidth - 4;
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'santolv-select' + (wide ? ' santolv-select-wide' : '');
+    trigger.id = 'santolv-select-' + (++uid);
+    trigger.setAttribute('role', 'combobox');
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    if (!wide && select.offsetWidth) trigger.style.minWidth = select.offsetWidth + 'px';
+    trigger.innerHTML = '<span class="santolv-select-value"></span>' + chevron;
+    select.after(trigger);
+    select.classList.add('santolv-select-native');
+    select.tabIndex = -1;
+    select.setAttribute('aria-hidden', 'true');
+    const sync = () => {
+      const option = select.options[select.selectedIndex];
+      const value = trigger.querySelector('.santolv-select-value');
+      value.textContent = option ? option.textContent : '';
+      value.classList.toggle('placeholder', !option || option.value === '' && !option.textContent.trim());
+      trigger.setAttribute('aria-label', labelOf(select) + ': ' + (option ? option.textContent : ''));
+      trigger.hidden = select.hidden;
+      trigger.disabled = select.disabled;
+      if (open?.select === select) render();
+    };
+    Object.defineProperty(select, 'value', {configurable: true, get() { return valueProperty.get.call(this); }, set(value) { valueProperty.set.call(this, value); sync(); }});
+    Object.defineProperty(select, 'selectedIndex', {configurable: true, get() { return indexProperty.get.call(this); }, set(value) { indexProperty.set.call(this, value); sync(); }});
+    select._santolvSync = sync;
+    select.addEventListener('change', sync);
+    select.addEventListener('input', sync);
+    select.addEventListener('focus', () => trigger.focus());
+    select.form?.addEventListener('reset', () => setTimeout(sync));
+    new MutationObserver(sync).observe(select, {childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'disabled', 'selected', 'label']});
+    trigger.addEventListener('click', () => (open?.select === select ? close() : show(select, trigger)));
+    trigger.addEventListener('keydown', event => {
+      if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key) && open?.select !== select) {
+        event.preventDefault();
+        show(select, trigger);
+      }
+    });
+    sync();
+  }
+
+  function enabledOptions() { return [...open.menu.querySelectorAll('[role=option]:not([aria-disabled=true])')]; }
+  function render() {
+    const {select, menu} = open;
+    menu.replaceChildren(...[...select.options].map((option, index) => {
+      const item = document.createElement('div');
+      item.className = 'santolv-select-option';
+      item.id = open.trigger.id + '-option-' + index;
+      item.setAttribute('role', 'option');
+      item.dataset.index = index;
+      item.textContent = option.textContent;
+      item.setAttribute('aria-selected', String(index === select.selectedIndex));
+      if (option.disabled || option.hidden) item.setAttribute('aria-disabled', 'true');
+      if (option.hidden) item.hidden = true;
+      return item;
+    }));
+  }
+  function activate(item) {
+    for (const other of open.menu.querySelectorAll('.active')) other.classList.remove('active');
+    if (!item) return;
+    item.classList.add('active');
+    open.trigger.setAttribute('aria-activedescendant', item.id);
+    item.scrollIntoView({block: 'nearest'});
+  }
+  function place() {
+    const {trigger, menu} = open;
+    const rect = trigger.getBoundingClientRect();
+    menu.style.width = rect.width + 'px';
+    menu.style.left = rect.left + 'px';
+    menu.style.maxHeight = 'none';
+    const below = innerHeight - rect.top - 8, above = rect.bottom - 8;
+    const natural = menu.offsetHeight;
+    const up = natural > below && above > below;
+    menu.style.maxHeight = Math.min(natural, up ? above : below, 320) + 'px';
+    menu.style.top = (up ? rect.bottom - menu.offsetHeight : rect.top) + 'px';
+    menu.dataset.direction = up ? 'up' : 'down';
+  }
+  function show(select, trigger) {
+    close(false);
+    if (trigger.disabled) return;
+    const menu = document.createElement('div');
+    menu.className = 'santolv-select-menu';
+    menu.id = trigger.id + '-listbox';
+    menu.setAttribute('role', 'listbox');
+    menu.setAttribute('aria-label', labelOf(select));
+    menu.popover = 'manual';
+    (select.closest('dialog[open]') || document.body).append(menu);
+    open = {select, trigger, menu};
+    render();
+    menu.showPopover();
+    place();
+    trigger.setAttribute('aria-expanded', 'true');
+    trigger.setAttribute('aria-controls', menu.id);
+    activate(menu.querySelector('[aria-selected=true]:not([aria-disabled=true])') || enabledOptions()[0]);
+    menu.addEventListener('pointermove', event => {
+      const item = event.target.closest('[role=option]:not([aria-disabled=true])');
+      if (item && !item.classList.contains('active')) activate(item);
+    });
+    menu.addEventListener('click', event => {
+      const item = event.target.closest('[role=option]:not([aria-disabled=true])');
+      if (item) choose(Number(item.dataset.index));
+    });
+    requestAnimationFrame(() => menu.classList.add('open'));
+  }
+  function choose(index) {
+    const {select, trigger} = open;
+    close();
+    if (index === select.selectedIndex) return;
+    indexProperty.set.call(select, index);
+    select._santolvSync();
+    select.dispatchEvent(new Event('input', {bubbles: true}));
+    select.dispatchEvent(new Event('change', {bubbles: true}));
+    trigger.focus({preventScroll: true});
+  }
+  function close(restore = true) {
+    if (!open) return;
+    const {trigger, menu} = open;
+    open = null;
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.removeAttribute('aria-activedescendant');
+    menu.classList.remove('open');
+    const remove = () => { try { menu.hidePopover(); } catch {} menu.remove(); };
+    if (reduced()) remove(); else setTimeout(remove, 120);
+    if (restore) trigger.focus({preventScroll: true});
+  }
+  document.addEventListener('keydown', event => {
+    if (!open) return;
+    const items = enabledOptions();
+    const current = items.indexOf(open.menu.querySelector('.active'));
+    const step = {ArrowDown: 1, ArrowUp: -1}[event.key];
+    if (step) { event.preventDefault(); activate(items[Math.min(items.length - 1, Math.max(0, current + step))]); }
+    else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); activate(items[event.key === 'Home' ? 0 : items.length - 1]); }
+    else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); const item = items[current]; if (item) choose(Number(item.dataset.index)); }
+    else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
+    else if (event.key === 'Tab') close(false);
+    else if (event.key.length === 1) {
+      const letter = event.key.toLocaleLowerCase('es');
+      const match = items.slice(current + 1).concat(items.slice(0, current + 1)).find(item => item.textContent.trim().toLocaleLowerCase('es').startsWith(letter));
+      if (match) activate(match);
+    }
+  }, true);
+  document.addEventListener('pointerdown', event => {
+    if (open && !open.menu.contains(event.target) && !open.trigger.contains(event.target)) close(false);
+  }, true);
+  addEventListener('resize', () => close(false));
+  document.addEventListener('scroll', event => { if (open && !open.menu.contains(event.target)) close(false); }, true);
+  document.addEventListener('close', () => close(false), true);
+
+  const scan = root => { for (const select of (root.matches?.('select') ? [root] : root.querySelectorAll?.('select') || [])) enhance(select); };
+  function start() {
+    scan(document);
+    new MutationObserver(records => {
+      for (const record of records) for (const node of record.addedNodes) if (node.nodeType === 1) scan(node);
+    }).observe(document.body, {childList: true, subtree: true});
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once: true}); else start();
+  window.SantolvShell = Object.assign(window.SantolvShell || {}, {enhanceSelect: enhance});
+})();

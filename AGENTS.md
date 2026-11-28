@@ -24,8 +24,9 @@ Instrucción permanente del propietario. Prevalece sobre cualquier otra forma de
 - Trabajar desde la carpeta independiente del área en `.worktrees/<area>` y con su rama original `codex/<area>` (por ejemplo `.worktrees/compartido` → `codex/compartido`). No crear ramas nuevas ni reutilizar ramas creadas por agentes para tareas sueltas.
 - Antes de editar, actualizar la rama del área con `git fetch origin` y `git merge --ff-only origin/main` (o `git merge origin/main` si ya tiene commits propios).
 - Aplicar los cambios, ejecutar las comprobaciones, crear el commit y publicarlo con `git push`.
-- Abrir la PR hacia `main`, revisar el diff y esperar a que GitHub Actions termine en verde.
-- Integrar la PR en `main` y actualizar la carpeta principal con `git switch main` y `git pull --ff-only origin main`.
+- Publicar solo con `git` usando el usuario local y el Git Credential Manager; no pedir otros permisos ni tokens.
+- Abrir la PR hacia `main` cuando sea posible, revisar el diff y esperar a que GitHub Actions termine en verde. Si no se puede abrir la PR desde el equipo, esperar igualmente al CI verde de la rama e integrarla con `git merge --no-ff` en `main`.
+- Integrar en `main` y actualizar la carpeta principal con `git pull --ff-only origin main`.
 
 ### Producción
 - Producción es la instalación de `backend/servidor/`: interfaz en `http://localhost:5500` y API en `http://localhost:8443` (`bind` `127.0.0.1:8443`). Es el entorno que usa el propietario para probar la suite.
@@ -38,4 +39,5 @@ Instrucción permanente del propietario. Prevalece sobre cualquier otra forma de
   5. Arrancar `.\servidor\santolvdrive.exe serve` desde `backend/`, en segundo plano y con su salida en `servidor/arranque-<AAAAMMDD-HHMMSS>.out.log` y `.err.log`.
   6. Comprobar `http://127.0.0.1:8443/health/ready`, `http://localhost:5500/`, el inicio de sesión del propietario y los servicios afectados.
 - Conservar siempre la base de datos, los usuarios, los archivos, las credenciales y `server.json`. No reinicializar la base ni borrar datos.
+- Al terminar cada tarea, desplegarla en producción automáticamente, sin esperar a que el propietario lo pida: es donde prueba la suite.
 - Una tarea solo está terminada cuando está integrada en `main`, desplegada en producción, accesible en 5500/8443 y comprobada. Si algo lo impide, decirlo claramente sin dar el despliegue por hecho.

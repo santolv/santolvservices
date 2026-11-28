@@ -64,6 +64,10 @@ body{font-family:var(--ui-font)}
 .sidebar-top :is(h1,h2),.contact-sidebar-head strong{margin:0;font:600 15px/1.2 var(--ui-font);letter-spacing:-.01em;color:var(--ui-text)}
 .app button.shell-sidebar-toggle{width:30px;height:30px;min-width:30px;min-height:30px;border-radius:7px;color:var(--ui-blue)}
 .app .shell-sidebar-toggle svg{width:20px;height:20px}
+/* One element: the icon is centred in the button and hover, press and focus share its rounded shape */
+.app button.shell-sidebar-toggle,.calendar-page .cal-controls button.shell-sidebar-toggle{padding:0;border:0;border-radius:7px;background:transparent;filter:none;transform:none}
+.app button.shell-sidebar-toggle:hover,.calendar-page .cal-controls button.shell-sidebar-toggle:hover{background:var(--ui-control);filter:none}
+.app button.shell-sidebar-toggle:focus-visible{outline:2px solid var(--ui-blue);outline-offset:0}
 .app .side :is(.nav,.album-link,.space-link)[aria-current="page"],.app .side :is(.nav,.album-link,.space-link).active{background:var(--ui-control)}
 .app .side :is(.nav,.album-link,.space-link):hover:not([aria-current="page"]):not(.active){background:var(--ui-hover)}
 .app .side .count{color:var(--ui-muted);font-variant-numeric:tabular-nums}
@@ -125,8 +129,8 @@ body{font-family:var(--ui-font)}
 :is(.records-main #new,.contact-primary,.mail-primary,.calendar-page button.primary,.account-action.primary):active{transform:scale(.98)}
 :is(.contacts,.contact-dialog) .contact-button:not(.contact-primary),.mail-action{height:30px;min-height:30px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:500}
 .contact-tools .contact-icon-button,.mail-reader-toolbar .mail-icon-button{width:30px;padding:0;border-radius:50%}
-.calendar-page .cal-controls button:not(.primary):not(.cal-segment button){height:30px;min-height:30px;padding:0 12px;border:0;border-radius:999px;background:var(--ui-control);color:var(--ui-text);font:500 13px/1 var(--ui-font)}
-.calendar-page .cal-controls button:not(.primary):not(.cal-segment button):hover{filter:none;background:color-mix(in srgb,var(--ui-text) 12%,transparent)}
+.calendar-page .cal-controls button:not(.primary):not(.cal-segment button):not(.shell-sidebar-toggle){height:30px;min-height:30px;padding:0 12px;border:0;border-radius:999px;background:var(--ui-control);color:var(--ui-text);font:500 13px/1 var(--ui-font)}
+.calendar-page .cal-controls button:not(.primary):not(.cal-segment button):not(.shell-sidebar-toggle):hover{filter:none;background:color-mix(in srgb,var(--ui-text) 12%,transparent)}
 .account-action{min-height:36px;padding:0 16px;border-radius:999px;font:600 13px/1 var(--ui-font)}
 
 /* Calendario keeps its red; filled red stays dark enough for white text in both themes */
@@ -260,7 +264,7 @@ dialog[open]::backdrop{animation:santolv-fade 220ms ease}
 /* Controls respond to touch */
 :is(.contact-nav,.mail-nav) button,.app .side :is(.nav,.album-link,.space-link),.contact-result,.mail-row,.records-main .record-open{transition:background-color 140ms ease,color 140ms ease}
 :is(.records-main .record-segment,.cal-segment) button{transition:background-color 180ms var(--ui-ease),box-shadow 180ms var(--ui-ease),color 180ms ease}
-:is(.contact-button,.mail-action,.calendar-page .cal-controls button,.account-action,.records-main #more):active:not(:disabled){transform:scale(.97)}
+:is(.contact-button,.mail-action,.calendar-page .cal-controls button:not(.shell-sidebar-toggle),.account-action,.records-main #more):active:not(:disabled){transform:scale(.97)}
 :is(.contact-button,.mail-action,.calendar-page .cal-controls button,.account-action,.records-main #more){transition:background-color 120ms ease,transform 120ms var(--ui-ease)}
 .records-main .task-toggle{transition:background-color 160ms var(--ui-ease),border-color 160ms var(--ui-ease),transform 160ms var(--ui-ease)}
 .records-main .task-toggle:active{transform:scale(.88)}

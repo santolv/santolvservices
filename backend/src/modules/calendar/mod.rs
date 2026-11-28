@@ -37,6 +37,7 @@ fn routes() -> Router<App> {
                 "/calendars/{id}",
                 put(rename_calendar).delete(delete_calendar),
             )
+            .route("/calendars/{id}/preferences", put(set_preferences))
             .route("/calendars/{id}/members", get(members).put(grant))
             .route(
                 "/calendars/{id}/members/{user}",
@@ -96,8 +97,11 @@ async fn owner_access(db: &PgPool, id: Uuid, user: Uuid) -> Result<()> {
 async fn calendars(State(app): State<App>, user: User) -> Result<Json<Value>> {
     let items: Vec<Value> = sqlx::query_scalar(
         "SELECT jsonb_build_object('id',c.id,'name',c.name,'is_default',c.is_default AND c.owner_id=$1,
-                    'role',CASE WHEN c.owner_id=$1 THEN 'owner' ELSE m.role END)
+                    'role',CASE WHEN c.owner_id=$1 THEN 'owner' ELSE m.role END,
+                    'owner',u.username,'color',p.color,'visible',COALESCE(p.visible,true))
          FROM calendars c LEFT JOIN members m ON m.calendar_id=c.id AND m.user_id=$1
+         JOIN public.users u ON u.id=c.owner_id
+         LEFT JOIN preferences p ON p.calendar_id=c.id AND p.user_id=$1
          WHERE c.owner_id=$1 OR m.user_id IS NOT NULL
          ORDER BY (c.is_default AND c.owner_id=$1) DESC,c.name,c.id"
     ).bind(user.id).fetch_all(&app.db).await?;
@@ -186,6 +190,49 @@ async fn members(State(app): State<App>, user: User, Path(id): Path<Uuid>) -> Re
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PreferenceInput {
+    color: Option<String>,
+    visible: bool,
+}
+
+/// Stores the caller's own colour and visibility for a calendar they own or were given.
+async fn set_preferences(
+    State(app): State<App>,
+    user: User,
+    Path(id): Path<Uuid>,
+    Json(input): Json<PreferenceInput>,
+) -> Result<StatusCode> {
+    let color = match input.color.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(value)
+            if value.len() == 7
+                && value.starts_with('#')
+                && value[1..].chars().all(|c| c.is_ascii_hexdigit()) =>
+        {
+            Some(value.to_ascii_lowercase())
+        }
+        Some(_) => return Err(Error::bad("invalid_calendar_color")),
+    };
+    let result = sqlx::query(
+        "INSERT INTO preferences (calendar_id,user_id,color,visible)
+         SELECT c.id,$2,$3,$4 FROM calendars c
+         WHERE c.id=$1 AND (c.owner_id=$2 OR EXISTS(SELECT 1 FROM members m WHERE m.calendar_id=c.id AND m.user_id=$2))
+         ON CONFLICT (calendar_id,user_id) DO UPDATE SET color=excluded.color,visible=excluded.visible",
+    )
+    .bind(id)
+    .bind(user.id)
+    .bind(color)
+    .bind(input.visible)
+    .execute(&app.db)
+    .await?;
+    if result.rows_affected() == 0 {
+        return Err(Error::denied());
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
 struct MemberInput {
     username: String,
     role: String,
@@ -234,6 +281,11 @@ async fn revoke(
         .bind(id).bind(target).execute(&mut *tx).await?;
     sqlx::query("DELETE FROM dismissals d USING events e WHERE e.calendar_id=$1 AND d.event_id=e.id AND d.user_id=$2")
         .bind(id).bind(target).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM preferences WHERE calendar_id=$1 AND user_id=$2")
+        .bind(id)
+        .bind(target)
+        .execute(&mut *tx)
+        .await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }

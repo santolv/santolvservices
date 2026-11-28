@@ -141,6 +141,54 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
 .calendar-page :is(#previous,#next,#today){display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:28px;height:28px;padding:0 8px;border:0;border-radius:7px;background:var(--ui-control);color:var(--ui-text);font:500 13px/1 var(--ui-font)}
 .calendar-page :is(#previous,#next) svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .cal-segment{background:var(--ui-control);padding:2px;gap:2px;border-radius:8px}.cal-segment button{height:26px;min-height:26px;border-radius:6px}.cal-segment button[aria-pressed=true]{background:var(--ui-selected);color:var(--ui-text);box-shadow:0 .5px 1px #0003}
+
+/* Barra lateral: minicalendario y listas de calendarios, sin desplazamiento horizontal. */
+.calendar-page .cal-sidebar{overflow-x:hidden;overflow-y:auto;gap:14px}
+.cal-sidebar .cal-mini{display:grid;gap:6px;padding:0 2px}
+.cal-mini-head{display:flex;align-items:center;gap:2px}
+.cal-mini-head strong{flex:1;font-size:13px;font-weight:600;text-transform:capitalize}
+.calendar-page .cal-mini-head button{display:grid;place-items:center;width:24px;height:24px;min-height:24px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--cal-muted)}
+.calendar-page .cal-mini-head button:hover{background:var(--ui-hover);filter:none}
+.cal-mini-head svg,.cal-group summary button svg,.cal-item-more svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.cal-mini-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));row-gap:1px;text-align:center}
+.cal-mini-weekday{font-size:10px;font-weight:600;color:var(--cal-muted);line-height:20px}
+.calendar-page .cal-mini-day{width:100%;height:26px;min-height:26px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--cal-text);font-size:12px;font-variant-numeric:tabular-nums}
+.calendar-page .cal-mini-day.outside{color:var(--cal-muted);opacity:.6}
+.calendar-page .cal-mini-day.in-range{background:var(--ui-hover)}
+.calendar-page .cal-mini-day:hover{background:var(--ui-control);filter:none}
+.calendar-page .cal-mini-day[aria-current="date"]{background:var(--ui-red-fill,var(--cal-accent));color:#fff;font-weight:600}
+.cal-group{min-width:0}
+.cal-group summary{display:flex;align-items:center;gap:6px;height:28px;padding:0 2px 0 4px;list-style:none;cursor:pointer;color:var(--cal-muted);font-size:11px;font-weight:600;letter-spacing:.02em}
+.cal-group summary::-webkit-details-marker{display:none}
+.cal-group summary>span{flex:1}
+.cal-group summary::before{content:'';width:6px;height:6px;margin:0 4px 0 2px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform 160ms ease}
+.cal-group[open] summary::before{transform:rotate(45deg)}
+.calendar-page .cal-group summary button{display:grid;place-items:center;width:24px;height:24px;min-height:24px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--ui-blue)}
+.calendar-page .cal-group summary button:hover{background:var(--ui-hover);filter:none}
+.cal-list{list-style:none;margin:2px 0 0;padding:0;display:grid;gap:1px}
+.cal-item{display:flex;align-items:center;gap:2px;min-width:0;border-radius:7px}
+.cal-item:hover{background:var(--ui-hover)}
+.cal-sidebar .cal-item label{flex:1;min-width:0;display:grid;grid-template-columns:18px minmax(0,1fr);align-items:center;column-gap:8px;row-gap:0;padding:5px 6px;color:var(--cal-text);font-size:13px;font-weight:400;letter-spacing:0;cursor:pointer}
+.cal-item input[type=checkbox]{appearance:none;-webkit-appearance:none;width:16px;height:16px;min-height:16px;margin:0;padding:0;border:1.5px solid var(--cal-color);border-radius:4px;background:transparent;display:grid;place-items:center;cursor:pointer}
+.cal-item input[type=checkbox]:checked{background:var(--cal-color)}
+.cal-item input[type=checkbox]:checked::after{content:'';width:4px;height:8px;margin-top:-2px;border-right:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(45deg)}
+.cal-item input[type=checkbox]:focus-visible{outline:2px solid var(--ui-blue);outline-offset:2px}
+.cal-item-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-item small{grid-column:2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--cal-muted);font-size:11px}
+.calendar-page .cal-item-more{display:grid;place-items:center;flex:none;width:26px;height:26px;min-height:26px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--cal-muted);opacity:0}
+.cal-item:is(:hover,:focus-within) .cal-item-more{opacity:1}
+.calendar-page .cal-item-more:hover{background:var(--ui-control);filter:none}
+@media(hover:none){.calendar-page .cal-item-more{opacity:1}}
+/* Editor de calendario: muestras de color */
+.cal-colors{display:grid;gap:8px}
+.cal-colors legend{font-size:14px;margin-bottom:6px}
+.cal-swatches{display:flex;flex-wrap:wrap;gap:10px}
+.cal-swatch{position:relative;display:block;width:26px;height:26px;border-radius:50%;background:var(--swatch);cursor:pointer}
+.cal-swatch input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.cal-swatch:has(input:checked){box-shadow:0 0 0 2px var(--ui-raised),0 0 0 4px var(--swatch)}
+.cal-swatch:has(input:focus-visible){outline:2px solid var(--ui-blue);outline-offset:4px}
+/* Barra de controles a la altura de la cabecera del lateral: botón del lateral, flechas, «Hoy» y mes comparten eje. */
+.calendar-page .cal-controls{box-sizing:border-box;min-height:48px;padding:9px 16px 9px 12px}
 </style>
 </head>
 <body class="calendar-body">
@@ -148,8 +196,18 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
 <main class="calendar-page app">
   <aside class="cal-sidebar" id="sidebar" aria-label="Calendarios">
     <div class="sidebar-top"><!-- SANTOLV_SIDEBAR_HIDE --><h1>Calendario</h1></div>
-    <label>Calendarios <select id="calendar-filter" aria-label="Filtrar por calendario"><option value="">Todos los calendarios</option></select></label>
-    <button type="button" id="manage">Gestionar calendarios</button>
+    <section class="cal-mini" aria-label="Minicalendario">
+      <div class="cal-mini-head"><strong id="mini-title"></strong><button type="button" id="mini-previous" aria-label="Mes anterior"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg></button><button type="button" id="mini-next" aria-label="Mes siguiente"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button></div>
+      <div class="cal-mini-grid" id="mini-grid"></div>
+    </section>
+    <details class="cal-group" id="own-group" open>
+      <summary><span>Mis calendarios</span><button type="button" id="add-calendar" aria-label="Nuevo calendario" title="Nuevo calendario"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button></summary>
+      <ul class="cal-list" id="own-list" aria-label="Mis calendarios"></ul>
+    </details>
+    <details class="cal-group" id="shared-group" open hidden>
+      <summary><span>Compartidos conmigo</span></summary>
+      <ul class="cal-list" id="shared-list" aria-label="Calendarios compartidos conmigo"></ul>
+    </details>
   </aside>
   <section class="cal-workspace" aria-label="Eventos">
   <div class="cal-row spread cal-controls">
@@ -198,11 +256,12 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
 </dialog>
 <dialog id="manage-dialog" class="calendar-dialog" aria-labelledby="manage-heading">
   <div class="calendar-form">
-    <h2 id="manage-heading">Gestionar calendarios</h2>
-    <label>Mis calendarios <select id="manage-select"></select></label>
+    <h2 id="manage-heading">Nuevo calendario</h2>
+    <input type="hidden" id="manage-select">
     <form id="calendar-name-form" class="calendar-form">
       <label>Nombre <input name="name" maxlength="100" required></label>
-      <div class="calendar-actions"><button type="submit" id="save-calendar">Crear calendario</button><button type="button" id="delete-calendar" hidden>Eliminar calendario</button></div>
+      <fieldset class="cal-colors"><legend>Color</legend><div id="color-choices" class="cal-swatches"></div></fieldset>
+      <div class="calendar-actions"><button type="button" id="delete-calendar" hidden>Eliminar calendario</button><button type="submit" id="save-calendar">Crear calendario</button></div>
     </form>
     <section id="sharing" hidden aria-labelledby="sharing-heading">
       <h3 id="sharing-heading">Acceso compartido</h3>
@@ -250,7 +309,7 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
     if (event.all_day) return event.local_start.slice(0, 10) <= value && event.local_end.slice(0, 10) > value;
     return new Date(event.starts_at) < day(date, 1) && new Date(event.ends_at) > date;
   }
-  function eventColor(id) { const item=calendars.find(c=>c.id===id),known={'personal':'#0a84ff','trabajo':'#ff9f0a','familia':'#30d158','estudio':'#bf5af2'};if(item?.is_default)return '#0a84ff';if(known[item?.name.toLocaleLowerCase()])return known[item.name.toLocaleLowerCase()];const colors=['#0a84ff','#ff9f0a','#30d158','#bf5af2','#ff453a'];return colors[Array.from(id||'').reduce((n,c)=>n+c.charCodeAt(0),0)%colors.length]; }
+  function eventColor(id) { const own=calendars.find(c=>c.id===id)?.color;if(own)return own;const item=calendars.find(c=>c.id===id),known={'personal':'#0a84ff','trabajo':'#ff9f0a','familia':'#30d158','estudio':'#bf5af2'};if(item?.is_default)return '#0a84ff';if(known[item?.name.toLocaleLowerCase()])return known[item.name.toLocaleLowerCase()];const colors=['#0a84ff','#ff9f0a','#30d158','#bf5af2','#ff453a'];return colors[Array.from(id||'').reduce((n,c)=>n+c.charCodeAt(0),0)%colors.length]; }
   const eventRecords = new WeakMap();
   function link(event, agenda = false) {
     const a = document.createElement('a');
@@ -344,9 +403,9 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
       : (start.toLocaleDateString('es',{month:'short'}).replace('.','') + (start.getMonth()===day(end,-1).getMonth()?'':' – '+day(end,-1).toLocaleDateString('es',{month:'short'}).replace('.',''))+' '+day(end,-1).getFullYear());
     $('display').replaceChildren();
     status.textContent = 'Cargando eventos…';
-    const filter = $('calendar-filter').value;
+    if (miniMonth.getFullYear() !== anchor.getFullYear() || miniMonth.getMonth() !== anchor.getMonth()) miniMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    renderMini();
     const query = new URLSearchParams({from: day(start, -2).toISOString(), to: day(end, 2).toISOString(), limit: '200'});
-    if (filter) query.set('calendar_id', filter);
     try {
       const items = [];
       let offset = 0;
@@ -357,7 +416,7 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
         items.push(...page.items);
         offset = page.next_offset;
       } while (offset !== null);
-      const visible = items.filter(event => event.all_day
+      const visible = items.filter(event => shown(event.calendar_id)).filter(event => event.all_day
         ? event.local_start.slice(0, 10) < key(end) && event.local_end.slice(0, 10) > key(start)
         : new Date(event.starts_at) < end && new Date(event.ends_at) > start);
       render(visible, start, end);
@@ -366,11 +425,102 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
   }
   async function loadCalendars() {
     calendars = (await api('/calendars')).items;
-    const select = $('calendar-filter');
-    const selected = select.value;
-    select.replaceChildren(new Option('Todos los calendarios', ''), ...calendars.map(item => new Option(item.name, item.id)));
-    if (calendars.some(item => item.id === selected)) select.value = selected;
+    renderCalendarList();
   }
+  // Sidebar calendars: visibility and colour are the signed-in user's own preferences, stored on the server.
+  const PALETTE = {'#0a84ff': 'Azul', '#30d158': 'Verde', '#ff9f0a': 'Naranja', '#ff453a': 'Rojo', '#bf5af2': 'Morado', '#ff2d55': 'Rosa', '#64d2ff': 'Celeste', '#a2845e': 'Marrón'};
+  let miniMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const shown = id => calendars.find(item => item.id === id)?.visible !== false;
+  function renderCalendarList() {
+    const own = calendars.filter(item => item.role === 'owner'), shared = calendars.filter(item => item.role !== 'owner');
+    fillCalendars($('own-list'), own);
+    fillCalendars($('shared-list'), shared);
+    $('shared-group').hidden = !shared.length;
+  }
+  function fillCalendars(list, items) {
+    list.replaceChildren(...items.map(item => {
+      const row = document.createElement('li');
+      row.className = 'cal-item';
+      row.dataset.id = item.id;
+      row.style.setProperty('--cal-color', eventColor(item.id));
+      const label = document.createElement('label');
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = item.visible !== false;
+      box.addEventListener('change', () => void savePreference(item, {visible: box.checked}));
+      const name = document.createElement('span');
+      name.className = 'cal-item-name';
+      name.textContent = item.name;
+      label.append(box, name);
+      if (item.role !== 'owner' && item.owner) {
+        const owner = document.createElement('small');
+        owner.textContent = item.owner + (item.role === 'editor' ? ' · Edición' : ' · Lectura');
+        label.append(owner);
+      }
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'cal-item-more';
+      more.setAttribute('aria-label', 'Opciones de ' + item.name);
+      more.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8h.01M8 8h.01M12 8h.01"/></svg>';
+      more.addEventListener('click', event => calendarMenu(event, item));
+      row.append(label, more);
+      return row;
+    }));
+  }
+  const putPreference = (item, visible) => api('/calendars/' + item.id + '/preferences', 'PUT', {color: item.color || null, visible})
+    .then(() => { item.visible = visible; });
+  async function savePreference(item, changes) {
+    const next = {color: item.color || null, visible: item.visible !== false, ...changes};
+    try {
+      await api('/calendars/' + item.id + '/preferences', 'PUT', next);
+      Object.assign(item, next);
+    } catch (error) { $('page-status').textContent = describe(error); }
+    renderCalendarList();
+    await load();
+  }
+  async function setVisibility(rule) {
+    try {
+      await Promise.all(calendars.filter(item => (item.visible !== false) !== rule(item)).map(item => putPreference(item, rule(item))));
+    } catch (error) { $('page-status').textContent = describe(error); }
+    renderCalendarList();
+    await load();
+  }
+  function calendarItems(item) {
+    const owner = item.role === 'owner';
+    return [
+      {label: 'Mostrar solo este calendario', icon: 'calendar', action: () => setVisibility(other => other.id === item.id)},
+      {label: 'Mostrar todos los calendarios', icon: 'check', hidden: calendars.every(other => other.visible !== false), action: () => setVisibility(() => true)},
+      '-',
+      {label: owner ? 'Editar calendario…' : 'Cambiar color…', icon: 'edit', action: () => openCalendarEditor(item.id)},
+      {label: 'Compartir y permisos…', icon: 'share', hidden: !owner, action: () => openCalendarEditor(item.id, true)},
+      '-',
+      {label: 'Eliminar calendario', icon: 'trash', danger: true, hidden: !owner || item.is_default, action: () => deleteCalendar(item)}
+    ];
+  }
+  function calendarMenu(event, item) { window.SantolvShell?.contextMenu?.(event, calendarItems(item), {label: 'Opciones de ' + item.name}); }
+  for (const list of [$('own-list'), $('shared-list')]) window.SantolvShell?.bindContextMenu?.(list, event => {
+    const item = calendars.find(calendar => calendar.id === event.target.closest('.cal-item')?.dataset.id);
+    return item && calendarItems(item);
+  }, {label: 'Opciones del calendario'});
+  function renderMini() {
+    $('mini-title').textContent = miniMonth.toLocaleDateString('es-ES', {month: 'long', year: 'numeric'});
+    const grid = $('mini-grid');
+    grid.replaceChildren(...['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(text => Object.assign(document.createElement('span'), {className: 'cal-mini-weekday', textContent: text})));
+    const [from, to] = range(), first = monday(miniMonth), today = key(new Date());
+    for (let i = 0; i < 42; i++) {
+      const date = day(first, i), button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = date.getDate();
+      button.className = 'cal-mini-day' + (date.getMonth() !== miniMonth.getMonth() ? ' outside' : '') + (date >= from && date < to ? ' in-range' : '');
+      if (key(date) === today) button.setAttribute('aria-current', 'date');
+      button.setAttribute('aria-label', date.toLocaleDateString('es-ES', {dateStyle: 'full'}));
+      button.addEventListener('click', () => { anchor = date; void load(); });
+      grid.append(button);
+    }
+  }
+  $('mini-previous').addEventListener('click', () => { miniMonth = new Date(miniMonth.getFullYear(), miniMonth.getMonth() - 1, 1); renderMini(); });
+  $('mini-next').addEventListener('click', () => { miniMonth = new Date(miniMonth.getFullYear(), miniMonth.getMonth() + 1, 1); renderMini(); });
+  $('add-calendar').addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); void openCalendarEditor(null); });
 
   function scheduleInputs() {
     const allDay = eventFields.all_day.checked;
@@ -413,7 +563,8 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
     const options = creating ? calendars.filter(calendar => calendar.role !== 'reader') : [calendars.find(calendar => calendar.id === item.calendar_id) || {id: item.calendar_id, name: item.calendar_name}];
     eventFields.calendar_id.replaceChildren(...options.map(calendar => new Option(calendar.name, calendar.id)));
     if (creating && !options.some(calendar => calendar.is_default)) eventFields.calendar_id.prepend(new Option('Personal', ''));
-    if (creating && options.some(calendar => calendar.id === $('calendar-filter').value)) eventFields.calendar_id.value = $('calendar-filter').value;
+    const onlyVisible = calendars.filter(calendar => calendar.visible !== false);
+    if (creating && onlyVisible.length === 1 && options.some(calendar => calendar.id === onlyVisible[0].id)) eventFields.calendar_id.value = onlyVisible[0].id;
     eventFields.calendar_id.disabled = !creating;
     eventFields.title.value = item?.title || '';
     eventFields.description.value = item?.description || '';
@@ -578,14 +729,11 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
     const version = ++membersNumber;
     const id = $('manage-select').value;
     const current = calendars.find(calendar => calendar.id === id);
-    nameForm.elements.name.value = current?.name || '';
-    $('save-calendar').textContent = current ? 'Guardar nombre' : 'Crear calendario';
-    $('delete-calendar').hidden = !current;
-    $('sharing').hidden = !current;
+    const owner = current?.role === 'owner';
+    $('sharing').hidden = !owner;
     $('members').replaceChildren();
-    const form = $('share-form');
-    form.reset();
-    if (!current) return;
+    $('share-form').reset();
+    if (!owner) return;
     try {
       const {items} = await api('/calendars/' + id + '/members');
       if (version !== membersNumber) return;
@@ -613,36 +761,69 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
     catch (error) { $('manage-status').textContent = describe(error); }
     finally { button.disabled = false; }
   }
-  async function manageOptions(selected = '') {
-    await loadCalendars();
-    $('manage-select').replaceChildren(new Option('Nuevo calendario', ''),
-      ...calendars.filter(calendar => calendar.role === 'owner').map(calendar => new Option(calendar.name, calendar.id)));
-    $('manage-select').value = selected;
-    await manageSelection();
+  function renderColors(current) {
+    $('color-choices').replaceChildren(...Object.entries(PALETTE).map(([value, label]) => {
+      const swatch = document.createElement('label');
+      swatch.className = 'cal-swatch';
+      swatch.style.setProperty('--swatch', value);
+      swatch.title = label;
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'color';
+      input.value = value;
+      input.checked = value === current;
+      input.setAttribute('aria-label', label);
+      swatch.append(input);
+      return swatch;
+    }));
+    if (!nameForm.querySelector('input[name=color]:checked')) nameForm.querySelector('input[name=color]').checked = true;
   }
-  $('manage').addEventListener('click', () => void manageAction($('manage'), async () => {
+  async function openCalendarEditor(id, share = false) {
+    const current = calendars.find(calendar => calendar.id === id) || null;
+    const owner = !current || current.role === 'owner';
+    $('manage-select').value = current ? current.id : '';
+    $('manage-heading').textContent = !current ? 'Nuevo calendario' : owner ? 'Editar calendario' : 'Calendario compartido';
+    nameForm.elements.name.value = current?.name || '';
+    nameForm.elements.name.disabled = !owner;
+    renderColors(current ? eventColor(current.id) : Object.keys(PALETTE)[calendars.length % 8]);
+    $('save-calendar').textContent = current ? 'Guardar' : 'Crear calendario';
+    $('delete-calendar').hidden = !current || !owner || current.is_default;
+    $('manage-status').textContent = '';
+    $('sharing').hidden = true;
     manageDialog.showModal();
-    await manageOptions();
-  }));
+    (owner ? nameForm.elements.name : nameForm.querySelector('input[name=color]:checked')).focus();
+    await manageSelection();
+    if (share && !$('sharing').hidden) $('share-form').elements.username.focus();
+  }
+  async function deleteCalendar(item) {
+    if (!window.confirm('¿Eliminar «' + item.name + '» y todos sus eventos?')) return;
+    try {
+      await api('/calendars/' + item.id, 'DELETE');
+      if (manageDialog.open) manageDialog.close();
+      await loadCalendars();
+      await Promise.all([load(), calendar.refresh()]);
+    } catch (error) { $(manageDialog.open ? 'manage-status' : 'page-status').textContent = describe(error); }
+  }
   $('close-manage').addEventListener('click', () => manageDialog.close());
-  $('manage-select').addEventListener('change', () => void manageSelection());
   nameForm.addEventListener('submit', event => {
     event.preventDefault();
     void manageAction($('save-calendar'), async () => {
       const id = $('manage-select').value;
-      const result = await api('/calendars' + (id ? '/' + id : ''), id ? 'PUT' : 'POST', {name: nameForm.elements.name.value});
-      await manageOptions(id || result.id);
+      const current = calendars.find(item => item.id === id);
+      const color = nameForm.querySelector('input[name=color]:checked')?.value || null;
+      const name = nameForm.elements.name.value.trim();
+      let target = id;
+      if (!current) target = (await api('/calendars', 'POST', {name})).id;
+      else if (current.role === 'owner' && name !== current.name) await api('/calendars/' + id, 'PUT', {name});
+      await api('/calendars/' + target + '/preferences', 'PUT', {color, visible: current ? current.visible !== false : true});
+      manageDialog.close();
+      await loadCalendars();
       await Promise.all([load(), calendar.refresh()]);
     });
   });
   $('delete-calendar').addEventListener('click', () => {
-    const id = $('manage-select').value;
-    if (!id || !window.confirm('¿Eliminar este calendario y todos sus eventos?')) return;
-    void manageAction($('delete-calendar'), async () => {
-      await api('/calendars/' + id, 'DELETE');
-      await manageOptions();
-      await Promise.all([load(), calendar.refresh()]);
-    });
+    const item = calendars.find(calendar => calendar.id === $('manage-select').value);
+    if (item) void deleteCalendar(item);
   });
   $('share-form').addEventListener('submit', event => {
     event.preventDefault();
@@ -679,7 +860,6 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
   $('today').addEventListener('click', () => { anchor = new Date(); void load(); });
   $('previous').addEventListener('click', () => shift(-1));
   $('next').addEventListener('click', () => shift(1));
-  $('calendar-filter').addEventListener('change', () => void load());
   $('new-event').addEventListener('click', () => openCreate(day(anchor)));
   for (const button of document.querySelectorAll('[data-view]')) button.addEventListener('click', () => {
     view = button.dataset.view;

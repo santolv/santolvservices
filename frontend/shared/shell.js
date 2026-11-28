@@ -147,3 +147,119 @@
   });
   media.addEventListener('change', () => { if (preference === 'system') apply(); });
 })();
+
+// Shared macOS-style context menu. Each service decides which items apply and
+// passes its own handlers, so every option runs the service's existing logic.
+(() => {
+  'use strict';
+  const paths = {
+    open: '<path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/>',
+    edit: '<path d="m10.5 3 2.5 2.5L5.5 13H3v-2.5z"/>',
+    info: '<circle cx="8" cy="8" r="6"/><path d="M8 7.3V11M8 5v.1"/>',
+    trash: '<path d="M2.5 4h11M6 4V2.5h4V4M4 4l.6 9.2h6.8L12 4M6.7 6.5v4.5M9.3 6.5v4.5"/>',
+    archive: '<rect x="2" y="2.5" width="12" height="3" rx="1"/><path d="M3 5.5V13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5.5M6.5 8.5h3"/>',
+    restore: '<path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v3h3"/>',
+    star: '<path d="m8 2 1.8 3.8 4.1.5-3 2.9.8 4.1L8 11.3l-3.7 2 .8-4.1-3-2.9 4.1-.5z"/>',
+    heart: '<path d="M8 13.5S2.5 10.3 2.5 6.3A2.8 2.8 0 0 1 8 4.8a2.8 2.8 0 0 1 5.5 1.5c0 4-5.5 7.2-5.5 7.2z"/>',
+    mail: '<rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="m2.5 4.5 5.5 4 5.5-4"/>',
+    phone: '<path d="M5.5 2.5 4 2.5A1.5 1.5 0 0 0 2.5 4c0 5.2 4.3 9.5 9.5 9.5A1.5 1.5 0 0 0 13.5 12v-1.5l-2.6-1-1.3 1.3a7 7 0 0 1-3.4-3.4L7.5 6.1z"/>',
+    download: '<path d="M8 2.5v8M5 7.5l3 3 3-3M2.5 11v2.5h11V11"/>',
+    copy: '<rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M3 10.5V3.5A1 1 0 0 1 4 2.5h7"/>',
+    check: '<circle cx="8" cy="8" r="6"/><path d="m5.5 8 1.8 1.8 3.2-3.5"/>',
+    circle: '<circle cx="8" cy="8" r="6"/>',
+    plus: '<path d="M8 3v10M3 8h10"/>',
+    calendar: '<rect x="2" y="3" width="12" height="10.5" rx="2"/><path d="M2 6.5h12M5.5 2v2M10.5 2v2"/>',
+    folder: '<path d="M1.8 4.5A1.5 1.5 0 0 1 3.3 3h2.7l1.5 1.7h5.2a1.5 1.5 0 0 1 1.5 1.5v5.3a1.5 1.5 0 0 1-1.5 1.5H3.3a1.5 1.5 0 0 1-1.5-1.5z"/>',
+    share: '<path d="M8 10V2.5M5 5.2l3-2.7 3 2.7M4 7.5H3.5a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H12"/>',
+    refresh: '<path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3"/>',
+    album: '<rect x="2.5" y="4" width="11" height="9.5" rx="1.5"/><path d="M4.5 2.5h7M5 11l2.2-2.6 1.6 1.8 1.2-1.3L12 11"/>',
+    reply: '<path d="M6.5 4 2.5 8l4 4M2.5 8H10a3.5 3.5 0 0 1 3.5 3.5V13"/>'
+  };
+  const icon = name => paths[name]
+    ? `<svg class="santolv-menu-icon" viewBox="0 0 16 16" aria-hidden="true">${paths[name]}</svg>`
+    : '<span class="santolv-menu-icon" aria-hidden="true"></span>';
+  let current = null;
+  function close(restore = true) {
+    if (!current) return;
+    const { menu, opener } = current;
+    current = null;
+    menu.classList.remove('open');
+    const remove = () => menu.remove();
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) remove();
+    else { menu.addEventListener('transitionend', remove, { once: true }); setTimeout(remove, 200); }
+    if (restore && opener?.isConnected) opener.focus({ preventScroll: true });
+  }
+  function open(event, items, options = {}) {
+    const entries = items.filter(Boolean).filter(item => item === '-' || !item.hidden);
+    if (!entries.some(item => item !== '-')) return false;
+    event?.preventDefault?.();
+    close(false);
+    const menu = document.createElement('div');
+    menu.className = 'santolv-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', options.label || 'Acciones');
+    let previousSeparator = true;
+    entries.forEach((item, index) => {
+      if (item === '-') {
+        const last = index === entries.length - 1;
+        if (!previousSeparator && !last) menu.append(Object.assign(document.createElement('hr'), { role: 'separator' }));
+        previousSeparator = true;
+        return;
+      }
+      previousSeparator = false;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('role', 'menuitem');
+      button.innerHTML = icon(item.icon);
+      button.append(Object.assign(document.createElement('span'), { textContent: item.label }));
+      if (item.danger) button.classList.add('danger');
+      if (item.disabled) button.disabled = true;
+      button.addEventListener('click', () => {
+        close(false);
+        try { const result = item.action?.(); result?.catch?.(error => console.error(error)); }
+        catch (error) { console.error(error); }
+      });
+      menu.append(button);
+    });
+    document.body.append(menu);
+    const anchor = event?.target?.getBoundingClientRect?.();
+    const x = event?.clientX || anchor?.left || 12;
+    const y = event?.clientY || anchor?.bottom || 12;
+    const left = Math.max(8, Math.min(x, innerWidth - menu.offsetWidth - 8));
+    const top = Math.max(8, Math.min(y, innerHeight - menu.offsetHeight - 8));
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+    menu.style.transformOrigin = `${x - left}px ${y - top}px`;
+    current = { menu, opener: document.activeElement };
+    requestAnimationFrame(() => menu.classList.add('open'));
+    menu.querySelector('button:not(:disabled)')?.focus({ preventScroll: true });
+    return true;
+  }
+  document.addEventListener('pointerdown', event => { if (current && !current.menu.contains(event.target)) close(false); }, true);
+  document.addEventListener('keydown', event => {
+    if (!current) return;
+    const buttons = [...current.menu.querySelectorAll('button:not(:disabled)')];
+    let index = buttons.indexOf(document.activeElement);
+    if (event.key === 'Escape') { event.preventDefault(); close(); }
+    else if (event.key === 'Tab') { event.preventDefault(); }
+    else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      event.preventDefault();
+      index = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+        : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+      buttons[index]?.focus();
+    }
+  }, true);
+  for (const type of ['resize', 'blur']) window.addEventListener(type, () => close(false));
+  document.addEventListener('scroll', () => close(false), true);
+  /** Opens the menu built by `build(event)`; returning nothing keeps the browser menu. */
+  function bind(root, build, options) {
+    // The keyboard menu key and Shift+F10 also fire "contextmenu", without coordinates.
+    const handler = event => {
+      if (event.target.closest('input,textarea,select,[contenteditable="true"]')) return;
+      const items = build(event);
+      if (items && open(event, items, options)) event.preventDefault();
+    };
+    root.addEventListener('contextmenu', handler);
+  }
+  window.SantolvShell = Object.assign(window.SantolvShell || {}, { contextMenu: open, closeContextMenu: close, bindContextMenu: bind });
+})();

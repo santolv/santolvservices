@@ -21,6 +21,14 @@ Shell y motor de archivos son dos partes compartidas, con carpetas separadas. Un
 - Cada servicio conserva su distribución y su color de acento (Calendario rojo,
   Notas amarillo, Tareas, Drive, Contactos y Correo azul). Los colores de tipos
   de archivo, carpetas y la fototeca 4:3 no dependen de esta capa.
+- Menú contextual común: `SantolvShell.bindContextMenu(raíz, construir)` y
+  `SantolvShell.contextMenu(evento, opciones)` en `shell.js`. Cada servicio
+  decide qué opciones muestra y conecta sus propias funciones; no se duplica la
+  lógica de las operaciones. Drive conserva su menú propio con el mismo aspecto.
+- Los `<select>` se dibujan como botones emergentes de macOS. La CSP no admite
+  imágenes `data:`, así que el chevrón se dibuja con degradados CSS.
+- Animaciones breves en menús, hojas, listas y botones; todas se desactivan con
+  `prefers-reduced-motion`.
 - La pantalla de acceso no usa el shell; replica los mismos valores en
   `frontend/home/login.html`.
 

@@ -247,6 +247,7 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
     return new Date(event.starts_at) < day(date, 1) && new Date(event.ends_at) > date;
   }
   function eventColor(id) { const item=calendars.find(c=>c.id===id),known={'personal':'#0a84ff','trabajo':'#ff9f0a','familia':'#30d158','estudio':'#bf5af2'};if(item?.is_default)return '#0a84ff';if(known[item?.name.toLocaleLowerCase()])return known[item.name.toLocaleLowerCase()];const colors=['#0a84ff','#ff9f0a','#30d158','#bf5af2','#ff453a'];return colors[Array.from(id||'').reduce((n,c)=>n+c.charCodeAt(0),0)%colors.length]; }
+  const eventRecords = new WeakMap();
   function link(event, agenda = false) {
     const a = document.createElement('a');
     a.className = 'cal-event';
@@ -254,6 +255,7 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
     a.href = occurrenceUrl(event);
     a.title = event.title;
     a.textContent = agenda ? eventLabel(event) + ' · ' + event.title + ' · ' + event.calendar_name : event.title;
+    eventRecords.set(a, event);
     a.addEventListener('click', click => {
       if (click.button || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
       click.preventDefault();
@@ -653,6 +655,23 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
     anchor = view === 'month' ? new Date(anchor.getFullYear(), anchor.getMonth() + direction, 1) : day(anchor, direction * (view === 'week' ? 7 : 14));
     void load();
   }
+  // Right click: event actions on an event, "Nuevo evento" on an empty hour or day.
+  window.SantolvShell?.bindContextMenu?.(document.querySelector('.cal-workspace'), contextEvent => {
+    const target = contextEvent.target;
+    const anchorLink = target.closest('a.cal-event');
+    const item = anchorLink && eventRecords.get(anchorLink);
+    if (item) return [
+      {label: 'Abrir evento', icon: 'open', action: () => anchorLink.click()},
+      {label: 'Abrir en una pestaña nueva', icon: 'share', action: () => window.open(anchorLink.href, '_blank', 'noopener')},
+      {label: 'Copiar enlace', icon: 'copy', hidden: !navigator.clipboard, action: () => navigator.clipboard.writeText(anchorLink.href)},
+      '-',
+      {label: 'Nuevo evento este día', icon: 'plus', action: () => openCreate(day(new Date(item.starts_at)))},
+      '-',
+      {label: 'Eliminar evento…', icon: 'trash', danger: true, action: async () => { await openDetail(item.event_id, item.original_start); if (detail?.event.id === item.event_id) $('delete-event').click(); }}
+    ];
+    const slot = target.closest('.cal-hour-slot') || target.closest('.cal-day')?.querySelector('button.day-number');
+    if (slot) return [{label: 'Nuevo evento', icon: 'calendar', action: () => slot.click()}, '-', {label: 'Ir a hoy', icon: 'restore', action: () => $('today').click()}];
+  }, {label: 'Acciones del calendario'});
   $('today').addEventListener('click', () => { anchor = new Date(); void load(); });
   $('previous').addEventListener('click', () => shift(-1));
   $('next').addEventListener('click', () => shift(1));

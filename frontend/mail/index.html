@@ -699,6 +699,30 @@ body{margin:0;background:var(--ui-canvas);color:var(--ui-text);font:15px/1.45 va
     }, 220);
   });
 
+  // Right click on a message opens it and offers the reader's visible actions.
+  list.addEventListener('contextmenu', async event => {
+    const row = event.target.closest('.mail-row');
+    if (!row || !window.SantolvShell?.contextMenu) return;
+    event.preventDefault();
+    const point = {clientX: event.clientX, clientY: event.clientY, target: row};
+    if (selected?.id !== row.dataset.id) await openMessage(row.dataset.id);
+    if (selected?.id !== row.dataset.id) return;
+    const entry = (target, icon, extra = {}) => {
+      const button = $(target);
+      return {label: button.textContent.trim(), icon, hidden: button.hidden || button.disabled, action: () => button.click(), ...extra};
+    };
+    window.SantolvShell.contextMenu(point, [
+      entry('mail-edit', 'edit', {label: 'Editar borrador'}),
+      {label: 'Responder', icon: 'reply', hidden: selected.kind !== 'received' || selected.trashed || !selected.sender, action: () => compose(null, selected.sender)},
+      '-',
+      entry('mail-read', 'mail'),
+      entry('mail-star', 'star'),
+      entry('mail-archive', selected.archived ? 'restore' : 'archive'),
+      '-',
+      entry('mail-trash', selected.trashed ? 'restore' : 'trash', {danger: !selected.trashed}),
+      entry('mail-delete', 'trash', {danger: true})
+    ], {label: 'Acciones del mensaje'});
+  });
   $('mail-account').addEventListener('click', () => {
     $('mail-account-message').textContent = transport === 'not_configured'
       ? 'El envío y la recepción estarán disponibles cuando se conecte una cuenta de correo. Los borradores ya se guardan en tu espacio privado de Santolv.'

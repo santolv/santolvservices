@@ -52,10 +52,10 @@
  'use strict';
  const {api,start}=window.SantolvRecords.create(),$=id=>document.getElementById(id),form=$('edit-form'),editor=$('editor'),filters=$('filters');
  const format=new Intl.DateTimeFormat('es',{dateStyle:'medium',timeStyle:'short'});
- let editing,cursor,request,params,saving=false,ready=false,searchTimer;
+ let editing,cursor,request,params,saving=false,ready=false,searchTimer;const records=new WeakMap();
  const message=(text,error=false)=>{$('message').textContent=text;$('message').dataset.error=String(error)};
  const error=(text='')=>{$('editor-error').textContent=text;$('editor-error').hidden=!text};
- function row(note){const li=document.createElement('li'),button=document.createElement('button');button.type='button';button.className='record-open';const title=document.createElement('strong');title.textContent=note.title;button.append(title);if(note.content){const preview=document.createElement('span');preview.className='preview';preview.textContent=Array.from(note.content).slice(0,140).join('');button.append(preview)}const meta=document.createElement('span');meta.className='meta';meta.textContent='Editada '+format.format(new Date(note.updated_at));button.append(meta);button.addEventListener('click',()=>open(note));li.append(button);return li}
+ function row(note){const li=document.createElement('li'),button=document.createElement('button');button.type='button';button.className='record-open';const title=document.createElement('strong');title.textContent=note.title;button.append(title);if(note.content){const preview=document.createElement('span');preview.className='preview';preview.textContent=Array.from(note.content).slice(0,140).join('');button.append(preview)}const meta=document.createElement('span');meta.className='meta';meta.textContent='Editada '+format.format(new Date(note.updated_at));button.append(meta);button.addEventListener('click',()=>open(note));li.append(button);records.set(li,note);return li}
  async function load(append=false){if(!ready||append&&!cursor)return;request?.abort();const current=new AbortController();request=current;
   if(!append){$('items').replaceChildren();cursor=null;params=new URLSearchParams({archived:filters.elements.archived.value});if(filters.elements.q.value.trim())params.set('q',filters.elements.q.value.trim())}
   const query=new URLSearchParams(params);if(append)query.set('cursor',cursor);$('more').disabled=true;$('items').setAttribute('aria-busy','true');message('Cargando…');
@@ -68,6 +68,11 @@
  $('delete').addEventListener('click',()=>{if(editing&&window.confirm('¿Eliminar esta nota? Las tareas vinculadas se conservarán.'))void change('DELETE')});
  $('cancel').addEventListener('click',()=>editor.close());editor.addEventListener('cancel',e=>{if(saving)e.preventDefault()});$('new').addEventListener('click',()=>open());$('more').addEventListener('click',()=>void load(true));
  for(const button of document.querySelectorAll('[data-record-archive]'))button.addEventListener('click',()=>{filters.elements.archived.value=button.dataset.recordArchive;for(const b of document.querySelectorAll('[data-record-archive]'))b.setAttribute('aria-pressed',String(b===button));void load()});
+ async function quick(note,method,body){try{await api('/notes/'+encodeURIComponent(note.id),{method,body});await load()}catch(e){message(e.message,true)}}
+ window.SantolvShell?.bindContextMenu?.($('items'),event=>{const note=records.get(event.target.closest('li'));if(!note||!ready||editor.open)return;const archived=Boolean(note.archived_at);
+  return [{label:'Abrir',icon:'open',action:()=>open(note)},{label:'Ver tareas vinculadas',icon:'check',action:()=>location.assign('/tasks/?note='+encodeURIComponent(note.id))},'-',
+   {label:archived?'Restaurar':'Archivar',icon:archived?'restore':'archive',action:()=>quick(note,'PUT',{title:note.title,content:note.content,archived:!archived})},'-',
+   {label:'Eliminar',icon:'trash',danger:true,action:()=>{if(window.confirm('¿Eliminar esta nota? Las tareas vinculadas se conservarán.'))return quick(note,'DELETE')}}]},{label:'Acciones de la nota'});
  filters.addEventListener('submit',e=>{e.preventDefault();void load()});filters.elements.q.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>void load(),200)});
  message('Cargando…');start().then(async()=>{ready=true;$('new').disabled=false;await load();const id=new URLSearchParams(location.search).get('id');if(id)open(await api('/notes/'+encodeURIComponent(id)))}).catch(e=>message(e.message,true));
 })();

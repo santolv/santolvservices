@@ -478,6 +478,22 @@ document.addEventListener('click',async event=>{
  if(action==='zoom'){state.zoom=!state.zoom;if(state.zoom){const id=state.viewerId;imageUrl(photos.find(p=>p.id===id),'original').then(url=>{if(state.viewerId===id&&state.zoom)document.getElementById('viewer-image').src=url}).catch(showPhotoError)}$('viewer-stage').classList.toggle('zoomed',state.zoom);target.setAttribute('aria-pressed',String(state.zoom));target.setAttribute('aria-label',state.zoom?'Ajustar imagen a la ventana':'Ampliar imagen')}
  if(action==='viewer-trash')await trashPhoto();
 });
+// Right click on a photo: the same actions as the viewer, inspector and selection bar.
+window.SantolvShell?.bindContextMenu?.($('library'),event=>{
+ const tile=event.target.closest('[data-photo]');const photo=tile&&photos.find(p=>p.id===tile.dataset.photo);if(!photo)return;
+ const download=async()=>{try{const url=await imageUrl(photo,'original');const link=document.createElement('a');link.href=url;link.download=photo.name||'foto';document.body.append(link);link.click();link.remove()}catch(error){showPhotoError(error)}};
+ if(photo.deleted)return [{label:'Restaurar',icon:'restore',action:()=>restorePhoto(photo.id)}];
+ return [
+  {label:'Abrir',icon:'open',action:()=>openViewer(photo.id)},
+  {label:'Obtener información',icon:'info',action:()=>{state.infoId=photo.id;setInspector(true);updateInspector()}},
+  '-',
+  {label:photo.favorite?'Quitar de favoritas':'Añadir a favoritas',icon:'heart',action:()=>toggleFavorite(photo.id)},
+  {label:'Descargar original',icon:'download',action:download},
+  {label:state.selecting&&state.selected.has(photo.id)?'Quitar de la selección':'Seleccionar',icon:'check',action:()=>{state.selecting=true;toggleSelection(photo.id)}},
+  '-',
+  {label:'Mover a la papelera',icon:'trash',danger:true,action:async()=>{if(await persistPhoto(photo,'trash'))notify('Foto guardada en la papelera del servidor.')}}
+ ];
+},{label:'Acciones de la foto'});
 $('viewer').addEventListener('close',()=>{const photoId=pendingFocus?.dataset.photo;render();const origin=photoId?document.querySelector('[data-photo="'+photoId+'"]'):null;if(origin)origin.focus({preventScroll:true});else $('content').focus({preventScroll:true})});
 $('viewer-image').addEventListener('error',()=>notify('No se ha podido previsualizar esta imagen. Prueba otro formato.'));
 $('search').addEventListener('input',render);$('thumbnail-size').addEventListener('input',event=>thumbnailSize(Number(event.target.value)));$('file-input').addEventListener('change',event=>importFiles(event.target.files));window.addEventListener('hashchange',route);

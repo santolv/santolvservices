@@ -12,6 +12,78 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 #[sqlx::test]
+async fn calendar_preferences_are_private_per_user(pool: PgPool) {
+    let h = Harness::new(pool).await;
+    santolvdrive::core::manager::set_enabled(&h.app.db, "calendar", true)
+        .await
+        .unwrap();
+    let owner = h.account("pref-owner").await;
+    let reader = h.account("pref-reader").await;
+    let outsider = h.account("pref-outsider").await;
+    let (owner_t, reader_t) = (Some(owner.token.as_str()), Some(reader.token.as_str()));
+    let call = |method, path, token, body| h.json(method, path, token, &[], body);
+    let calendars = "/api/v1/calendar/calendars";
+    let (status, created) = call("POST", calendars, owner_t, json!({"name":"Trabajo"})).await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    let id = created["id"].as_str().unwrap();
+    let prefs = format!("{calendars}/{id}/preferences");
+    let set = |token, color: &str, visible| {
+        call(
+            "PUT",
+            &prefs,
+            token,
+            json!({"color":color,"visible":visible}),
+        )
+    };
+    assert_eq!(set(owner_t, "red", true).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        set(owner_t, "#FF9500", false).await.0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        set(reader_t, "#34c759", true).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        set(Some(outsider.token.as_str()), "#34c759", true).await.0,
+        StatusCode::NOT_FOUND
+    );
+    let grant = json!({"username":"pref-reader","role":"reader"});
+    let members = format!("{calendars}/{id}/members");
+    assert_eq!(
+        call("PUT", &members, owner_t, grant).await.0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        set(reader_t, "#34c759", true).await.0,
+        StatusCode::NO_CONTENT
+    );
+    let find = |list: &Value| {
+        list["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["id"] == id)
+            .cloned()
+            .unwrap()
+    };
+    let mine = find(&call("GET", calendars, owner_t, Value::Null).await.1);
+    assert_eq!(
+        (mine["color"].as_str(), mine["visible"].as_bool()),
+        (Some("#ff9500"), Some(false))
+    );
+    let theirs = find(&call("GET", calendars, reader_t, Value::Null).await.1);
+    assert_eq!(
+        (theirs["color"].as_str(), theirs["visible"].as_bool()),
+        (Some("#34c759"), Some(true))
+    );
+    assert_eq!(
+        (theirs["role"].as_str(), theirs["owner"].as_str()),
+        (Some("reader"), Some("pref-owner"))
+    );
+}
+
+#[sqlx::test]
 async fn calendar_obeys_access_and_preserves_occurrence_identity(pool: PgPool) {
     let h = Harness::new(pool).await;
     let owner = h.account("calendar-owner").await;

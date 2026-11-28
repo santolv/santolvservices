@@ -173,6 +173,7 @@ pub fn router(s: App) -> Router {
             "/api/v1/openapi.json",
             get(|_: auth::User| async { axum::Json(crate::openapi::document()) }),
         )
+        .merge(crate::collaboration::routes())
         .with_state(s.clone())
         .merge(crate::core::manager::routes(&s))
         .layer(DefaultBodyLimit::max(128 * 1024))

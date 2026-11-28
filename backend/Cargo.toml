@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.94"
 
 [dependencies]
-axum = { version = "0.8", features = ["json", "macros"] }
+axum = { version = "0.8", features = ["json", "macros", "ws"] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["io"] }
 tower = { version = "0.5", features = ["util"] }
@@ -35,6 +35,8 @@ tempfile = "3"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 image-webp = "0.2"
 zip = { version = "9", default-features = false, features = ["deflate"] }
+# CRDT for real-time collaboration (authorised by the owner); exact pin, reviewed on every update.
+yrs = { version = "=0.28.2", features = ["sync"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_JobObjects", "Win32_System_Threading"] }
@@ -46,3 +48,7 @@ libc = "0.2"
 lto = "thin"
 codegen-units = 1
 strip = true
+
+[dev-dependencies]
+# WebSocket client for the collaboration tests (same version axum already locks).
+tokio-tungstenite = "=0.29.0"

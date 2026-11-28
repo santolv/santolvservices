@@ -1,7 +1,7 @@
 # Modelo de amenazas: editores ofimáticos y colaboración
 
-Alcance: los cuatro editores ArtCraft alojados en la suite (fase 1) y el motor colaborativo previsto
-(fases siguientes). Se revisará en cada fase.
+Alcance: los cuatro editores ArtCraft alojados en la suite (fase 1) y el servidor del motor
+colaborativo (fase 2). Se revisará en cada fase.
 
 ## Activos
 
@@ -37,17 +37,26 @@ Alcance: los cuatro editores ArtCraft alojados en la suite (fase 1) y el motor c
 | Suplantación de origen | Core comprueba la cabecera Host; la API valida orígenes en CORS. |
 | Cadena de suministro | Releases fijadas por etiqueta y commit; compilación `--locked`; sin `trunk` ni `wasm-opt`. Auditoría de dependencias de ArtCraft: pendiente (ver riesgos). |
 
-## Amenazas previstas para la colaboración (fases siguientes)
+## Amenazas y medidas del motor colaborativo
 
-- Secuestro de WebSocket entre sitios: validar `Origin`, cookie de sesión y CSRF en el
-  establecimiento de la conexión.
-- Suscripción a documentos ajenos: autorización por documento al unirse y en cada mensaje.
-- Revocación de permisos: cierre inmediato de las conexiones afectadas.
-- Actualizaciones CRDT válidas pero no autorizadas: validación semántica por editor antes de
-  integrar; los lectores no pueden enviar actualizaciones.
-- Agotamiento de recursos con actualizaciones CRDT: límites de tamaño por mensaje, por documento y
-  por usuario, colas acotadas con contrapresión y tiempo máximo de inactividad.
-- Duplicados y desorden: identificadores únicos de operación y reconocimiento tras persistir.
+Servidor en `backend/src/collaboration/`; diseño y límites en
+[collaboration/README.md](../collaboration/README.md). Cada medida tiene una prueba en
+`backend/tests/collaboration.rs` o en las pruebas unitarias de `protocol`.
+
+| Amenaza | Medida |
+|---|---|
+| Secuestro de WebSocket entre sitios (CSWSH) | `Origin` debe ser exactamente el frontend de la suite. Solo se acepta la cookie `drive_session` (`SameSite=Strict`); `Authorization` se rechaza. El middleware común sigue comprobando Host, proxys y `Sec-Fetch-Site`. |
+| Unirse a documentos ajenos (IDOR) | Permiso de Drive sobre el archivo (`files::access`) antes de aceptar la conexión. Las carpetas, los archivos en la papelera y la falta de permiso responden 404. El rol viene del servidor, nunca del cliente. |
+| Escritura sin permiso | Los lectores reciben el documento, pero sus actualizaciones se rechazan (`read_only`). El rol se comprueba en cada actualización. |
+| Revocación y fin de sesión | Cada 5 s se reverifican la sesión (cierre de sesión, caducidad, cuenta desactivada o con cambio de contraseña) y el permiso. Al perderse, se cierra la conexión con `session_ended` o `access_revoked`. |
+| Suplantación en la presencia | El servidor fija `user`, `name`, `color` y `connection`; el cliente solo aporta su estado (JSON de 2 KiB como máximo). |
+| Mensajes hostiles | Decodificación con límites, mensaje de 256 KiB como máximo y solo binario. Tras 5 errores (mensajes mal formados o actualizaciones Yrs inválidas) se cierra la conexión. |
+| Agotamiento de recursos | 100 actualizaciones/s por conexión, presencia 20/s, pings 2/s. Documento de 32 MiB como máximo y 512 MiB entre todas las salas. 16 conexiones por cuenta, 2000 en total y 500 por documento. Intentos de conexión limitados por cuenta. Colas acotadas: escritura 1024 (`busy`) y salida 1024 (`too_slow`). Inactividad de 60 s. |
+| Agotamiento del pool de la base | Un escritor por sala con confirmación en grupo: cada documento usa como mucho una conexión para escribir. |
+| Duplicados, desorden y pérdida del ack | Id único de operación por documento (`UNIQUE(node_id, op_id)`); un reintento exacto recibe la secuencia original. Yrs integra el desorden. El ack solo se envía tras confirmar la escritura. |
+| Id de operación reutilizado con otro contenido | Se guarda y se reparte con un id nuevo del servidor; memoria, registro y miembros no divergen. |
+| Fallo de la base durante una escritura | La sala se invalida (`room_reset`), sus miembros se reconectan desde lo guardado y una sala invalidada no se compacta. |
+| Varias salas para el mismo documento | El registro garantiza una única sala abierta por documento, incluso con carreras entre entrar y salir. |
 
 ## Comprobaciones realizadas en producción (28/11/2026)
 
@@ -69,4 +78,24 @@ Alcance: los cuatro editores ArtCraft alojados en la suite (fase 1) y el motor c
   pestaña del navegador. El impacto queda limitado al navegador del usuario: el servidor no procesa
   esos formatos en esta fase.
 - `cargo audit` de los proyectos ArtCraft: pendiente de ejecutar e incluir aquí.
-- Edición simultánea sin motor colaborativo: el segundo guardado recibe un conflicto.
+- Edición simultánea en los editores: hasta que existan los adaptadores, el segundo guardado recibe
+  un conflicto.
+- `cargo audit` del backend: `smallstr` 0.3.1 está marcado como **sin mantenimiento**
+  (RUSTSEC-2026-0215). No es una vulnerabilidad conocida y no tiene versión corregida. Es una
+  dependencia obligatoria de `yrs` 0.28.2, la última versión, y no hay función que permita
+  quitarla. Con `--deny warnings` el CI falla. Aceptar la excepción o sustituir la dependencia lo
+  decide el propietario.
+- Colaboración:
+  - **Revocación:** se aplica en 5 s como máximo, no al instante.
+  - **Contenido arbitrario:** sin validación semántica por editor, un usuario con permiso de edición
+    puede escribir en el documento Yrs cualquier estructura dentro de los límites. La validará el
+    adaptador de cada editor.
+  - **Invalidación de la sala:** un editor que envíe más de 256 actualizaciones con dependencias que
+    nunca llegan provoca `document_inconsistent`, y la sala se reconstruye. Es una interrupción
+    temporal que solo puede causar alguien con permiso de edición.
+  - **Cuota:** el almacenamiento colaborativo, de 32 MiB por archivo como máximo, no cuenta todavía
+    en la cuota de Drive.
+  - **Memoria:** el límite de 512 MiB mide el tamaño codificado, no la memoria real de Yrs, que es
+    mayor.
+  - **Varias instancias:** el registro de salas es del proceso, lo que basta para la única
+    instalación de producción, pero no para varias instancias.

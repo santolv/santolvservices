@@ -1,3 +1,4 @@
+pub mod collaboration;
 pub mod core;
 pub mod dependencies;
 pub mod file_store;

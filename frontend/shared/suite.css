@@ -1,0 +1,212 @@
+/*
+ * Santolv suite design layer.
+ *
+ * Injected by Core at the end of <head> of every shell page (Inicio, Cuenta and
+ * all services), after each service stylesheet. It owns what must look the same
+ * everywhere: the Apple-style palette (tokens in shell.css), the top bar and its
+ * menus, source-list sidebars, titles, search fields, segmented controls,
+ * capsule buttons, sheets and empty states. Each service keeps its own layout,
+ * content and accent colour (Calendario rojo, Notas amarillo); file-type colours,
+ * folder icons and the 4:3 photo grid are not touched here.
+ *
+ * `:root:root:root` maps the historical per-service palettes onto the shared
+ * tokens with enough specificity to win over their own :root[data-theme] rules.
+ */
+
+/* ---------- 1. One palette for every service ---------- */
+:root:root:root{
+  /* Drive and Fotos */
+  --bg:var(--ui-canvas);--side:var(--ui-panel);--surface:var(--ui-raised);--card:var(--ui-surface);
+  --text:var(--ui-text);--line:var(--ui-line);--fill:var(--ui-control);--hover:var(--ui-hover);
+  --blue:var(--ui-blue);--red:var(--ui-red);--nav-selected:var(--ui-control);--segment:var(--ui-selected);
+  --photo-sidebar-width:var(--ui-sidebar-width);
+  /* Calendario */
+  --cal-bg:var(--ui-canvas);--cal-panel:var(--ui-raised);--cal-text:var(--ui-text);--cal-muted:var(--ui-muted);--cal-line:var(--ui-line);
+  /* Cuenta */
+  --canvas:var(--ui-grouped);--field:var(--ui-control);--muted:var(--ui-muted);--accent:var(--ui-blue);
+  font-synthesis:none;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility
+}
+body{font-family:var(--ui-font)}
+::selection{background:color-mix(in srgb,var(--ui-blue) 28%,transparent)}
+
+/* ---------- 2. Top bar: a quiet material strip, borderless glyph buttons ---------- */
+.shell-header{background:color-mix(in srgb,var(--ui-canvas) 82%,transparent);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--ui-line);color:var(--ui-text)}
+:root[data-theme=dark] .shell-header{background:color-mix(in srgb,var(--ui-canvas) 82%,transparent);border-color:var(--ui-line);color:var(--ui-text)}
+.shell-brand{font:600 15px/1 var(--ui-font);letter-spacing:-.01em}
+.shell-controls{gap:4px}
+.shell-button,:root[data-theme=dark] .shell-button{width:32px;height:32px;padding:7px;border:0;border-radius:8px;background:transparent;color:color-mix(in srgb,var(--ui-text) 72%,transparent);transition:background-color 120ms ease}
+.shell-button:hover,:root[data-theme=dark] .shell-button:hover{background:var(--ui-control);color:var(--ui-text)}
+.shell-button:active{background:color-mix(in srgb,var(--ui-text) 14%,transparent)}
+.shell-button:focus-visible{outline:2px solid var(--ui-blue);outline-offset:2px}
+.shell-button svg{stroke-width:1.7}
+.shell-home,:root[data-theme=dark] .shell-home{width:auto;height:30px;gap:6px;padding:0 12px 0 10px;margin-right:6px;border-radius:999px;background:var(--ui-control);box-shadow:none;color:var(--ui-text);font:500 13px/1 var(--ui-font)}
+.shell-home:hover,:root[data-theme=dark] .shell-home:hover{background:color-mix(in srgb,var(--ui-text) 14%,transparent)}
+.shell-home svg{width:16px;height:16px}
+:root .shell-header .shell-profile.account-avatar[data-avatar-color],:root[data-theme=dark] .shell-header .shell-profile.account-avatar[data-avatar-color]{width:30px;height:30px;margin-left:4px;padding:0;border-radius:50%;background:var(--avatar-bg,#2861b4);color:#fff;font:600 11px/1 var(--ui-font);letter-spacing:.02em}
+:root .shell-header .shell-profile.account-avatar[data-avatar-color]:hover{background:var(--avatar-bg,#2861b4);filter:brightness(1.12)}
+.shell-top-edge .shell-button{background:var(--ui-menu);box-shadow:var(--ui-menu-shadow);font:500 12px var(--ui-font)}
+#shell-calendar-count{top:2px;right:1px;min-width:15px;padding:1px 4px;border-radius:8px;background:var(--ui-red);font:600 10px/1.3 var(--ui-font);text-align:center}
+
+/* Menus: macOS pop-up menus, accent highlight under the pointer */
+.shell-menu,:root[data-theme=dark] .shell-menu{inset:54px 12px auto auto;width:min(244px,calc(100vw - 24px));padding:5px;border:0;border-radius:12px;background:var(--ui-menu);color:var(--ui-text);-webkit-backdrop-filter:saturate(180%) blur(24px);backdrop-filter:saturate(180%) blur(24px);box-shadow:var(--ui-menu-shadow);font:13px/1.35 var(--ui-font)}
+.shell-menu strong{padding:7px 10px 5px;font-weight:600}
+.shell-menu p{padding:4px 10px 7px;color:var(--ui-muted)}
+.shell-menu a,.shell-menu button{gap:10px;min-height:30px;padding:5px 10px;border-radius:6px;font-weight:400}
+.shell-menu a:hover,.shell-menu button:hover,:root[data-theme=dark] .shell-menu a:hover,:root[data-theme=dark] .shell-menu button:hover{background:var(--ui-tint-fill);color:#fff}
+.shell-menu a:focus-visible,.shell-menu button:focus-visible{outline:0;background:var(--ui-tint-fill);color:#fff}
+.shell-menu hr{margin:5px 10px;border:0;border-top:1px solid var(--ui-line)}
+.shell-app-mark{width:10px;height:10px;flex:none}
+.shell-notes-mark{background:#f5b500}.shell-tasks-mark{background:#1a7cf5}
+.calendar-popup{padding:6px}
+
+/* ---------- 3. Sidebars: one source list for every service ---------- */
+.sidebar-top,.contact-sidebar-head{height:48px;display:flex;align-items:center;gap:6px;margin:0 0 6px;padding-left:2px;flex:none}
+.sidebar-top :is(h1,h2),.contact-sidebar-head strong{margin:0;font:600 15px/1.2 var(--ui-font);letter-spacing:-.01em;color:var(--ui-text)}
+.app button.shell-sidebar-toggle{width:30px;height:30px;min-width:30px;min-height:30px;border-radius:7px;color:var(--ui-blue)}
+.app .shell-sidebar-toggle svg{width:20px;height:20px}
+.app .side :is(.nav,.album-link,.space-link)[aria-current="page"],.app .side :is(.nav,.album-link,.space-link).active{background:var(--ui-control)}
+.app .side :is(.nav,.album-link,.space-link):hover:not([aria-current="page"]):not(.active){background:var(--ui-hover)}
+.app .side .count{color:var(--ui-muted);font-variant-numeric:tabular-nums}
+.app .side :is(h2,h3,.side-label,.section-label){font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--ui-muted)}
+
+/* Contactos, Correo and Calendario use the same rows as Drive and Fotos */
+.contact-sidebar,.mail-sidebar,.cal-sidebar{background:var(--ui-panel);border-color:var(--ui-line)}
+.contact-sidebar{padding:0 10px 14px}
+.contact-nav,.mail-nav{gap:1px}
+.contact-nav button,.mail-nav button{gap:8px;width:100%;height:32px;min-height:32px;padding:0 8px;border-radius:7px;font-size:14px;font-weight:500;line-height:20px;color:var(--ui-text)}
+.contact-nav button:hover,.mail-nav button:hover{background:var(--ui-hover)}
+.contact-nav button[aria-current="page"],.mail-nav button[aria-current=page],.mail-nav button[aria-current=page]:hover{background:var(--ui-control);font-weight:500}
+.contact-nav svg,.mail-nav .mail-icon{width:18px;height:18px;color:var(--ui-blue)}
+.mail-sidebar{gap:10px;padding:0 10px 14px}
+.mail-account{padding:8px 10px;border:0;border-radius:10px;background:var(--ui-control);font-size:13px}
+.mail-account:hover{background:color-mix(in srgb,var(--ui-text) 12%,transparent)}
+.cal-sidebar{padding:0 12px 14px;gap:12px}
+.cal-sidebar .sidebar-top h1{font-size:15px;letter-spacing:-.01em}
+.cal-sidebar label{gap:6px;font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--ui-muted)}
+.cal-sidebar select,.cal-sidebar #manage{width:100%;height:30px;min-height:30px;padding:0 10px;border:0;border-radius:7px;background:var(--ui-control);color:var(--ui-text);font:500 13px var(--ui-font);text-align:start}
+.cal-sidebar #manage{display:flex;align-items:center;color:var(--ui-blue)}
+.cal-sidebar #manage:hover{filter:none;background:color-mix(in srgb,var(--ui-text) 12%,transparent)}
+@media(min-width:901px){
+  .contacts{grid-template-columns:var(--ui-sidebar-width) minmax(220px,330px) minmax(0,1fr)}
+  .mail-app{grid-template-columns:var(--ui-sidebar-width) minmax(0,1fr)}
+  .mail-app.sidebar-hidden{grid-template-columns:0 minmax(0,1fr)}
+  .calendar-page{grid-template-columns:var(--ui-sidebar-width) minmax(0,1fr)}
+  .calendar-page.sidebar-hidden{grid-template-columns:0 minmax(0,1fr)}
+}
+.contacts.sidebar-hidden{grid-template-columns:minmax(220px,330px) minmax(0,1fr)}
+
+/* ---------- 4. Titles: one scale ---------- */
+#page-title,#window-title{font-size:var(--ui-title);font-weight:700;letter-spacing:-.03em}
+.calendar-page h2{font-weight:700;letter-spacing:-.025em}
+.mail-toolbar h2,.contact-toolbar h1{font-size:var(--ui-title-2);font-weight:700;line-height:1.15;letter-spacing:-.025em}
+.records-main h1,body > main > h1,#greeting{font-size:var(--ui-large-title);font-weight:700;line-height:1.12;letter-spacing:-.035em}
+@media(max-width:620px){.records-main h1,body > main > h1,#greeting{font-size:28px}}
+
+/* Drive on phones: title aligned to the 16px screen margin */
+@media(max-width:620px){.cloud-heading{padding-inline:10px}}
+
+/* ---------- 5. Search fields ---------- */
+.records-main .record-search,.contact-search,.mail-search{height:32px;min-height:32px;border-radius:9px;background:var(--ui-control);color:var(--ui-muted);font-size:14px}
+.contact-search input,.mail-search input,.records-main .record-search input{min-height:30px;height:30px;font-size:14px}
+.records-main .record-search::after{top:20px}
+.records-main .record-search:focus-within,.contact-search:focus-within,.mail-search:focus-within{outline:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--ui-blue) 35%,transparent)}
+
+/* ---------- 6. Segmented controls ---------- */
+.records-main .record-segment,.cal-segment{gap:0;height:30px;min-height:30px;padding:2px;border-radius:9px;background:var(--ui-control)}
+.records-main .record-segment button,.cal-segment button,.calendar-page .cal-segment button{height:26px;min-height:26px;padding:0 14px;border:0;border-radius:7px;background:transparent;color:var(--ui-text);font:500 13px/1 var(--ui-font);box-shadow:none}
+.records-main .record-segment [aria-pressed=true],.cal-segment button[aria-pressed="true"],.calendar-page .cal-segment button[aria-pressed="true"]{background:var(--ui-selected);color:var(--ui-text);box-shadow:0 1px 2px rgba(0,0,0,.12),0 0 0 .5px rgba(0,0,0,.04)}
+.cal-segment button:hover:not([aria-pressed="true"]),.records-main .record-segment button:hover:not([aria-pressed=true]){filter:none;background:var(--ui-hover)}
+
+/* ---------- 7. Buttons: capsules, one tint per app ---------- */
+.records-main #new,.contact-primary,.mail-primary,.calendar-page button.primary,.account-action.primary{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:30px;min-height:30px;padding:0 14px;border:0;border-radius:999px;font:600 13px/1 var(--ui-font);letter-spacing:-.005em;box-shadow:none;transition:filter 120ms ease,transform 120ms ease}
+.records-main #new::before{content:'+';font-size:17px;font-weight:500;line-height:1;margin-top:-1px}
+:is(.contacts,.contact-dialog) .contact-primary,.mail-primary,.account-action.primary{background:var(--ui-tint-fill);color:#fff}
+:is(.contacts,.contact-dialog) .contact-primary:hover,.mail-primary:hover,.account-action.primary:hover,.records-main #new:hover,.calendar-page button.primary:hover{background-image:linear-gradient(rgba(0,0,0,.08),rgba(0,0,0,.08));filter:none}
+:is(.records-main #new,.contact-primary,.mail-primary,.calendar-page button.primary,.account-action.primary):active{transform:scale(.98)}
+:is(.contacts,.contact-dialog) .contact-button:not(.contact-primary),.mail-action{height:30px;min-height:30px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:500}
+.contact-tools .contact-icon-button,.mail-reader-toolbar .mail-icon-button{width:30px;padding:0;border-radius:50%}
+.calendar-page .cal-controls button:not(.primary):not(.cal-segment button){height:30px;min-height:30px;padding:0 12px;border:0;border-radius:999px;background:var(--ui-control);color:var(--ui-text);font:500 13px/1 var(--ui-font)}
+.calendar-page .cal-controls button:not(.primary):not(.cal-segment button):hover{filter:none;background:color-mix(in srgb,var(--ui-text) 12%,transparent)}
+.account-action{min-height:36px;padding:0 16px;border-radius:999px;font:600 13px/1 var(--ui-font)}
+
+/* Calendario keeps its red; filled red stays dark enough for white text in both themes */
+.calendar-page button.primary,.calendar-page [aria-current="date"]{background:var(--ui-red-fill)!important;color:#fff}
+
+/* Tareas: Recordatorios-blue; Notas keeps its yellow with dark text */
+body[data-service="tasks"]{--record-accent:var(--ui-tint-fill)}
+body[data-service="tasks"] :is(.records-main #new,.records-editor #save,.records-main .done .task-toggle){color:#fff}
+body[data-service="tasks"] .records-main .quick-task>span{color:var(--ui-blue)}
+
+/* ---------- 8. Lists and grouped content ---------- */
+.records-main :is(#items,#completed-items),.contact-fields{border-radius:12px;background:var(--ui-surface)}
+.records-main .record-open:hover{background:var(--ui-hover)}
+.records-main .quick-task{background:var(--ui-surface)}
+.records-main #more,.mail-more,#contact-more{height:30px;min-height:30px;border:0;border-radius:999px;background:var(--ui-control);font-size:13px;font-weight:500}
+.contact-result{border-radius:8px}
+.contact-result[aria-current="true"],.mail-row[aria-current=true]{background:var(--ui-tint-fill);color:#fff}
+.contact-result[aria-current="true"] :is(small,.contact-star),.mail-row[aria-current=true] :is(.mail-row-summary,time,.mail-icon){color:rgba(255,255,255,.82)}
+.contact-result[aria-current="true"] .contact-avatar{background:rgba(255,255,255,.22);color:#fff}
+.mail-row[aria-current=true] .mail-unread{background:#fff}
+.mail-row{border-radius:8px}
+.mail-row:hover:not([aria-current=true]),.contact-result:hover:not([aria-current="true"]){background:var(--ui-hover)}
+.contact-section{padding:12px 9px 4px;font-size:11px;font-weight:600;letter-spacing:.02em}
+.mail-reader{background:var(--ui-canvas)}
+.mail-toolbar,.contact-toolbar{border-color:var(--ui-line)}
+
+/* ---------- 9. Empty states ---------- */
+.contact-empty h2,.mail-empty h3{font-size:20px;font-weight:700;letter-spacing:-.02em;color:var(--ui-text)}
+.contact-empty p,.mail-empty p{font-size:14px;line-height:1.4;color:var(--ui-muted)}
+.contact-placeholder{width:56px;height:56px;border-radius:14px;background:var(--ui-control)}
+.mail-empty .mail-icon{color:var(--ui-muted)}
+.records-main #message{padding:28px 0;text-align:center;font-size:14px}
+
+/* ---------- 10. Sheets and dialogs ---------- */
+:is(.calendar-dialog,.records-editor,.contact-dialog,.mail-dialog){border:0;border-radius:16px;background:var(--ui-raised);box-shadow:var(--ui-shadow)}
+:is(.calendar-dialog,.records-editor,.contact-dialog,.mail-dialog)::backdrop{background:var(--ui-backdrop);-webkit-backdrop-filter:none;backdrop-filter:none}
+.contact-dialog-foot,.mail-dialog-actions,.calendar-actions{gap:8px}
+:is(.contact-dialog-foot,.mail-dialog-actions,.calendar-actions,.records-editor .actions) button{height:30px;min-height:30px;padding:0 14px;border-radius:999px;font-size:13px;font-weight:500}
+.calendar-actions button[type=submit],.records-editor .actions #save{font-weight:600}
+.calendar-actions button[type=submit]{background:var(--ui-tint-fill)}
+.records-editor #cancel{border-radius:50%;padding:0;height:28px;min-height:28px}
+.contact-dialog-body :is(input,textarea),.calendar-form :is(input:not([type=checkbox]),select,textarea),.records-editor :is(input:not([name=title]):not([type=checkbox]),select){border:1px solid var(--ui-line);border-radius:8px;background:var(--ui-canvas)}
+:is(.contact-dialog-body,.calendar-form,.records-editor) :is(input:not([name=title]),select,textarea:not([name=content])):focus-visible{outline:0;border-color:var(--ui-blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--ui-blue) 30%,transparent)}
+.contact-popover{padding:5px;border:0;border-radius:12px;background:var(--ui-menu);-webkit-backdrop-filter:saturate(180%) blur(24px);backdrop-filter:saturate(180%) blur(24px);box-shadow:var(--ui-menu-shadow)}
+.contact-popover .contact-button{height:30px;min-height:30px;border-radius:6px;font-weight:400}
+.contact-popover .contact-button:hover{background:var(--ui-tint-fill);color:#fff}
+
+/* Disclosure rows: a chevron instead of the browser triangle */
+:is(.mail-copies,.contact-dialog-body details,.records-main .record-filter-options)>summary{list-style:none;display:inline-flex;align-items:center;gap:6px}
+:is(.mail-copies,.contact-dialog-body details,.records-main .record-filter-options)>summary::-webkit-details-marker{display:none}
+:is(.mail-copies,.contact-dialog-body details,.records-main .record-filter-options)>summary::after{content:'';width:6px;height:6px;margin-top:-3px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform 160ms var(--ui-ease)}
+:is(.mail-copies,.contact-dialog-body details,.records-main .record-filter-options)[open]>summary::after{margin-top:3px;transform:rotate(-135deg)}
+
+/* ---------- 11. Inicio and Cuenta: grouped pages ---------- */
+:root:root:root body:has(> main .account-layout),:root:root:root body:has(#greeting){background:var(--ui-grouped)}
+.account-layout .card{border:0;border-radius:14px;background:var(--ui-raised)}
+.security summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-radius:14px;font-size:15px}
+.security summary::-webkit-details-marker{display:none}
+.security summary::after{content:'';width:8px;height:8px;margin-right:4px;border-right:2px solid var(--ui-muted);border-bottom:2px solid var(--ui-muted);transform:rotate(-45deg);transition:transform 160ms var(--ui-ease)}
+.security[open] summary::after{transform:rotate(45deg)}
+.security summary:hover{background:var(--ui-hover)}
+
+/* Inicio: app grid and recent activity as grouped cards */
+:root:root:root body:has(#greeting) .service,:root:root:root body:has(#greeting) .table-wrap{border:0;border-radius:16px;background:var(--ui-raised);color:var(--ui-text);box-shadow:0 0 0 .5px var(--ui-line),0 1px 2px rgba(0,0,0,.04)}
+body:has(#greeting) .service{transition:box-shadow 160ms var(--ui-ease),transform 160ms var(--ui-ease)}
+body:has(#greeting) .service:hover{border:0;box-shadow:0 0 0 .5px var(--ui-line),0 8px 24px rgba(0,0,0,.08)}
+:root[data-theme=dark] body:has(#greeting) .service:hover{box-shadow:0 0 0 .5px var(--ui-line),0 8px 24px rgba(0,0,0,.4)}
+body:has(#greeting) .service strong{font-size:15px;font-weight:600;letter-spacing:-.01em}
+body:has(#greeting) .service-description{font-size:13px;line-height:1.35;color:var(--ui-muted)}
+body:has(#greeting) .welcome p{font-size:15px;color:var(--ui-muted)}
+body:has(#greeting) .section-heading h2{font-size:20px;font-weight:700;letter-spacing:-.02em}
+body:has(#greeting) .section-heading span,body:has(#greeting) :is(th,.app-cell,.date-cell){font-size:12px;color:var(--ui-muted)}
+body:has(#greeting) :is(td,th){border-color:var(--ui-line)}
+body:has(#greeting) td{font-size:13px}
+body:has(#greeting) .recent-row:hover{background:var(--ui-hover)}
+body:has(#greeting) .search{height:32px;border:0;border-radius:9px;background:var(--ui-control)}
+body:has(#greeting) .search:focus-within{background:var(--ui-control);box-shadow:0 0 0 3px color-mix(in srgb,var(--ui-blue) 35%,transparent)}
+@media(prefers-reduced-motion:reduce){body:has(#greeting) .service{transition:none}}
+
+/* ---------- 12. Motion and accessibility ---------- */
+@media(prefers-reduced-motion:reduce){.shell-button,:is(.records-main #new,.contact-primary,.mail-primary,.calendar-page button.primary,.account-action.primary),.security summary::after,summary::after{transition:none}}
+@media(prefers-reduced-transparency:reduce){.shell-header,.shell-menu,.contact-popover{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--ui-raised)}}
+@media(pointer:coarse){.shell-button{min-width:40px;min-height:40px}.shell-home,:root[data-theme=dark] .shell-home{height:40px;min-height:40px}:root .shell-header .shell-profile.account-avatar[data-avatar-color]{width:40px;height:40px}.contact-nav button,.mail-nav button{height:40px;min-height:40px}}

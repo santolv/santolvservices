@@ -215,10 +215,12 @@ pub fn routes(core: &App) -> Router {
         let service = *service;
         let app = service.app(core);
         let auth = core.clone();
-        let registered =
-            (service.routes)()
-                .with_state(app.clone())
-                .route_layer(middleware::from_fn(move |request: Request, next: Next| {
+        let own_routes = (service.routes)();
+        // A module whose pages use other services' APIs (the office editors) has no routes of
+        // its own; axum refuses a route layer on an empty router.
+        if own_routes.has_routes() {
+            router = router.merge(own_routes.with_state(app.clone()).route_layer(
+                middleware::from_fn(move |request: Request, next: Next| {
                     let auth = auth.clone();
                     async move {
                         let (mut parts, body) = request.into_parts();
@@ -226,8 +228,9 @@ pub fn routes(core: &App) -> Router {
                         require_access(&auth.db, service.id, user.id).await?;
                         Ok::<_, Error>(next.run(Request::from_parts(parts, body)).await)
                     }
-                }));
-        router = router.merge(registered);
+                }),
+            ));
+        }
         if service.uses_file_store {
             services.push(Registered {
                 service,

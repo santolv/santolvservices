@@ -1,0 +1,32 @@
+# ArtCraft editors hosted by the suite (see docs/architecture/office-editors.md).
+# Each is an official GitHub release, pinned by tag AND commit: the build script refuses a tag
+# that no longer points at the recorded commit. Updating an editor = change tag + commit here,
+# rebuild with tools/build-office-editors.ps1 and review the changes before deploying.
+
+[wordcraft]
+repository = "https://github.com/storytold/wordcraft"
+tag = "v0.19.1"
+commit = "5d658dc033f3139926839bffd6ae0eef558c210c"
+package = "wordcraft-web"
+service = "documents"
+
+[gridcraft]
+repository = "https://github.com/storytold/gridcraft"
+tag = "v0.19.1"
+commit = "476448d7d9f3a5f8e93fcf7d98b47fd52293fe7f"
+package = "gridcraft-web"
+service = "spreadsheets"
+
+[deckcraft]
+repository = "https://github.com/storytold/deckcraft"
+tag = "v0.19.1"
+commit = "4a980c33ddf37eb64157777fcaeab6d19baa5878"
+package = "deckcraft-web"
+service = "presentations"
+
+[pdfcraft]
+repository = "https://github.com/storytold/pdfcraft"
+tag = "v0.22.0"
+commit = "ac140f809d554981a5276d748e6193fcf4d4bdfa"
+package = "pdfcraft-web"
+service = "pdf"

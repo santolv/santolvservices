@@ -2,7 +2,7 @@
 use axum::{
     Router,
     body::Body,
-    extract::{FromRequestParts, Request, State},
+    extract::{FromRequestParts, Path, Request, State},
     http::StatusCode,
     response::{IntoResponse, Redirect, Response},
     routing::get,
@@ -17,7 +17,17 @@ pub struct Frontend {
     app: crate::App,
     authority: String,
     api_origin: String,
+    /// The ArtCraft editors' web builds, `apps/<app>/` beside the installed executable.
+    apps: Option<std::path::PathBuf>,
 }
+
+/// Each ArtCraft editor's web build and the service that grants access to it.
+const EDITORS: &[(&str, &str)] = &[
+    ("wordcraft", "documents"),
+    ("gridcraft", "spreadsheets"),
+    ("deckcraft", "presentations"),
+    ("pdfcraft", "pdf"),
+];
 impl Frontend {
     pub fn bundled(
         origin: &str,
@@ -56,6 +66,9 @@ impl Frontend {
                 .trim_end_matches('/')
                 .into(),
             api_origin: api.origin().ascii_serialization(),
+            apps: std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(|dir| dir.join("apps"))),
         })
     }
     fn with_shell(html: &str) -> Arc<str> {
@@ -92,6 +105,14 @@ impl Frontend {
             &upload
                 .replace("{{action}}", "import")
                 .replace("{{label}}", "Subir fotos"),
+        )
+        .replace(
+            "<!-- SANTOLV_OFFICE_HOST -->",
+            concat!(
+                "<script>",
+                include_str!("../../../frontend/shared/office-host.js"),
+                "</script>"
+            ),
         )
         .replace(
             "<!-- SANTOLV_SIDEBAR_HIDE -->",
@@ -134,7 +155,8 @@ pub fn router(s: Frontend) -> Router {
         .route("/", get(index))
         .route("/index.html", get(index))
         .route("/account", get(index))
-        .route("/account/", get(index));
+        .route("/account/", get(index))
+        .route("/apps/{app}/{*path}", get(asset));
     for (service, _) in &s.modules {
         for path in [
             service.page.to_owned(),
@@ -154,15 +176,96 @@ fn no_store(mut response: Response) -> Response {
     response
 }
 
-async fn index(State(s): State<Frontend>, request: Request) -> Response {
-    let (mut parts, _) = request.into_parts();
-    let headers = &parts.headers;
-    if headers.get_all("host").iter().count() != 1
-        || !headers
+/// Exactly one Host header, naming this listener.
+fn trusted_host(s: &Frontend, headers: &axum::http::HeaderMap) -> bool {
+    headers.get_all("host").iter().count() == 1
+        && headers
             .get("host")
             .and_then(|v| v.to_str().ok())
             .is_some_and(|v| v.eq_ignore_ascii_case(&s.authority))
-    {
+}
+
+/// The content type of an editor build file, or `None` for a kind it never serves.
+fn asset_type(name: &str) -> Option<&'static str> {
+    Some(match name.rsplit_once('.')?.1 {
+        "js" | "mjs" => "text/javascript; charset=utf-8",
+        "wasm" => "application/wasm",
+        "json" => "application/json",
+        "css" => "text/css; charset=utf-8",
+        "png" => "image/png",
+        "ico" => "image/x-icon",
+        "woff2" => "font/woff2",
+        "ttf" => "font/ttf",
+        "otf" => "font/otf",
+        _ => return None,
+    })
+}
+
+/// A file of an ArtCraft editor's web build, for a signed-in user allowed to use that editor. The
+/// path is a few plain segments (no dot files, no traversal) and must be a regular file, not a link.
+async fn asset(
+    State(s): State<Frontend>,
+    Path((app, path)): Path<(String, String)>,
+    request: Request,
+) -> Response {
+    let (mut parts, _) = request.into_parts();
+    if !trusted_host(&s, &parts.headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let Some((_, service)) = EDITORS.iter().find(|(id, _)| *id == app) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    parts.headers.remove("authorization");
+    let user = match crate::auth::User::from_request_parts(&mut parts, &s.app).await {
+        Ok(user) => user,
+        Err(error) => return no_store(error.into_response()),
+    };
+    if let Err(error) = crate::core::manager::require_access(&s.app.db, service, user.id).await {
+        return no_store(error.into_response());
+    }
+    let segments: Vec<&str> = path.split('/').collect();
+    let plain = |segment: &&str| {
+        (1..=128).contains(&segment.len())
+            && !segment.starts_with('.')
+            && segment
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+    };
+    let (Some(root), Some(kind)) = (&s.apps, segments.last().and_then(|name| asset_type(name)))
+    else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    if segments.len() > 4 || !segments.iter().all(plain) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let file = segments
+        .iter()
+        .fold(root.join(&app), |dir, segment| dir.join(segment));
+    match tokio::fs::symlink_metadata(&file).await {
+        Ok(meta) if meta.is_file() => {}
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    }
+    let Ok(handle) = tokio::fs::File::open(&file).await else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let mut response = Response::new(Body::from_stream(tokio_util::io::ReaderStream::new(handle)));
+    for (key, value) in [
+        ("content-type", kind),
+        ("cache-control", "private, no-cache"),
+        ("x-content-type-options", "nosniff"),
+        ("cross-origin-resource-policy", "same-origin"),
+        ("referrer-policy", "no-referrer"),
+    ] {
+        response
+            .headers_mut()
+            .insert(key, value.parse().expect("static header"));
+    }
+    response
+}
+
+async fn index(State(s): State<Frontend>, request: Request) -> Response {
+    let (mut parts, _) = request.into_parts();
+    if !trusted_host(&s, &parts.headers) {
         return StatusCode::FORBIDDEN.into_response();
     }
     let module = s.modules.iter().find(|(service, _)| {
@@ -181,7 +284,12 @@ async fn index(State(s): State<Frontend>, request: Request) -> Response {
             return if parts.uri.path() != "/" {
                 no_store(Redirect::to("/").into_response())
             } else {
-                render(&s, include_str!("../../../frontend/home/login.html"), true)
+                render(
+                    &s,
+                    include_str!("../../../frontend/home/login.html"),
+                    true,
+                    false,
+                )
             };
         }
         Err(error) => return no_store(error.into_response()),
@@ -213,10 +321,13 @@ async fn index(State(s): State<Frontend>, request: Request) -> Response {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    render(&s, &html, false)
+    let editor = module.is_some_and(|(service, _)| EDITORS.iter().any(|(_, id)| *id == service.id));
+    render(&s, &html, false, editor)
 }
 
-fn render(s: &Frontend, html: &str, login: bool) -> Response {
+/// `editor`: an ArtCraft editor page, whose WebAssembly build is loaded from `/apps/` on this
+/// origin. Only those pages may run WebAssembly ('wasm-unsafe-eval') and same-origin scripts.
+fn render(s: &Frontend, html: &str, login: bool, editor: bool) -> Response {
     let nonce = crate::auth::token();
     let html = html.replace(
         "const API_ORIGIN=location.protocol==='https:'?location.origin:'http://localhost:8443';",
@@ -242,9 +353,16 @@ fn render(s: &Frontend, html: &str, login: bool) -> Response {
         (
             "content-security-policy",
             format!(
-                "default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; style-src-attr {}; connect-src {}; img-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
+                "default-src 'none'; script-src 'nonce-{nonce}'{}; style-src 'nonce-{nonce}'; style-src-attr {}; connect-src {}{}; img-src 'self' blob:{}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
+                if editor {
+                    " 'self' 'wasm-unsafe-eval'"
+                } else {
+                    ""
+                },
                 if login { "'none'" } else { "'unsafe-inline'" },
-                s.api_origin
+                s.api_origin,
+                if editor { " 'self'" } else { "" },
+                if editor { " data:" } else { "" }
             ),
         ),
     ] {

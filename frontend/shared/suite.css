@@ -244,12 +244,29 @@ body:has(#greeting) .search:focus-within{background:var(--ui-control);box-shadow
 .app .inline-rename{width:100%;max-width:150px;height:22px;padding:0 5px;border:0;border-radius:5px;background:var(--ui-raised);color:var(--ui-text);box-shadow:0 0 0 2px var(--ui-blue);font:500 13px/22px var(--ui-font);text-align:center;outline:0;user-select:text}
 .app .list .inline-rename,.app [data-view="list"] .inline-rename{max-width:none;text-align:start}
 
-/* ---------- 13. Pop-up buttons: native selects drawn as macOS pop-ups ---------- */
-:is(.calendar-page,.cal-sidebar,.calendar-form,.records-main,.records-editor,.app,main,.contact-dialog,.mail-dialog,.photo-inspector) select:not([multiple]):not([size]):not(#sort-order){-webkit-appearance:none;appearance:none;height:30px;min-height:30px;padding:0 30px 0 10px;border:0;border-radius:7px;background-color:var(--ui-control);background-image:linear-gradient(45deg,transparent 50%,var(--ui-muted) 50%),linear-gradient(135deg,var(--ui-muted) 50%,transparent 50%);background-position:calc(100% - 15px) 55%,calc(100% - 11px) 55%;background-size:4px 4px;background-repeat:no-repeat;color:var(--ui-text);font:500 13px/1 var(--ui-font);cursor:pointer;transition:background-color 120ms ease}
-:is(.calendar-page,.cal-sidebar,.calendar-form,.records-main,.records-editor,.app,main,.contact-dialog,.mail-dialog,.photo-inspector) select:not([multiple]):not([size]):not(#sort-order):hover{background-color:color-mix(in srgb,var(--ui-text) 12%,transparent)}
-:is(.calendar-page,.cal-sidebar,.calendar-form,.records-main,.records-editor,.app,main,.contact-dialog,.mail-dialog,.photo-inspector) select:focus-visible{outline:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--ui-blue) 35%,transparent)}
-.account-layout select{height:36px;min-height:36px;border-radius:9px}
-select option{background:var(--ui-raised);color:var(--ui-text)}
+/* ---------- 13. Selector (shared component in shell.js) ----------
+   One look for every dropdown. The native <select> stays in the page, visually hidden,
+   so values, forms, validation and listeners keep working. :is(#_) raises specificity
+   above each module's generic button rules without !important. */
+:root{--select-bg:#f5f5f5;--select-border:#d5d5d5;--select-text:#202020;--select-placeholder:#8a8a8a;--select-menu-bg:#fff;--select-menu-border:#d5d5d5;--select-hover:#eee;--select-option-text:#202020;--select-shadow:0 4px 12px rgba(0,0,0,.12)}
+:root[data-theme=dark]{--select-bg:#242424;--select-border:#505050;--select-text:#fff;--select-placeholder:#8e8e8e;--select-menu-bg:#1c1c1c;--select-menu-border:#303030;--select-hover:#262626;--select-option-text:#f5f5f5;--select-shadow:0 4px 12px rgba(0,0,0,.35)}
+select.santolv-select-native:is(#_,select){position:absolute;width:1px;height:1px;min-width:0;min-height:0;margin:0;padding:0;border:0;opacity:0;pointer-events:none;overflow:hidden;clip-path:inset(50%)}
+button.santolv-select:is(#_,button){display:inline-flex;align-items:center;gap:8px;box-sizing:border-box;width:auto;max-width:100%;height:32px;min-height:32px;margin:0;padding:0 10px 0 12px;border:1px solid var(--select-border);border-radius:12px;background:var(--select-bg);color:var(--select-text);font:500 13px/1 var(--ui-font);letter-spacing:-.005em;text-align:left;cursor:pointer;box-shadow:none;filter:none;transform:none;transition:border-color 120ms ease,background-color 120ms ease}
+button.santolv-select.santolv-select-wide:is(#_,button){display:flex;width:100%}
+button.santolv-select:is(#_,button):hover:not(:disabled){filter:none;background:var(--select-bg);border-color:color-mix(in srgb,var(--select-border) 70%,var(--select-text))}
+button.santolv-select:is(#_,button):focus-visible{outline:2px solid var(--ui-blue);outline-offset:2px}
+button.santolv-select:is(#_,button):disabled{opacity:.5;cursor:default}
+button.santolv-select:is(#_,button)[hidden]{display:none}
+.santolv-select-value{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.santolv-select-value.placeholder{color:var(--select-placeholder)}
+button.santolv-select:is(#_,button) svg{flex:none;width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;opacity:.8}
+.santolv-select-menu:is(#_,div){position:fixed;inset:auto;margin:0;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;padding:4px;border:1px solid var(--select-menu-border);border-radius:12px;background:var(--select-menu-bg);color:var(--select-option-text);box-shadow:var(--select-shadow);font:500 13px/1 var(--ui-font);opacity:0;transform:scale(.98);transform-origin:top center;transition:opacity 120ms ease,transform 120ms ease}
+.santolv-select-menu:is(#_,div)[data-direction=up]{transform-origin:bottom center}
+.santolv-select-menu:is(#_,div).open{opacity:1;transform:none}
+.santolv-select-option{display:flex;align-items:center;height:32px;min-height:32px;padding:0 8px;border-radius:10px;color:var(--select-option-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;user-select:none}
+.santolv-select-option.active{background:var(--select-hover)}
+.santolv-select-option[aria-disabled=true]{opacity:.4;cursor:default}
+@media(prefers-reduced-motion:reduce){.santolv-select-menu:is(#_,div),button.santolv-select:is(#_,button){transition:none}}
 
 /* ---------- 14. Motion: short, physical, tied to what changed ---------- */
 @keyframes santolv-pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}

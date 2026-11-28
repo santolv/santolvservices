@@ -57,6 +57,7 @@ body{font-family:var(--ui-font)}
 .shell-menu hr{margin:5px 10px;border:0;border-top:1px solid var(--ui-line)}
 .shell-app-mark{width:10px;height:10px;flex:none}
 .shell-notes-mark{background:#f5b500}.shell-tasks-mark{background:#1a7cf5}
+.shell-documents-mark{background:#2b66b1}.shell-spreadsheets-mark{background:#1f8a4c}.shell-presentations-mark{background:#d4572a}.shell-pdf-mark{background:#e2352b}
 .calendar-popup{padding:6px}
 
 /* ---------- 3. Sidebars: one source list for every service ---------- */

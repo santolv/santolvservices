@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="color-scheme" content="light dark">
+<title>Hojas de cálculo · Santolv</title>
+<style>
+html,body{height:100%}
+body{margin:0;display:flex;flex-direction:column;overflow:hidden;background:#fff}
+.office-stage{position:relative;flex:1;min-height:0}
+#gridcraft_canvas{position:absolute;inset:0;width:100%;height:100%;display:block;outline:none}
+.office-status{position:absolute;right:16px;bottom:16px;z-index:5;max-width:min(420px,calc(100% - 32px));padding:7px 12px;border-radius:999px;background:var(--ui-menu,#fff);color:var(--ui-text,#1d1d1f);box-shadow:var(--ui-menu-shadow,0 4px 12px rgba(0,0,0,.15));font:500 12px/1.3 var(--ui-font,system-ui,sans-serif);pointer-events:none}
+.office-status[data-state=error]{color:var(--ui-red,#d92d25)}
+.office-status[data-state=saved]::before{content:'';display:inline-block;width:7px;height:7px;margin-right:7px;border-radius:50%;background:#30d158;vertical-align:1px}
+.office-status[data-state=dirty]::before{content:'';display:inline-block;width:7px;height:7px;margin-right:7px;border-radius:50%;background:#ff9f0a;vertical-align:1px}
+.office-status[hidden]{display:none}
+</style>
+</head>
+<body data-service="spreadsheets" class="office-page">
+<!-- SANTOLV_SHELL -->
+<main class="office-stage">
+  <canvas id="gridcraft_canvas" data-host="page" aria-label="Hojas de cálculo"></canvas>
+  <p class="office-status" id="office-status" role="status" data-state="pending">Cargando el editor…</p>
+</main>
+<script>window.SantolvOffice={app:'gridcraft',canvas:'gridcraft_canvas',module:'/apps/gridcraft/gridcraft-web.js',wasm:'/apps/gridcraft/gridcraft-web_bg.wasm'};</script>
+<!-- SANTOLV_OFFICE_HOST -->
+</body>
+</html>

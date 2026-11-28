@@ -257,13 +257,13 @@ button.santolv-select:is(#_,button):hover:not(:disabled){filter:none;background:
 button.santolv-select:is(#_,button):focus-visible{outline:2px solid var(--ui-blue);outline-offset:2px}
 button.santolv-select:is(#_,button):disabled{opacity:.5;cursor:default}
 button.santolv-select:is(#_,button)[hidden]{display:none}
-.santolv-select-value{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.santolv-select-value{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:18px}
 .santolv-select-value.placeholder{color:var(--select-placeholder)}
 button.santolv-select:is(#_,button) svg{flex:none;width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;opacity:.8}
 .santolv-select-menu:is(#_,div){position:fixed;inset:auto;margin:0;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;padding:4px;border:1px solid var(--select-menu-border);border-radius:12px;background:var(--select-menu-bg);color:var(--select-option-text);box-shadow:var(--select-shadow);font:500 13px/1 var(--ui-font);opacity:0;transform:scale(.98);transform-origin:top center;transition:opacity 120ms ease,transform 120ms ease}
 .santolv-select-menu:is(#_,div)[data-direction=up]{transform-origin:bottom center}
 .santolv-select-menu:is(#_,div).open{opacity:1;transform:none}
-.santolv-select-option{display:flex;align-items:center;height:32px;min-height:32px;padding:0 8px;border-radius:10px;color:var(--select-option-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;user-select:none}
+.santolv-select-option{display:flex;align-items:center;height:32px;min-height:32px;padding:0 8px;line-height:18px;border-radius:10px;color:var(--select-option-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;user-select:none}
 .santolv-select-option.active{background:var(--select-hover)}
 .santolv-select-option[aria-disabled=true]{opacity:.4;cursor:default}
 @media(prefers-reduced-motion:reduce){.santolv-select-menu:is(#_,div),button.santolv-select:is(#_,button){transition:none}}

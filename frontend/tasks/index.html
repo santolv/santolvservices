@@ -77,14 +77,14 @@
  const {api,start}=window.SantolvRecords.create(),$=id=>document.getElementById(id),form=$('edit-form'),editor=$('editor'),filters=$('filters'),noteSelect=form.elements.note_id;
  const states={pending:'Pendiente',in_progress:'En curso',done:'Hecha'},priorities={low:'Baja',normal:'Normal',high:'Alta'},format=new Intl.DateTimeFormat('es',{dateStyle:'medium',timeStyle:'short'});
  const noteFilter=new URLSearchParams(location.search).get('note');
- let editing,cursor,request,params,saving=false,ready=false,searchTimer,initialDue,pickerRequest,pickerCursor,pickerParams;
+ let editing,cursor,request,params,saving=false,ready=false,searchTimer,initialDue,pickerRequest,pickerCursor,pickerParams;const records=new WeakMap();
  const message=(text,error=false)=>{$('message').textContent=text;$('message').dataset.error=String(error)};
  const error=(text='')=>{$('editor-error').textContent=text;$('editor-error').hidden=!text};
  const path=id=>'/tasks'+(id?'/'+encodeURIComponent(id):'');
  function row(task){const li=document.createElement('li');li.className='task-row'+(task.status==='done'?' done':'');
   const toggle=document.createElement('button');toggle.type='button';toggle.className='task-toggle';toggle.setAttribute('aria-label',(task.status==='done'?'Marcar pendiente: ':'Completar: ')+task.title);toggle.setAttribute('aria-pressed',String(task.status==='done'));
   toggle.addEventListener('click',async()=>{toggle.disabled=true;try{await api(path(task.id),{method:'PUT',body:{title:task.title,status:task.status==='done'?'pending':'done',priority:task.priority,due_at:task.due_at,note_id:task.note_id,archived:Boolean(task.archived_at)}});await load()}catch(e){message(e.message,true)}finally{toggle.disabled=false}});
-  const button=document.createElement('button');button.type='button';button.className='record-open';const title=document.createElement('strong');title.textContent=task.title;const meta=document.createElement('span');meta.className='meta';meta.textContent=[states[task.status],priorities[task.priority],task.due_at?'Vence '+format.format(new Date(task.due_at)):''].filter(Boolean).join(' · ');button.append(title,meta);button.addEventListener('click',()=>open(task));li.append(toggle,button);return li;
+  const button=document.createElement('button');button.type='button';button.className='record-open';const title=document.createElement('strong');title.textContent=task.title;const meta=document.createElement('span');meta.className='meta';meta.textContent=[states[task.status],priorities[task.priority],task.due_at?'Vence '+format.format(new Date(task.due_at)):''].filter(Boolean).join(' · ');button.append(title,meta);button.addEventListener('click',()=>open(task));li.append(toggle,button);records.set(li,task);return li;
  }
  async function load(append=false){if(!ready||append&&!cursor)return;request?.abort();const current=new AbortController();request=current;
   if(!append){$('items').replaceChildren();$('completed-items').replaceChildren();cursor=null;params=new URLSearchParams({archived:filters.elements.archived.value});for(const key of ['q','status','priority'])if(filters.elements[key].value.trim())params.set(key,filters.elements[key].value.trim());if(noteFilter&&!$('note-filter').hidden)params.set('note_id',noteFilter)}
@@ -113,6 +113,15 @@
  $('load-notes').addEventListener('click',()=>void loadNotes(Boolean(pickerCursor)));$('search-notes').addEventListener('click',()=>void loadNotes());$('picker-archived').addEventListener('change',()=>void loadNotes());$('picker-query').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void loadNotes()}});
  $('quick-task').addEventListener('submit',async e=>{e.preventDefault();const input=$('quick-task').elements.title,button=$('quick-task').querySelector('button');button.disabled=true;try{await api('/tasks',{method:'POST',body:{title:input.value}});input.value='';await load();input.focus()}catch(err){message(err.message,true)}finally{button.disabled=false}});
  for(const button of document.querySelectorAll('[data-record-archive]'))button.addEventListener('click',()=>{filters.elements.archived.value=button.dataset.recordArchive;for(const b of document.querySelectorAll('[data-record-archive]'))b.setAttribute('aria-pressed',String(b===button));void load()});
+ const edit=(task,changes)=>({title:task.title,status:task.status,priority:task.priority,due_at:task.due_at,note_id:task.note_id,archived:Boolean(task.archived_at),...changes});
+ async function quick(task,method,body){try{await api(path(task.id),{method,body});await load()}catch(e){message(e.message,true)}}
+ const taskMenu=event=>{const task=records.get(event.target.closest('li'));if(!task||!ready||editor.open)return;const done=task.status==='done',archived=Boolean(task.archived_at);
+  return [{label:'Abrir',icon:'open',action:()=>open(task)},{label:done?'Marcar como pendiente':'Marcar como hecha',icon:done?'circle':'check',action:()=>quick(task,'PUT',edit(task,{status:done?'pending':'done'}))},
+   {label:task.priority==='high'?'Quitar prioridad alta':'Prioridad alta',icon:'star',action:()=>quick(task,'PUT',edit(task,{priority:task.priority==='high'?'normal':'high'}))},
+   {label:'Abrir nota vinculada',icon:'edit',hidden:!task.note_id,action:()=>location.assign('/notes/?id='+encodeURIComponent(task.note_id))},'-',
+   {label:archived?'Restaurar':'Archivar',icon:archived?'restore':'archive',action:()=>quick(task,'PUT',edit(task,{archived:!archived}))},'-',
+   {label:'Eliminar',icon:'trash',danger:true,action:()=>{if(window.confirm('¿Eliminar esta tarea?'))return quick(task,'DELETE')}}]};
+ for(const list of [$('items'),$('completed-items')])window.SantolvShell?.bindContextMenu?.(list,taskMenu,{label:'Acciones de la tarea'});
  filters.addEventListener('submit',e=>{e.preventDefault();void load()});filters.addEventListener('change',e=>{if(e.target.matches('select'))void load()});filters.elements.q.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>void load(),200)});
  message('Cargando…');start().then(async()=>{ready=true;$('new').disabled=false;$('new').textContent='Nueva tarea';$('task-fields').hidden=false;$('task-fields').disabled=false;$('note-filter').hidden=!noteFilter;if(noteFilter)$('note-filter-label').textContent='Tareas de la nota vinculada';await load();const id=new URLSearchParams(location.search).get('id');if(id)open(await api(path(id)))}).catch(e=>message(e.message,true));
 })();

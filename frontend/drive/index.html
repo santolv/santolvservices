@@ -576,7 +576,7 @@ function driveContextMenu(event){if(event.target.closest('input,textarea,select,
 const EDITOR_FOR={docx:'documents',doc:'documents',odt:'documents',rtf:'documents',xlsx:'spreadsheets',xls:'spreadsheets',xlsm:'spreadsheets',ods:'spreadsheets',csv:'spreadsheets',pptx:'presentations',ppt:'presentations',odp:'presentations',pdf:'pdf'};
 let editorServices=null;
 async function openFile(n){const ext=n?.name?.split('.').pop()?.toLowerCase(),service=EDITOR_FOR[ext];
- if(service&&!n.trashed_at){try{editorServices??=(await api('/services')).items.filter(s=>s.enabled).map(s=>s.id);if(editorServices.includes(service)){location.assign('/'+service+'/?node='+encodeURIComponent(n.id));return}}catch{}}
+ if(service&&!n.trashed_at){try{if(!editorServices){const r=await api('/services');editorServices=(r.data||r).items.filter(s=>s.enabled).map(s=>s.id)}if(editorServices.includes(service)){location.assign('/'+service+'/?node='+encodeURIComponent(n.id));return}}catch{}}
  detail()}
 document.addEventListener('contextmenu',driveContextMenu);
 // Finder-style rename in place; falls back to the dialog when the label is not on screen.

@@ -63,9 +63,9 @@
 .app .shell-upload-button:disabled{opacity:.3;cursor:default}
 .app .shell-upload-button:focus-visible{outline:2.14px solid var(--blue);outline-offset:2.14px}
 @media(max-width:620px){.app .shell-upload-button{width:29px;height:33px}.app .shell-upload-button svg{width:18px;height:18px}}
-.app .shell-sidebar-toggle[data-shell-sidebar="show"]{display:none}
-.app.sidebar-hidden .shell-sidebar-toggle[data-shell-sidebar="show"]{display:grid}
-@media(max-width:620px){.sidebar-top{margin-bottom:5px}.app:not(.mobile-sidebar) .shell-sidebar-toggle[data-shell-sidebar="show"]{display:grid}.app.mobile-sidebar .shell-sidebar-toggle[data-shell-sidebar="show"]{display:none}}
+.app .shell-sidebar-slot[data-shell-sidebar-slot="show"]{display:none}
+.app.sidebar-hidden .shell-sidebar-slot[data-shell-sidebar-slot="show"]{display:block}
+@media(max-width:620px){.sidebar-top{margin-bottom:5px}.app:not(.mobile-sidebar) .shell-sidebar-slot[data-shell-sidebar-slot="show"]{display:block}.app.mobile-sidebar .shell-sidebar-slot[data-shell-sidebar-slot="show"]{display:none}}
 @media(max-width:620px){.shell-header{padding-inline:12px}.shell-controls{gap:5px}.shell-home{padding:0 10px}}
 @media(max-width:360px){.shell-home span{display:none}.shell-home{width:34px;padding:0}}
 @media(pointer:coarse){.shell-home{min-width:44px;height:44px}.shell-top-edge .shell-button{min-height:44px}}

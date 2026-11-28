@@ -146,7 +146,7 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
 .calendar-page .cal-sidebar{overflow-x:hidden;overflow-y:auto;gap:14px}
 .cal-sidebar .cal-mini{display:grid;gap:6px;padding:0 2px}
 .cal-mini-head{display:flex;align-items:center;gap:2px}
-.cal-mini-head strong{flex:1;font-size:13px;font-weight:600;text-transform:capitalize}
+.cal-mini-head strong{flex:1;font-size:13px;font-weight:600}
 .calendar-page .cal-mini-head button{display:grid;place-items:center;width:24px;height:24px;min-height:24px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--cal-muted)}
 .calendar-page .cal-mini-head button:hover{background:var(--ui-hover);filter:none}
 .cal-mini-head svg,.cal-group summary button svg,.cal-item-more svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
@@ -503,7 +503,8 @@ body.calendar-body{font:15px/1.45 var(--ui-font)}#event-form,#event-form .cal-da
     return item && calendarItems(item);
   }, {label: 'Opciones del calendario'});
   function renderMini() {
-    $('mini-title').textContent = miniMonth.toLocaleDateString('es-ES', {month: 'long', year: 'numeric'});
+    const miniTitle = miniMonth.toLocaleDateString('es-ES', {month: 'long', year: 'numeric'});
+    $('mini-title').textContent = miniTitle.charAt(0).toLocaleUpperCase('es') + miniTitle.slice(1);
     const grid = $('mini-grid');
     grid.replaceChildren(...['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(text => Object.assign(document.createElement('span'), {className: 'cal-mini-weekday', textContent: text})));
     const [from, to] = range(), first = monday(miniMonth), today = key(new Date());

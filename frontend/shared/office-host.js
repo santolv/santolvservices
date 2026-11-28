@@ -31,6 +31,7 @@
   }
   function messageFor(code) {
     return ({
+      revision_changed: 'Otra persona ha guardado una versión más reciente. Guarda con otro nombre para no perder tus cambios.',
       revision_conflict: 'Otra persona ha guardado una versión más reciente. Guarda con otro nombre para no perder tus cambios.',
       name_conflict: 'Ya existe un archivo con ese nombre en la carpeta.',
       quota_exceeded: 'No queda espacio en tu Drive.',

@@ -212,11 +212,22 @@ main{grid-column:2;grid-row:2;position:relative;min-width:0;min-height:0;overflo
 
 .drive-page .cloud-columns>span{grid-row:1}.drive-page .cloud-columns>span:first-child{grid-column:2}.drive-page .cloud-columns>span:last-child{display:none}.drive-page .search input{font:13px/1.35 var(--ui-font)}.drive-page .files.grid .cap b{max-width:124px;word-break:normal;overflow-wrap:break-word}.drive-page .files.grid .card{user-select:none}
 
-/* Menú contextual y menú Nuevo: cristal esmerilado de macOS. Solo cambia el fondo;
-   el desenfoque actúa sobre lo que hay detrás, nunca sobre el texto o los iconos.
+/* Menú contextual y menú Nuevo: cristal esmerilado de macOS.
+   El desenfoque actúa solo sobre lo que hay detrás; texto e iconos quedan nítidos.
    Se mantiene aunque Windows tenga desactivada la transparencia: es una elección del propietario. */
-.drive-page #node-menu.menu,.drive-page #new-menu.menu{background:rgba(246,246,248,.85);-webkit-backdrop-filter:blur(30px) saturate(100%);backdrop-filter:blur(30px) saturate(100%);border:1px solid rgba(0,0,0,.05);box-shadow:0 6px 18px rgba(0,0,0,.12)}
-:root[data-theme=dark] .drive-page #node-menu.menu,:root[data-theme=dark] .drive-page #new-menu.menu{background:rgba(40,40,42,.85);border-color:rgba(255,255,255,.03);box-shadow:0 8px 22px rgba(0,0,0,.28)}
+.drive-page :is(#node-menu,#new-menu).menu{min-width:228px;padding:5px;border-radius:11px;background:rgba(246,246,248,.82);-webkit-backdrop-filter:blur(24px) saturate(115%);backdrop-filter:blur(24px) saturate(115%);border:1px solid rgba(0,0,0,.06);box-shadow:0 6px 16px rgba(0,0,0,.14);color:rgba(0,0,0,.88);font:500 13px/20px "SF Pro Text",-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text","Segoe UI",sans-serif;letter-spacing:-.15px}
+:root[data-theme=dark] .drive-page :is(#node-menu,#new-menu).menu{background:rgba(40,40,42,.82);border-color:rgba(255,255,255,.05);box-shadow:0 6px 16px rgba(0,0,0,.3);color:rgba(255,255,255,.95)}
+.drive-page :is(#node-menu,#new-menu).menu button{display:flex;align-items:center;gap:9px;width:100%;height:26px;min-height:26px;padding:0 9px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;letter-spacing:inherit;text-align:start}
+.drive-page :is(#node-menu,#new-menu).menu button span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drive-page #node-menu.menu .menu-glyph{width:16px;height:16px;flex:none;fill:none;stroke:#0a84ff;stroke-width:1.3;stroke-linecap:round;stroke-linejoin:round}
+.drive-page :is(#node-menu,#new-menu).menu button:is(:hover,:focus-visible):not(:disabled){outline:0;background:#0a84ff;color:#fff}
+.drive-page #node-menu.menu button:is(:hover,:focus-visible):not(:disabled) .menu-glyph{stroke:#fff}
+.drive-page #node-menu.menu button.destructive{color:#ff453a}
+.drive-page #node-menu.menu button.destructive .menu-glyph{stroke:#ff453a}
+.drive-page #node-menu.menu button.destructive:is(:hover,:focus-visible):not(:disabled){background:#ff453a;color:#fff}
+.drive-page #node-menu.menu button.destructive:is(:hover,:focus-visible):not(:disabled) .menu-glyph{stroke:#fff}
+.drive-page :is(#node-menu,#new-menu).menu hr{height:1px;margin:4px 9px;border:0;background:rgba(0,0,0,.08)}
+:root[data-theme=dark] .drive-page :is(#node-menu,#new-menu).menu hr{background:rgba(255,255,255,.08)}
 </style></head>
 <body class="drive-page">
 <svg aria-hidden="true" style="display:none" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -523,11 +534,13 @@ function photoParent(index){
  return load();
 }
 function closeMenus(){for(const id of ['new-menu','node-menu'])$(id).classList.remove('show');$('newBtn').setAttribute('aria-expanded','false')}
+const MENU_GLYPHS={open:'<path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/>',folder:'<path d="M1.8 4.5A1.5 1.5 0 0 1 3.3 3h2.7l1.5 1.7h5.2a1.5 1.5 0 0 1 1.5 1.5v5.3a1.5 1.5 0 0 1-1.5 1.5H3.3a1.5 1.5 0 0 1-1.5-1.5z"/>',info:'<circle cx="8" cy="8" r="6"/><path d="M8 7.3V11M8 5v.1"/>',users:'<circle cx="6" cy="5.5" r="2.3"/><path d="M1.8 13c.3-2.3 2-3.5 4.2-3.5s3.9 1.2 4.2 3.5M10.5 3.5a2.2 2.2 0 0 1 0 4.2M12.5 9.7c1.2.5 1.9 1.6 2 3.3"/>',pen:'<path d="m10.5 3 2.5 2.5L5.5 13H3v-2.5z"/>',move:'<path d="M1.8 4.5A1.5 1.5 0 0 1 3.3 3h2.7l1.5 1.7h5.2a1.5 1.5 0 0 1 1.5 1.5v5.3a1.5 1.5 0 0 1-1.5 1.5H3.3a1.5 1.5 0 0 1-1.5-1.5zM6 9h4M8.5 7.2 10.3 9 8.5 10.8"/>',trash:'<path d="M2.5 4h11M6 4V2.5h4V4M4 4l.6 9.2h6.8L12 4M6.7 6.5v4.5M9.3 6.5v4.5"/>',restore:'<path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v3h3"/>'};
+const menuIcon=name=>'<svg class="menu-glyph" viewBox="0 0 16 16" aria-hidden="true">'+(MENU_GLYPHS[name]||'')+'</svg>';
 function nodeMenu(event,node){
  event.preventDefault();contextSpace=null;const n=state.rows.find(n=>n.id===node.dataset.node);if(!n)return;
  closeMenus();state.selected=n;state.selection=n.id;document.querySelectorAll('[data-node]').forEach(card=>{const selected=card.dataset.node===n.id;card.classList.toggle('on',selected);card.setAttribute('aria-pressed',String(selected))});selectionBar();
- const options=n.trashed_at?[['restore','Restaurar','history'],['purge','Eliminar definitivamente','trash']]:[['inspect',n.kind==='folder'?'Abrir carpeta':'Abrir','folder'],['info','Obtener información','file'],...(n.kind==='file'?[['download-selected','Descargar una copia','download']]:[]),...(protectedItem(n)?[]:[['share','Compartir','users'],['rename','Cambiar nombre','edit'],['move','Mover a una carpeta','folder'],['trash','Enviar a la papelera','trash']])];
- const menu=$('node-menu');menu.innerHTML=options.map(([action,label,name],i)=>(i&&['download-selected','share','duplicate','trash'].includes(action)?'<hr>':'')+'<button role="menuitem" data-action="'+action+'"'+(['trash','purge'].includes(action)?' class="destructive"':'')+'>'+icon(name)+esc(label)+'</button>').join('');
+ const options=n.trashed_at?[['restore','Restaurar','restore'],['purge','Eliminar definitivamente','trash']]:[['inspect',n.kind==='folder'?'Abrir carpeta':'Abrir',n.kind==='folder'?'folder':'open'],['info','Obtener información','info'],...(protectedItem(n)?[]:[['share','Compartir','users'],['rename','Cambiar nombre','pen'],['move','Mover a una carpeta','move'],['trash','Enviar a la papelera','trash']])];
+ const menu=$('node-menu');menu.innerHTML=options.map(([action,label,name],i)=>(i&&['download-selected','share','duplicate','trash'].includes(action)?'<hr>':'')+'<button role="menuitem" data-action="'+action+'"'+(['trash','purge'].includes(action)?' class="destructive"':'')+'>'+menuIcon(name)+'<span>'+esc(label)+'</span></button>').join('');
  menu.classList.add('show');const rect=node.getBoundingClientRect();menu.style.left=Math.max(12,Math.min(event.clientX??rect.left,innerWidth-menu.offsetWidth-12))+'px';menu.style.top=Math.max(12,Math.min(event.clientY??rect.bottom,innerHeight-menu.offsetHeight-12))+'px';menu.querySelector('button')?.focus();
 }
 

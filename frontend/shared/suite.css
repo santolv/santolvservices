@@ -20,6 +20,7 @@
   --text:var(--ui-text);--line:var(--ui-line);--fill:var(--ui-control);--hover:var(--ui-hover);
   --blue:var(--ui-blue);--red:var(--ui-red);--nav-selected:var(--ui-control);--segment:var(--ui-selected);
   --photo-sidebar-width:var(--ui-sidebar-width);
+  --drive-menu:var(--ui-menu);--drive-shadow:var(--ui-menu-shadow);
   /* Calendario */
   --cal-bg:var(--ui-canvas);--cal-panel:var(--ui-raised);--cal-text:var(--ui-text);--cal-muted:var(--ui-muted);--cal-line:var(--ui-line);
   /* Cuenta */
@@ -48,7 +49,7 @@ body{font-family:var(--ui-font)}
 #shell-calendar-count{top:2px;right:1px;min-width:15px;padding:1px 4px;border-radius:8px;background:var(--ui-red);font:600 10px/1.3 var(--ui-font);text-align:center}
 
 /* Menus: macOS pop-up menus, accent highlight under the pointer */
-.shell-menu,:root[data-theme=dark] .shell-menu{inset:54px 12px auto auto;width:min(244px,calc(100vw - 24px));padding:5px;border:0;border-radius:12px;background:var(--ui-menu);color:var(--ui-text);-webkit-backdrop-filter:saturate(180%) blur(24px);backdrop-filter:saturate(180%) blur(24px);box-shadow:var(--ui-menu-shadow);font:13px/1.35 var(--ui-font)}
+.shell-menu,:root[data-theme=dark] .shell-menu{inset:54px 12px auto auto;width:min(244px,calc(100vw - 24px));padding:5px;border:0;border-radius:12px;background:var(--ui-menu);color:var(--ui-text);box-shadow:var(--ui-menu-shadow);font:13px/1.35 var(--ui-font)}
 .shell-menu strong{padding:7px 10px 5px;font-weight:600}
 .shell-menu p{padding:4px 10px 7px;color:var(--ui-muted)}
 .shell-menu a,.shell-menu button{gap:10px;min-height:30px;padding:5px 10px;border-radius:6px;font-weight:400}
@@ -171,7 +172,7 @@ body[data-service="tasks"] .records-main .quick-task>span{color:var(--ui-blue)}
 .records-editor #cancel{border-radius:50%;padding:0;height:28px;min-height:28px}
 .contact-dialog-body :is(input,textarea),.calendar-form :is(input:not([type=checkbox]),select,textarea),.records-editor :is(input:not([name=title]):not([type=checkbox]),select){border:1px solid var(--ui-line);border-radius:8px;background:var(--ui-canvas)}
 :is(.contact-dialog-body,.calendar-form,.records-editor) :is(input:not([name=title]),select,textarea:not([name=content])):focus-visible{outline:0;border-color:var(--ui-blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--ui-blue) 30%,transparent)}
-.contact-popover{padding:5px;border:0;border-radius:12px;background:var(--ui-menu);-webkit-backdrop-filter:saturate(180%) blur(24px);backdrop-filter:saturate(180%) blur(24px);box-shadow:var(--ui-menu-shadow)}
+.contact-popover{padding:5px;border:0;border-radius:12px;background:var(--ui-menu);box-shadow:var(--ui-menu-shadow)}
 .contact-popover .contact-button{height:30px;min-height:30px;border-radius:6px;font-weight:400}
 .contact-popover .contact-button:hover{background:var(--ui-tint-fill);color:#fff}
 
@@ -207,8 +208,10 @@ body:has(#greeting) .search{height:32px;border:0;border-radius:9px;background:va
 body:has(#greeting) .search:focus-within{background:var(--ui-control);box-shadow:0 0 0 3px color-mix(in srgb,var(--ui-blue) 35%,transparent)}
 @media(prefers-reduced-motion:reduce){body:has(#greeting) .service{transition:none}}
 
-/* ---------- 12. Context menus (shared component in shell.js) ---------- */
-.santolv-menu{position:fixed;z-index:1000;min-width:220px;max-width:min(320px,calc(100vw - 16px));padding:5px;border-radius:12px;background:var(--ui-menu);color:var(--ui-text);-webkit-backdrop-filter:saturate(180%) blur(24px);backdrop-filter:saturate(180%) blur(24px);box-shadow:var(--ui-menu-shadow);font:13px/1.3 var(--ui-font);opacity:0;transform:scale(.96);transition:opacity 120ms ease,transform 160ms var(--ui-ease);user-select:none}
+/* ---------- 12. Context menus (shared component in shell.js) ----------
+   Every menu in the suite is an opaque surface with a hairline and a short
+   shadow: nothing behind it shows through and no dark halo spreads below. */
+.santolv-menu{position:fixed;z-index:1000;min-width:220px;max-width:min(320px,calc(100vw - 16px));padding:5px;border-radius:12px;background:var(--ui-menu);color:var(--ui-text);box-shadow:var(--ui-menu-shadow);font:13px/1.3 var(--ui-font);opacity:0;transform:scale(.96);transition:opacity 120ms ease,transform 160ms var(--ui-ease);user-select:none}
 .santolv-menu.open{opacity:1;transform:none}
 .santolv-menu button{display:flex;align-items:center;gap:10px;width:100%;height:28px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;text-align:start;cursor:default}
 .santolv-menu button span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -220,6 +223,7 @@ body:has(#greeting) .search:focus-within{background:var(--ui-control);box-shadow
 .santolv-menu button:disabled{opacity:.4}
 .santolv-menu hr{height:1px;margin:5px 10px;border:0;background:var(--ui-line)}
 /* Drive keeps its own menu element; same look and entrance */
+.app .menu{background:var(--ui-menu);box-shadow:var(--ui-menu-shadow);-webkit-backdrop-filter:none;backdrop-filter:none;border-radius:12px}
 .app .menu.show{animation:santolv-pop 160ms var(--ui-ease)}
 
 /* Drive and Fotos dialogs: the same capsule buttons and close glyph as the rest of the suite */

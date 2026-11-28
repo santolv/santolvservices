@@ -213,10 +213,10 @@ main{grid-column:2;grid-row:2;position:relative;min-width:0;min-height:0;overflo
 .drive-page .cloud-columns>span{grid-row:1}.drive-page .cloud-columns>span:first-child{grid-column:2}.drive-page .cloud-columns>span:last-child{display:none}.drive-page .search input{font:13px/1.35 var(--ui-font)}.drive-page .files.grid .cap b{max-width:124px;word-break:normal;overflow-wrap:break-word}.drive-page .files.grid .card{user-select:none}
 
 /* Menú contextual y menú Nuevo: cristal esmerilado de macOS. Solo cambia el fondo;
-   el desenfoque actúa sobre lo que hay detrás, nunca sobre el texto o los iconos. */
+   el desenfoque actúa sobre lo que hay detrás, nunca sobre el texto o los iconos.
+   Se mantiene aunque Windows tenga desactivada la transparencia: es una elección del propietario. */
 .drive-page #node-menu.menu,.drive-page #new-menu.menu{background:rgba(246,246,248,.74);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);border:1px solid rgba(0,0,0,.08);box-shadow:0 6px 18px rgba(0,0,0,.12)}
 :root[data-theme=dark] .drive-page #node-menu.menu,:root[data-theme=dark] .drive-page #new-menu.menu{background:rgba(44,44,47,.72);border-color:rgba(255,255,255,.1);box-shadow:0 8px 22px rgba(0,0,0,.28)}
-@media(prefers-reduced-transparency:reduce){.drive-page #node-menu.menu,.drive-page #new-menu.menu{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--surface)}}
 </style></head>
 <body class="drive-page">
 <svg aria-hidden="true" style="display:none" xmlns="http://www.w3.org/2000/svg"><defs>
